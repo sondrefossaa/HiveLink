@@ -38,6 +38,7 @@ interface UseGameStateResult extends GameState {
   submitScore: () => Promise<void>
   allowExploration: boolean
   enableExploration: () => void
+  wasRestoredComplete: boolean
 }
 
 export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult {
@@ -52,6 +53,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [error, setError] = useState<string | null>(null)
   const [winningPath, setWinningPath] = useState<string[]>([])
   const [startTime] = useState(() => Date.now())
+  const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
   const scoreSubmittedRef = useRef(false)
 
   // Initialize game with start and goal nodes
@@ -72,10 +74,44 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       setMaxLayer(savedState.maxLayer || 0)
       setIsComplete(savedState.isComplete || false)
       
+      // Mark as restored complete so we don't auto-show victory modal
       if (savedState.isComplete) {
-        const goalNode = savedState.nodes.find(n => n.isGoal && n.isCompleted)
-        if (goalNode) {
-          const path = findPathToNode(goalNode.id, savedState.nodes, savedState.edges || [])
+        setWasRestoredComplete(true)
+        setAllowExploration(true) // Allow exploration on restored complete games
+        
+        // Find the winning word node (the one that connected to the goal)
+        // It's the node with isGoal=true that isn't the original goal node, 
+        // OR find the node that has an edge to the goal
+        const goalNode = savedState.nodes.find(n => n.id === 'goal')
+        const edges = savedState.edges || []
+        
+        // Find the node that connects to the goal (has an edge with goal as source or target)
+        let winningNodeId: string | undefined
+        for (const edge of edges) {
+          const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
+          const targetId = typeof edge.target === 'string' ? edge.target : edge.target
+          if (sourceId === 'goal' || targetId === 'goal') {
+            winningNodeId = sourceId === 'goal' ? targetId : sourceId
+            break
+          }
+        }
+        
+        // If no edge to goal found, find the highest layer completed node
+        if (!winningNodeId) {
+          const completedNodes = savedState.nodes
+            .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
+            .sort((a, b) => b.layer - a.layer)
+          if (completedNodes.length > 0) {
+            winningNodeId = completedNodes[0].id
+          }
+        }
+        
+        if (winningNodeId) {
+          const path = findPathToNode(winningNodeId, savedState.nodes, edges)
+          // Add the goal word at the end if not already there
+          if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
+            path.push(goalNode.word)
+          }
           setWinningPath(path)
         }
       }
@@ -260,8 +296,13 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
         }
 
-        // Calculate winning path
+        // Calculate winning path from start to the winning word
         const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, ...newEdges])
+        // Add the goal word at the end if the winning word isn't the goal itself
+        const goalNode = nodes.find(n => n.id === 'goal')
+        if (goalNode && path.length > 0 && path[path.length - 1].toLowerCase() !== goalNode.word.toLowerCase()) {
+          path.push(goalNode.word)
+        }
         setWinningPath(path)
       }
 
@@ -378,6 +419,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     submitScore,
     allowExploration,
     enableExploration,
+    wasRestoredComplete,
   }
 }
 

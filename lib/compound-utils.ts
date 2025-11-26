@@ -262,10 +262,57 @@ export function findPathToNode(
   nodes: GraphNode[],
   edges: Array<{ source: string; target: string }>
 ): string[] {
-  const path: string[] = []
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
+  const startNode = nodes.find(n => n.isStart)
   
-  // Build adjacency list (reverse direction to trace back)
+  if (!startNode) return []
+  if (nodeId === startNode.id) {
+    const node = nodeMap.get(nodeId)
+    return node ? [node.word] : []
+  }
+  
+  // Build adjacency list (forward direction for BFS)
+  const adjacency = new Map<string, string[]>()
+  for (const edge of edges) {
+    const sourceId = typeof edge.source === 'string' ? edge.source : (edge.source as GraphNode).id
+    const targetId = typeof edge.target === 'string' ? edge.target : (edge.target as GraphNode).id
+    if (!adjacency.has(sourceId)) adjacency.set(sourceId, [])
+    adjacency.get(sourceId)!.push(targetId)
+  }
+  
+  // BFS to find shortest path from start to target
+  const visited = new Set<string>()
+  const parent = new Map<string, string>()
+  const queue: string[] = [startNode.id]
+  visited.add(startNode.id)
+  
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    
+    if (current === nodeId) {
+      // Found the target, reconstruct path
+      const path: string[] = []
+      let curr: string | undefined = nodeId
+      while (curr) {
+        const node = nodeMap.get(curr)
+        if (node) path.unshift(node.word)
+        curr = parent.get(curr)
+      }
+      return path
+    }
+    
+    const neighbors = adjacency.get(current) || []
+    for (const neighbor of neighbors) {
+      if (!visited.has(neighbor)) {
+        visited.add(neighbor)
+        parent.set(neighbor, current)
+        queue.push(neighbor)
+      }
+    }
+  }
+  
+  // No path found, fall back to simple trace
+  const path: string[] = []
   const parentMap = new Map<string, string>()
   for (const edge of edges) {
     const sourceId = typeof edge.source === 'string' ? edge.source : (edge.source as GraphNode).id
@@ -273,7 +320,6 @@ export function findPathToNode(
     parentMap.set(targetId, sourceId)
   }
   
-  // Trace back from the target node
   let currentId: string | undefined = nodeId
   while (currentId) {
     const node = nodeMap.get(currentId)

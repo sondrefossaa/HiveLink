@@ -52,18 +52,18 @@ export default function Game() {
   const [showGiveUp, setShowGiveUp] = useState(false)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
 
-  // Show victory modal when game is complete
+  // Show victory modal when game is complete (only for fresh victories, not restored games)
   const handleVictory = useCallback(() => {
     setShowVictory(true)
   }, [])
 
-  // Check for victory
+  // Check for victory - only auto-show for fresh victories
   useMemo(() => {
-    if (gameState.isComplete && !showVictory && !gameState.allowExploration) {
+    if (gameState.isComplete && !showVictory && !gameState.allowExploration && !gameState.wasRestoredComplete) {
       // Small delay for the animation to show
       setTimeout(handleVictory, 500)
     }
-  }, [gameState.isComplete, showVictory, handleVictory, gameState.allowExploration])
+  }, [gameState.isComplete, showVictory, handleVictory, gameState.allowExploration, gameState.wasRestoredComplete])
 
   // Get selected node
   const selectedNode = useMemo(() => {
@@ -229,7 +229,10 @@ export default function Game() {
         isOpen={showVictory}
         stats={gameStats}
         puzzleNumber={puzzle.puzzleNumber}
-        onClose={() => setShowVictory(false)}
+        onClose={() => {
+          gameState.enableExploration()
+          setShowVictory(false)
+        }}
         onContinue={() => {
           gameState.enableExploration()
           setShowVictory(false)
@@ -247,10 +250,26 @@ export default function Game() {
       {/* How to play tutorial */}
       <HowToPlay isOpen={showTutorial} onClose={() => setShowTutorial(false)} />
 
+      {/* View Solution button - shown when game is complete */}
+      {gameState.isComplete && (
+        <button
+          onClick={() => setShowVictory(true)}
+          className="fixed bottom-32 left-4 z-30 w-10 h-10 rounded-full
+                     bg-hive-yellow/90 hover:bg-hive-gold backdrop-blur-sm
+                     text-hive-dark flex items-center justify-center transition-colors
+                     border border-hive-gold/50 shadow-hive-glow"
+          aria-label="View solution"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+          </svg>
+        </button>
+      )}
+
       {/* Help button */}
       <button
         onClick={() => setShowTutorial(true)}
-        className="fixed bottom-32 right-4 z-30 w-10 h-10 rounded-full
+        className="fixed bottom-20 left-4 z-30 w-10 h-10 rounded-full
                    bg-hive-graphite/80 hover:bg-hive-slate/80 backdrop-blur-sm
                    text-hive-yellow flex items-center justify-center transition-colors
                    border border-hive-slate/50"
