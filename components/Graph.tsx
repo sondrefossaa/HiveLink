@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import dynamic from 'next/dynamic'
+import { forceX, forceY, forceCollide } from 'd3-force'
 import type { GraphNode, GraphEdge } from '@/types'
 
 // Dynamically import ForceGraph2D to avoid SSR issues
@@ -23,11 +24,13 @@ interface GraphProps {
   isComplete: boolean
 }
 
-interface ForceGraphNode extends GraphNode {
+interface ForceGraphNode extends Omit<GraphNode, 'fx' | 'fy'> {
   x?: number
   y?: number
   vx?: number
   vy?: number
+  fx?: number
+  fy?: number
 }
 
 interface ForceGraphLink {
@@ -35,6 +38,11 @@ interface ForceGraphLink {
   target: string | ForceGraphNode
   sharedPart: string
 }
+
+// Graph coordinate constants - using centered coordinate system
+const GRAPH_SPAN = 600 // Total horizontal span from start to goal
+const START_X = -GRAPH_SPAN / 2 // Start node at left
+const GOAL_X = GRAPH_SPAN / 2 // Goal node at right
 
 export default function Graph({
   nodes,
@@ -65,14 +73,44 @@ export default function Graph({
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
+  // Calculate target X position for a node based on layer and direction
+  const getTargetX = useCallback((node: GraphNode, maxLayer: number) => {
+    if (node.isStart) return START_X
+    if (node.isGoal) return GOAL_X
+    
+    // Base position: interpolate between start and goal based on layer
+    const layerProgress = node.layer / (maxLayer + 1)
+    let targetX = START_X + layerProgress * GRAPH_SPAN
+    
+    // Adjust based on expansion direction
+    if (node.expandsForward === true) {
+      // Forward expansion: push further toward goal
+      targetX += GRAPH_SPAN * 0.08
+    } else if (node.expandsForward === false) {
+      // Backward expansion: keep closer to parent position
+      targetX -= GRAPH_SPAN * 0.03
+    }
+    
+    return targetX
+  }, [])
+
   // Transform data for force-graph
   const graphData = useMemo(() => {
-    const graphNodes: ForceGraphNode[] = nodes.map(node => ({
-      ...node,
-      // Set fixed positions for start and goal nodes
-      fx: node.isStart ? 80 : node.isGoal ? dimensions.width - 80 : undefined,
-      fy: node.isStart || node.isGoal ? dimensions.height / 2 : undefined,
-    }))
+    const maxLayer = Math.max(...nodes.filter(n => n.layer >= 0).map(n => n.layer), 1)
+    
+    const graphNodes: ForceGraphNode[] = nodes.map(node => {
+      const targetX = getTargetX(node, maxLayer)
+      
+      return {
+        ...node,
+        // Set fixed positions for start and goal nodes
+        fx: node.isStart ? START_X : node.isGoal ? GOAL_X : undefined,
+        fy: node.isStart || node.isGoal ? 0 : undefined,
+        // Initialize position for new nodes (helps prevent random drift)
+        x: node.x ?? targetX,
+        y: node.y ?? 0,
+      }
+    })
 
     const graphLinks: ForceGraphLink[] = edges.map(edge => ({
       source: edge.source,
@@ -81,7 +119,7 @@ export default function Graph({
     }))
 
     return { nodes: graphNodes, links: graphLinks }
-  }, [nodes, edges, dimensions])
+  }, [nodes, edges, getTargetX])
 
   // Custom node rendering
   const drawNode = useCallback(
@@ -190,10 +228,14 @@ export default function Graph({
   // Custom link rendering
   const drawLink = useCallback(
     (link: ForceGraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const sourceNode = link.source as ForceGraphNode
-      const targetNode = link.target as ForceGraphNode
+      // Handle both string IDs and resolved node objects
+      const sourceNode = typeof link.source === 'string' ? null : link.source as ForceGraphNode
+      const targetNode = typeof link.target === 'string' ? null : link.target as ForceGraphNode
 
-      if (!sourceNode.x || !sourceNode.y || !targetNode.x || !targetNode.y) return
+      // Skip if nodes aren't resolved yet or don't have coordinates
+      if (!sourceNode || !targetNode) return
+      if (typeof sourceNode.x !== 'number' || typeof sourceNode.y !== 'number') return
+      if (typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number') return
 
       const isWinningEdge =
         isComplete &&
@@ -209,7 +251,8 @@ export default function Graph({
       const dy = targetNode.y - sourceNode.y
       const dist = Math.sqrt(dx * dx + dy * dy)
       
-      // Curve amount based on distance
+      // Curve amount based on distance (avoid NaN if nodes overlap)
+      if (dist === 0) return
       const curveOffset = Math.min(dist * 0.15, 30)
       const perpX = -dy / dist
       const perpY = dx / dist
@@ -286,42 +329,49 @@ export default function Graph({
     }
   }, [nodes.length])
 
-  // Force simulation configuration
-  const forceConfig = useMemo(
-    () => ({
-      // Push nodes horizontally based on layer
-      forceX: {
-        strength: 0.1,
-        x: (node: ForceGraphNode) => {
-          if (node.isStart) return 80
-          if (node.isGoal) return dimensions.width - 80
-          const layerWidth = (dimensions.width - 200) / Math.max(nodes.length, 3)
-          return 120 + node.layer * layerWidth
-        },
-      },
-      // Center vertically
-      forceY: {
-        strength: 0.1,
-        y: dimensions.height / 2,
-      },
-      // Collision detection
-      collide: {
-        radius: 50,
-        strength: 1,
-      },
-      // Link force
-      link: {
-        distance: 120,
-        strength: 0.5,
-      },
-      // Charge (repulsion)
-      charge: {
-        strength: -200,
-        distanceMax: 300,
-      },
-    }),
-    [dimensions, nodes.length]
-  )
+  // Configure force simulation via ref
+  const configureForces = useCallback(() => {
+    if (!graphRef.current) return
+
+    const fg = graphRef.current
+    const maxLayer = Math.max(...nodes.filter(n => n.layer >= 0).map(n => n.layer), 1)
+
+    // Configure link force
+    const linkForce = fg.d3Force('link')
+    if (linkForce) {
+      linkForce.distance(120).strength(0.3)
+    }
+
+    // Configure charge (repulsion) force - reduced to prevent pushing nodes away
+    const chargeForce = fg.d3Force('charge')
+    if (chargeForce) {
+      chargeForce.strength(-150).distanceMax(300)
+    }
+
+    // Remove default center force - we use x/y positioning forces instead
+    fg.d3Force('center', null)
+
+    // Position nodes horizontally using graph-centered coordinates
+    fg.d3Force('x', forceX((node: ForceGraphNode) => {
+      return getTargetX(node as GraphNode, maxLayer)
+    }).strength(0.8)) // Strong force to keep nodes in position
+
+    // Center nodes vertically at y=0 (graph center)
+    fg.d3Force('y', forceY(0).strength(0.3))
+
+    // Add collision detection
+    fg.d3Force('collide', forceCollide(50).strength(0.8).iterations(2))
+
+    // Reheat simulation to apply new forces
+    fg.d3ReheatSimulation()
+  }, [nodes, getTargetX])
+
+  // Run force configuration when graph is ready and when dependencies change
+  useEffect(() => {
+    // Small delay to ensure graph is mounted
+    const timer = setTimeout(configureForces, 100)
+    return () => clearTimeout(timer)
+  }, [configureForces])
 
   return (
     <div
@@ -354,8 +404,6 @@ export default function Graph({
           d3VelocityDecay={0.3}
           cooldownTicks={100}
           warmupTicks={50}
-          d3Force="forceX"
-          d3ForceConfig={forceConfig.forceX}
         />
       )}
 

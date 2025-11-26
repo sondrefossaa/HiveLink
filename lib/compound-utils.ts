@@ -1,4 +1,4 @@
-import type { GraphNode, ConnectionResult } from '@/types'
+import type { GraphNode, ConnectionResult, MultiConnectionResult, NodeConnection } from '@/types'
 
 /**
  * Common compound word part patterns
@@ -180,6 +180,42 @@ export function canConnect(
     parentNode: best.node,
     sharedPart: best.sharedPart,
     newPart: best.newPart,
+  }
+}
+
+/**
+ * Find ALL nodes that a new word can connect to
+ * Returns all valid connections, not just the best one
+ */
+export function findAllConnections(
+  newWord: string,
+  newParts: string[],
+  existingNodes: GraphNode[]
+): MultiConnectionResult {
+  const connections: NodeConnection[] = []
+  let minLayer = Infinity
+  
+  for (const node of existingNodes) {
+    // Allow connecting to goal node if we share a part with it
+    const sharedPart = findSharedPart(node.parts, newParts)
+    if (sharedPart) {
+      connections.push({ node, sharedPart })
+      // Track the minimum layer among all connections (treat goal as high layer)
+      const effectiveLayer = node.isGoal ? 999 : node.layer
+      if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
+        minLayer = effectiveLayer
+      }
+    }
+  }
+  
+  if (connections.length === 0) {
+    return { canConnect: false, connections: [], minLayer: 0 }
+  }
+  
+  return {
+    canConnect: true,
+    connections,
+    minLayer: minLayer === Infinity ? 0 : minLayer,
   }
 }
 

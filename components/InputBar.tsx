@@ -55,6 +55,7 @@ export default function InputBar({
 
     if (!trimmed) {
       setLocalError('Please enter a word')
+      inputRef.current?.focus()
       return
     }
 
@@ -62,6 +63,7 @@ export default function InputBar({
       setLocalError('Word must be at least 4 characters')
       setShake(true)
       setTimeout(() => setShake(false), 500)
+      inputRef.current?.focus()
       return
     }
 
@@ -76,6 +78,9 @@ export default function InputBar({
       setShake(true)
       setTimeout(() => setShake(false), 500)
     }
+
+    // Always refocus input after submission
+    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {

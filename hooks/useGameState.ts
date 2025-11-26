@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import type { GraphNode, GraphEdge, GameState, ValidationResult, DailyPuzzle } from '@/types'
 import {
   parseCompoundWord,
-  canConnect,
+  findAllConnections,
   isGoalWord,
   generateNodeId,
   generateEdgeId,
@@ -89,7 +89,6 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       isStart: true,
       isGoal: false,
       isCompleted: false,
-      fx: 100, // Fixed x position on left
     }
 
     const goalNode: GraphNode = {
@@ -100,7 +99,6 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       isStart: false,
       isGoal: true,
       isCompleted: false,
-      fx: 900, // Fixed x position on right (will be adjusted based on container)
     }
 
     setNodes([startNode, goalNode])
@@ -179,20 +177,36 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
         return { success: false, error: validation.error }
       }
 
-      // Check if this word can connect to existing nodes
-      const connectionResult = canConnect(normalized, validation.parts, nodes)
+      // Find ALL nodes this word can connect to automatically
+      const connectionResult = findAllConnections(normalized, validation.parts, nodes)
 
-      if (!connectionResult.canConnect || !connectionResult.parentNode) {
-        const err = 'Word must share exactly one part with an existing word'
+      if (!connectionResult.canConnect || connectionResult.connections.length === 0) {
+        const err = 'Word must share a part with an existing word'
         setError(err)
         return { success: false, error: err }
       }
 
-      // Check if this is the goal word
-      const isWinningWord = isGoalWord(normalized, puzzle.goalWord)
+      // Check if this connects to the goal node (winning condition)
+      const connectsToGoal = connectionResult.connections.some(conn => conn.node.isGoal)
+      
+      // Check if this is the goal word itself
+      const isWinningWord = isGoalWord(normalized, puzzle.goalWord) || connectsToGoal
 
-      // Create new node
-      const newLayer = connectionResult.parentNode.layer + 1
+      // Determine direction based on which part of the primary parent is shared
+      // Find the highest-layer non-goal connection to use as primary parent
+      const nonGoalConnections = connectionResult.connections.filter(c => !c.node.isGoal)
+      const primaryConnection = nonGoalConnections.length > 0
+        ? nonGoalConnections.reduce((a, b) => a.node.layer > b.node.layer ? a : b)
+        : connectionResult.connections[0]
+      
+      // Check if shared part is the LAST part of the parent (extends forward toward goal)
+      const parentParts = primaryConnection.node.parts
+      const sharedPart = primaryConnection.sharedPart.toLowerCase()
+      const expandsForward = parentParts.length > 0 && 
+        parentParts[parentParts.length - 1].toLowerCase() === sharedPart
+
+      // Create new node - layer is one more than the minimum connected layer
+      const newLayer = connectionResult.minLayer + 1
       const newNode: GraphNode = {
         id: generateNodeId(),
         word: normalized,
@@ -201,15 +215,16 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
         isStart: false,
         isGoal: isWinningWord,
         isCompleted: isWinningWord,
+        expandsForward,
       }
 
-      // Create edge
-      const newEdge: GraphEdge = {
-        id: generateEdgeId(connectionResult.parentNode.id, newNode.id),
-        source: connectionResult.parentNode.id,
+      // Create edges to ALL connected nodes
+      const newEdges: GraphEdge[] = connectionResult.connections.map(conn => ({
+        id: generateEdgeId(conn.node.id, newNode.id),
+        source: conn.node.id,
         target: newNode.id,
-        sharedPart: connectionResult.sharedPart || '',
-      }
+        sharedPart: conn.sharedPart,
+      }))
 
       // Update state
       setNodes(prev => {
@@ -224,7 +239,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
         return [...updated, newNode]
       })
 
-      setEdges(prev => [...prev, newEdge])
+      setEdges(prev => [...prev, ...newEdges])
       setWordsUsed(prev => prev + 1)
       setMaxLayer(prev => Math.max(prev, newLayer))
       setSelectedNodeId(newNode.id)
@@ -235,7 +250,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
         updatePlayerStats(wordsUsed + 1, true)
 
         // Calculate winning path
-        const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, newEdge])
+        const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, ...newEdges])
         setWinningPath(path)
       }
 
@@ -269,7 +284,6 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       isStart: true,
       isGoal: false,
       isCompleted: false,
-      fx: 100,
     }
 
     const goalNode: GraphNode = {
@@ -280,7 +294,6 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       isStart: false,
       isGoal: true,
       isCompleted: false,
-      fx: 900,
     }
 
     setNodes([startNode, goalNode])
