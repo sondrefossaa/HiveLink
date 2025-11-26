@@ -26,6 +26,16 @@ export interface GraphData {
   links: GraphEdge[];
 }
 
+export interface GraphProps {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  selectedNodeId: string | null;
+  onNodeSelect: (nodeId: string) => void;
+  goalWord: string;
+  isComplete: boolean;
+  winningPath: string[];
+}
+
 // Puzzle Types
 export type PuzzleMode = 'daily' | 'practice';
 
