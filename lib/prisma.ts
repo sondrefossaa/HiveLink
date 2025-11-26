@@ -1,3 +1,4 @@
+// lib/prisma.ts
 import { PrismaClient } from '@prisma/client'
 
 declare global {
@@ -5,7 +6,7 @@ declare global {
   var prisma: PrismaClient | undefined
 }
 
-// Prevent multiple instances of Prisma Client in development
+// Remove the datasourceUrl option - Prisma will automatically use DATABASE_URL from schema.prisma
 export const prisma = globalThis.prisma || new PrismaClient()
 
 if (process.env.NODE_ENV !== 'production') {
@@ -13,4 +14,3 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export default prisma
-
