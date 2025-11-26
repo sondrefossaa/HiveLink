@@ -123,7 +123,8 @@ export default function Graph({
 
   // Custom node rendering
   const drawNode = useCallback(
-    (node: ForceGraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    (nodeObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const node = nodeObj as ForceGraphNode
       const label = node.word
       const fontSize = Math.max(12 / globalScale, 10)
       const isSelected = node.id === selectedNodeId
@@ -227,7 +228,8 @@ export default function Graph({
 
   // Custom link rendering
   const drawLink = useCallback(
-    (link: ForceGraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    (linkObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const link = linkObj as ForceGraphLink
       // Handle both string IDs and resolved node objects
       const sourceNode = typeof link.source === 'string' ? null : link.source as ForceGraphNode
       const targetNode = typeof link.target === 'string' ? null : link.target as ForceGraphNode
@@ -312,7 +314,8 @@ export default function Graph({
 
   // Handle node click
   const handleNodeClick = useCallback(
-    (node: ForceGraphNode) => {
+    (nodeObj: object) => {
+      const node = nodeObj as ForceGraphNode
       if (!node.isGoal || node.isCompleted) {
         onNodeSelect(node.id)
       }
@@ -389,7 +392,8 @@ export default function Graph({
           nodeCanvasObject={drawNode}
           linkCanvasObject={drawLink}
           onNodeClick={handleNodeClick}
-          nodePointerAreaPaint={(node: ForceGraphNode, color, ctx) => {
+          nodePointerAreaPaint={(nodeObj, color, ctx) => {
+            const node = nodeObj as ForceGraphNode
             const size = node.isStart || node.isGoal ? 35 : 25
             ctx.fillStyle = color
             ctx.beginPath()

@@ -205,6 +205,10 @@ export default function Game() {
         stats={gameStats}
         puzzleNumber={puzzle.puzzleNumber}
         onClose={() => setShowVictory(false)}
+        onTryAgain={() => {
+          gameState.reset()
+          setShowVictory(false)
+        }}
         path={gameState.winningPath}
       />
 

@@ -11,6 +11,7 @@ interface VictoryModalProps {
   stats: GameStats
   puzzleNumber: number
   onClose: () => void
+  onTryAgain: () => void
   path: string[]
 }
 
@@ -19,6 +20,7 @@ export default function VictoryModal({
   stats,
   puzzleNumber,
   onClose,
+  onTryAgain,
   path,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
@@ -262,22 +264,35 @@ export default function VictoryModal({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.8 }}
-                className="flex gap-3 mt-6"
+                className="flex flex-col gap-3 mt-6"
               >
+                <div className="flex gap-3">
+                  <button
+                    onClick={onClose}
+                    className="flex-1 py-3 rounded-xl bg-hive-graphite hover:bg-hive-slate
+                              text-white font-medium transition-colors"
+                  >
+                    Close
+                  </button>
+                  <ShareButton
+                    puzzleNumber={puzzleNumber}
+                    wordsUsed={stats.wordsUsed}
+                    layers={stats.layersExplored}
+                    path={path}
+                    won={true}
+                  />
+                </div>
                 <button
-                  onClick={onClose}
-                  className="flex-1 py-3 rounded-xl bg-hive-graphite hover:bg-hive-slate
-                            text-white font-medium transition-colors"
+                  onClick={onTryAgain}
+                  className="w-full py-3 rounded-xl bg-hive-yellow/10 hover:bg-hive-yellow/20
+                            text-hive-yellow font-medium transition-colors border border-hive-yellow/30
+                            flex items-center justify-center gap-2"
                 >
-                  Close
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Try Again
                 </button>
-                <ShareButton
-                  puzzleNumber={puzzleNumber}
-                  wordsUsed={stats.wordsUsed}
-                  layers={stats.layersExplored}
-                  path={path}
-                  won={true}
-                />
               </motion.div>
             </div>
           </motion.div>
