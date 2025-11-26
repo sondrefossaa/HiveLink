@@ -41,17 +41,38 @@ interface ForceLayoutLink extends GraphEdge {
 }
 
 const SIMULATION_DURATION_MS = 1000
-const CHARGE_STRENGTH = -450
+const CHARGE_STRENGTH = -520
 const LINK_DISTANCE_FORWARD = 280
 const LINK_DISTANCE_SIDE = 180
 const LINK_STRENGTH_FORWARD = 0.9
 const LINK_STRENGTH_SIDE = 0.25
-const COLLIDE_RADIUS = 80
-const COLLIDE_STRENGTH = 0.6
+const COLLIDE_RADIUS_DEFAULT = 60
+const COLLIDE_RADIUS_ANCHORED = 85
+const COLLIDE_STRENGTH = 0.75
+const POINTER_RADIUS_DEFAULT = 65
+const POINTER_RADIUS_ANCHORED = 90
 
 const resolveId = (value: string | GraphNode | undefined): string | undefined => {
   if (!value) return undefined
   return typeof value === 'string' ? value : value.id
+}
+
+const getDynamicCollideRadius = (node: ForceLayoutNode): number =>
+  node.isGoal || node.isStart ? COLLIDE_RADIUS_ANCHORED : COLLIDE_RADIUS_DEFAULT
+
+const getPointerHitRadius = (node: ForceLayoutNode, globalScale: number): number => {
+  const base = node.isGoal || node.isStart ? POINTER_RADIUS_ANCHORED : POINTER_RADIUS_DEFAULT
+  return base / Math.max(globalScale, 0.001)
+}
+
+const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number => {
+  const baseSize = node.isStart || node.isGoal ? 38 : 28
+  const size = baseSize / Math.max(globalScale, 0.001)
+  // Use the full size (circumradius) to ensure edges don't overlap with hexagon
+  // The hexagon vertices are at distance 'size' from center
+  // Adding a small buffer to account for stroke width
+  const strokeWidth = 2.5 / Math.max(globalScale, 0.001)
+  return size + strokeWidth / 2
 }
 
 export default function Graph({
@@ -70,6 +91,7 @@ export default function Graph({
   const animationFrameRef = useRef<number | null>(null)
   const draggedNodeRef = useRef<string | null>(null)
   const snapBackTimerRef = useRef<number | null>(null)
+  const pointerScaleRef = useRef(1)
 
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
 
@@ -197,7 +219,7 @@ export default function Graph({
     // Charge force - mild repulsion to prevent overlaps
     const chargeForce = fg.d3Force('charge')
     if (chargeForce) {
-      chargeForce.strength(CHARGE_STRENGTH).distanceMax(900)
+      chargeForce.strength(CHARGE_STRENGTH).distanceMin(80).distanceMax(1400)
     }
 
     // CRITICAL: ForceX pushes nodes to their CORRECT layer position (never changes it)
@@ -215,11 +237,16 @@ export default function Graph({
       forceY((node: any) => {
         const n = node as ForceLayoutNode
         return n.targetY ?? 0
-      }).strength(0.85) // Strong but allows slight adjustment
+      }).strength(0.45) // Allow more breathing room vertically
     )
     
     // Collision force - last resort, only if needed
-    fg.d3Force('collide', forceCollide(COLLIDE_RADIUS).strength(COLLIDE_STRENGTH))
+    fg.d3Force(
+      'collide',
+      forceCollide((node: any) => getDynamicCollideRadius(node as ForceLayoutNode)).strength(
+        COLLIDE_STRENGTH
+      )
+    )
     
     // Disable center force - we control positions
     fg.d3Force('center', null)
@@ -403,6 +430,7 @@ export default function Graph({
   const drawNode = useCallback(
     (nodeObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const node = nodeObj as ForceLayoutNode
+      pointerScaleRef.current = globalScale
       const x = node.x ?? node.targetX
       const y = node.y ?? node.targetY
       const isSelected = node.id === selectedNodeId
@@ -519,17 +547,89 @@ export default function Graph({
       const dy = target.y - source.y
       const distance = Math.sqrt(dx * dx + dy * dy) || 1
       
-      // Curved bezier path - more curve for side branches
-      const curveStrength = link.branchType === 'side' ? 0.4 : 0.15
-      const perpX = -dy / distance
-      const perpY = dx / distance
-      const controlX = (source.x + target.x) / 2 + perpX * distance * curveStrength
-      const controlY = (source.y + target.y) / 2 + perpY * distance * curveStrength
-
-      ctx.save()
-      ctx.beginPath()
-      ctx.moveTo(source.x, source.y)
-      ctx.quadraticCurveTo(controlX, controlY, target.x, target.y)
+      // Check if nodes are on the same layer (same X position)
+      // Use targetX to determine layer since it's calculated from layer * FIXED_HORIZONTAL_SPACING
+      // Use a threshold to account for floating point precision and small force adjustments
+      const sourceTargetX = source.targetX ?? source.x
+      const targetTargetX = target.targetX ?? target.x
+      const sameLayer = Math.abs(sourceTargetX - targetTargetX) < 10
+      
+      // For side branches, calculate padded start/end points at node boundaries
+      let startX = source.x
+      let startY = source.y
+      let endX = target.x
+      let endY = target.y
+      let controlX: number
+      let controlY: number
+      
+      if (link.branchType === 'side') {
+        // Calculate direction vector (normalized)
+        const dirX = dx / distance
+        const dirY = dy / distance
+        
+        // Get node radii
+        const sourceRadius = getNodeVisualRadius(source, globalScale)
+        const targetRadius = getNodeVisualRadius(target, globalScale)
+        
+        // Offset start point: move from source center by source radius along direction
+        startX = source.x + dirX * sourceRadius
+        startY = source.y + dirY * sourceRadius
+        
+        // Offset end point: move from target center by target radius along reverse direction
+        endX = target.x - dirX * targetRadius
+        endY = target.y - dirY * targetRadius
+        
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(startX, startY)
+        
+        if (sameLayer) {
+          // Straight line for nodes on the same layer
+          ctx.lineTo(endX, endY)
+          // Control point for label positioning (midpoint)
+          controlX = (startX + endX) / 2
+          controlY = (startY + endY) / 2
+        } else {
+          // Curved bezier path for nodes on different layers
+          // Recalculate distance and direction for padded points
+          const paddedDx = endX - startX
+          const paddedDy = endY - startY
+          const paddedDistance = Math.sqrt(paddedDx * paddedDx + paddedDy * paddedDy) || 1
+          
+          // Update for curve calculation
+          const paddedDirX = paddedDx / paddedDistance
+          const paddedDirY = paddedDy / paddedDistance
+          
+          // Curved bezier path - more curve for side branches
+          const curveStrength = 0.4
+          const perpX = -paddedDirY
+          const perpY = paddedDirX
+          controlX = (startX + endX) / 2 + perpX * paddedDistance * curveStrength
+          controlY = (startY + endY) / 2 + perpY * paddedDistance * curveStrength
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
+        }
+      } else {
+        // Forward branches: use node centers (no padding)
+        ctx.save()
+        ctx.beginPath()
+        ctx.moveTo(startX, startY)
+        
+        if (sameLayer) {
+          // Straight line for nodes on the same layer
+          ctx.lineTo(endX, endY)
+          // Control point for label positioning (midpoint)
+          controlX = (startX + endX) / 2
+          controlY = (startY + endY) / 2
+        } else {
+          // Curved bezier path for nodes on different layers
+          const curveStrength = 0.15
+          const perpX = -dy / distance
+          const perpY = dx / distance
+          controlX = (source.x + target.x) / 2 + perpX * distance * curveStrength
+          controlY = (source.y + target.y) / 2 + perpY * distance * curveStrength
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
+        }
+      }
 
       // Dash side branches (non-winning)
       if (link.branchType === 'side' && !link.isWinning) {
@@ -538,8 +638,8 @@ export default function Graph({
         ctx.setLineDash([])
       }
 
-      // Create gradient for edge color
-      const gradient = ctx.createLinearGradient(source.x, source.y, target.x, target.y)
+      // Create gradient for edge color (use padded points for side branches)
+      const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
       
       if (link.isWinning && isComplete) {
         // Winning path: animated golden glow
@@ -613,10 +713,11 @@ export default function Graph({
           onNodeDragEnd={handleNodeDragEnd}
           nodePointerAreaPaint={(nodeObj, color, ctx) => {
             const node = nodeObj as ForceLayoutNode
-            const size = node.isGoal || node.isStart ? 40 : 30
+            const globalScale = pointerScaleRef.current || 1
+            const radius = getPointerHitRadius(node, globalScale)
             ctx.fillStyle = color
             ctx.beginPath()
-            ctx.arc(node.x ?? node.targetX, node.y ?? node.targetY, size, 0, Math.PI * 2)
+            ctx.arc(node.x ?? node.targetX, node.y ?? node.targetY, radius, 0, Math.PI * 2)
             ctx.fill()
           }}
           enablePanInteraction

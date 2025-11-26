@@ -136,7 +136,8 @@ export default function Game() {
         wordsUsed={gameState.wordsUsed}
         layersExplored={gameState.maxLayer}
         onGiveUp={handleGiveUp}
-        isComplete={gameState.isComplete}
+        onReset={() => gameState.reset()}
+        pathsFound={gameState.winningPath.length > 0 ? 1 : 0}
       />
 
       {/* Main game area */}

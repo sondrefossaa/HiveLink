@@ -35,3 +35,12 @@ model Score {
   @@map("scores")
 }
 
+model CompoundWord {
+  word      String   @id
+  parts     String[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("compound_words")
+}
+

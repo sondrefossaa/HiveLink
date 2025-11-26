@@ -11,8 +11,10 @@ interface VictoryModalProps {
   stats: GameStats
   puzzleNumber: number
   onClose: () => void
+  onContinue: () => void
   onTryAgain: () => void
   path: string[]
+  pathsFound: number
 }
 
 export default function VictoryModal({
@@ -20,8 +22,10 @@ export default function VictoryModal({
   stats,
   puzzleNumber,
   onClose,
+  onContinue,
   onTryAgain,
   path,
+  pathsFound,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
 
@@ -101,7 +105,7 @@ export default function VictoryModal({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           onClick={onClose}
         >
           {/* Backdrop */}
@@ -119,14 +123,14 @@ export default function VictoryModal({
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-hive-charcoal rounded-2xl 
-                       border border-hive-graphite shadow-2xl overflow-hidden"
+            className="relative w-full max-w-md max-h-[90vh] bg-hive-charcoal rounded-2xl 
+                       border border-hive-graphite shadow-2xl overflow-hidden flex flex-col"
           >
             {/* Header glow */}
-            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-hive-yellow/10 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-hive-yellow/10 to-transparent pointer-events-none z-0" />
 
-            {/* Content */}
-            <div className="relative p-6">
+            {/* Content - scrollable */}
+            <div className="relative p-6 pb-0 overflow-y-auto flex-1 min-h-0">
               {/* Trophy icon */}
               <motion.div
                 initial={{ scale: 0, rotate: -180 }}
@@ -153,10 +157,22 @@ export default function VictoryModal({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
-                className={`text-center font-medium ${rating.color} mb-6`}
+                className={`text-center font-medium ${rating.color} mb-2`}
               >
                 {rating.text}
               </motion.p>
+
+              {/* Multiple paths indicator */}
+              {pathsFound > 1 && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.45 }}
+                  className="text-center text-sm text-gray-400 mb-6"
+                >
+                  {pathsFound} paths found! Keep exploring to find more.
+                </motion.p>
+              )}
 
               {/* Stats grid */}
               <motion.div
@@ -259,32 +275,46 @@ export default function VictoryModal({
                 )}
               </AnimatePresence>
 
-              {/* Actions */}
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.8 }}
-                className="flex flex-col gap-3 mt-6"
-              >
-                <div className="flex gap-3">
-                  <button
-                    onClick={onClose}
-                    className="flex-1 py-3 rounded-xl bg-hive-graphite hover:bg-hive-slate
-                              text-white font-medium transition-colors"
-                  >
-                    Close
-                  </button>
-                  <ShareButton
-                    puzzleNumber={puzzleNumber}
-                    wordsUsed={stats.wordsUsed}
-                    layers={stats.layersExplored}
-                    path={path}
-                    won={true}
-                  />
-                </div>
+            </div>
+
+            {/* Actions - fixed at bottom */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 }}
+              className="relative z-10 p-6 pt-4 border-t border-hive-graphite/50 bg-hive-charcoal"
+            >
+              <div className="flex gap-3 mb-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 rounded-xl bg-hive-graphite hover:bg-hive-slate
+                            text-white font-medium transition-colors"
+                >
+                  Close
+                </button>
+                <ShareButton
+                  puzzleNumber={puzzleNumber}
+                  wordsUsed={stats.wordsUsed}
+                  layers={stats.layersExplored}
+                  path={path}
+                  won={true}
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={onContinue}
+                  className="flex-1 py-3 rounded-xl bg-hive-yellow hover:bg-hive-gold
+                            text-hive-dark font-medium transition-colors shadow-hive-glow
+                            flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                  Continue Playing
+                </button>
                 <button
                   onClick={onTryAgain}
-                  className="w-full py-3 rounded-xl bg-hive-yellow/10 hover:bg-hive-yellow/20
+                  className="flex-1 py-3 rounded-xl bg-hive-yellow/10 hover:bg-hive-yellow/20
                             text-hive-yellow font-medium transition-colors border border-hive-yellow/30
                             flex items-center justify-center gap-2"
                 >
@@ -293,8 +323,8 @@ export default function VictoryModal({
                   </svg>
                   Try Again
                 </button>
-              </motion.div>
-            </div>
+              </div>
+            </motion.div>
           </motion.div>
         </motion.div>
       )}

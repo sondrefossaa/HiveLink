@@ -34,6 +34,19 @@ const COMMON_PARTS = new Set([
 ])
 
 /**
+ * Count how many parts are recognized compound components.
+ */
+export function countCommonCompoundParts(parts: string[]): number {
+  let count = 0
+  for (const part of parts) {
+    if (COMMON_PARTS.has(part.toLowerCase())) {
+      count++
+    }
+  }
+  return count
+}
+
+/**
  * Parse a compound word into its constituent parts
  * Uses a greedy approach with known compound word patterns
  */

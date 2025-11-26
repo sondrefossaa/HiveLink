@@ -37,3 +37,9 @@ next-env.d.ts
 # prisma
 prisma/migrations/**/migration_lock.toml
 
+# imported datasets (should not be committed)
+scripts/*.txt
+scripts/*.json
+scripts/*.csv
+scripts/*.tsv
+

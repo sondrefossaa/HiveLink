@@ -22,20 +22,18 @@ const Game = dynamic(() => import('@/components/Game'), {
 export default function Home() {
   return (
     <main className="relative min-h-screen bg-hive-dark overflow-hidden">
-      {/* Particle background */}
-      <ParticleBackground />
-
-      {/* Base gradient background */}
+      {/* Base gradient background - behind everything */}
       <div
-        className="fixed inset-0 z-0 pointer-events-none"
+        className="fixed inset-0 -z-10 pointer-events-none"
         style={{
           background: `
-            radial-gradient(ellipse at 0% 50%, rgba(244, 180, 0, 0.05) 0%, transparent 50%),
-            radial-gradient(ellipse at 100% 50%, rgba(244, 180, 0, 0.05) 0%, transparent 50%),
             linear-gradient(180deg, #0D0D0D 0%, #1A1A1A 50%, #0D0D0D 100%)
           `,
         }}
       />
+
+      {/* Particle background with honeycomb, bubbles, and bees */}
+      <ParticleBackground />
 
       {/* Game container */}
       <div className="relative z-10">

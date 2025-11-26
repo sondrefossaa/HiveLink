@@ -1,6 +1,15 @@
+import { readFile } from 'fs/promises'
+import path from 'path'
+import { fileURLToPath } from 'url'
+
 import { PrismaClient } from '@prisma/client'
 
 const prisma = new PrismaClient()
+
+type CompoundWordSeed = {
+  word: string
+  parts: string[]
+}
 
 // Sample puzzles for seeding the database
 const puzzles = [
@@ -55,9 +64,7 @@ const puzzles = [
   },
 ]
 
-async function main() {
-  console.log('🐝 Starting HiveLink database seed...')
-
+async function seedPuzzles() {
   for (const puzzle of puzzles) {
     const result = await prisma.dailyPuzzle.upsert({
       where: { date: puzzle.date },
@@ -68,9 +75,43 @@ async function main() {
       },
       create: puzzle,
     })
-    console.log(`✓ Created/updated puzzle for ${puzzle.date.toISOString().split('T')[0]}: ${puzzle.startWord} → ${puzzle.goalWord}`)
+    console.log(`✓ Puzzle ${puzzle.startWord} → ${puzzle.goalWord} on ${puzzle.date.toISOString().split('T')[0]}`)
+  }
+}
+
+async function seedCompoundWords() {
+  const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
+  const dataPath = path.resolve(rootDir, 'data', 'compound-words.json')
+  const raw = await readFile(dataPath, 'utf-8')
+  const words = JSON.parse(raw) as CompoundWordSeed[]
+
+  let created = 0
+  for (const entry of words) {
+    if (!entry.word || !Array.isArray(entry.parts) || entry.parts.length < 2) {
+      console.warn(`⚠️  Skipping invalid compound entry: ${JSON.stringify(entry)}`)
+      continue
+    }
+
+    await prisma.compoundWord.upsert({
+      where: { word: entry.word.toLowerCase() },
+      update: {
+        parts: entry.parts.map(part => part.toLowerCase()),
+      },
+      create: {
+        word: entry.word.toLowerCase(),
+        parts: entry.parts.map(part => part.toLowerCase()),
+      },
+    })
+    created++
   }
 
+  console.log(`✓ Compound words seeded (${created} entries)`)
+}
+
+async function main() {
+  console.log('🐝 Starting HiveLink database seed...')
+  await seedPuzzles()
+  await seedCompoundWords()
   console.log('🍯 Seed completed successfully!')
 }
 

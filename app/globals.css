@@ -177,3 +177,17 @@ input:-webkit-autofill:focus {
   display: block;
 }
 
+/* Honeycomb pattern animation - subtle pulse */
+@keyframes honeycombPulse {
+  0%, 100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.18;
+  }
+}
+
+.honeycomb-pattern {
+  animation: honeycombPulse 6s ease-in-out infinite;
+}
+

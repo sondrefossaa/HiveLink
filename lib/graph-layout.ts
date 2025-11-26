@@ -3,6 +3,7 @@ import type { GraphEdge, GraphNode } from '@/types'
 // Constants - DO NOT MODIFY THESE
 export const FIXED_HORIZONTAL_SPACING = 300
 export const SIDE_BRANCH_VERTICAL_OFFSET = 80
+export const FORWARD_VERTICAL_SPACING = 110
 const MIN_GOAL_LAYER = 8
 const MAX_GOAL_LAYER = 12
 
@@ -175,6 +176,31 @@ function calculateSideBranchOffset(index: number): number {
 }
 
 /**
+ * Calculate forward-branch offset so siblings fan out (+, -, ++, --, etc.)
+ */
+function calculateForwardBranchOffset(slotIndex: number): number {
+  if (slotIndex === 0) return 0
+  const magnitude = Math.floor((slotIndex + 1) / 2)
+  const direction = slotIndex % 2 === 1 ? 1 : -1
+  return direction * magnitude * FORWARD_VERTICAL_SPACING
+}
+
+/**
+ * Claim a forward slot for a branch/layer/parent combination
+ */
+function claimForwardSlot(
+  registry: Map<string, number>,
+  branchId: string,
+  layer: number,
+  parentId?: string
+): number {
+  const key = `${branchId}:${layer}:${parentId ?? 'root'}`
+  const slotIndex = registry.get(key) ?? 0
+  registry.set(key, slotIndex + 1)
+  return slotIndex
+}
+
+/**
  * Generate unique branch ID for tracking vertical lineage
  */
 function generateBranchId(
@@ -278,12 +304,10 @@ export function computeGraphLayout(
   
   // Branch assignment system
   const branchAssignments = new Map<string, BranchAssignment>()
-  const branchSlots = new Map<string, number>() // branchId -> absolute Y position
+  const forwardSlotRegistry = new Map<string, number>()
   const sideBranchIndexMap = new Map<string, number>() // parentBranchId -> next side index
   
   // Initialize main branch
-  branchSlots.set('branch-main', centerY)
-  
   // Assign start node to main branch at center
   branchAssignments.set(startNode.id, {
     branchId: 'branch-main',
@@ -353,19 +377,22 @@ export function computeGraphLayout(
     const isForward = isForwardBranch(edge, parentNode, node)
     
     if (isForward) {
-      // Forward branch: same Y lineage as parent
+      // Forward branch: same lineage but allow fan-out per layer
+      const slotIndex = claimForwardSlot(
+        forwardSlotRegistry,
+        parentAssignment.branchId,
+        nodeLayer,
+        parentId
+      )
+      const absoluteY = parentAssignment.absoluteY + calculateForwardBranchOffset(slotIndex)
+
       branchAssignments.set(node.id, {
         branchId: parentAssignment.branchId,
-        absoluteY: parentAssignment.absoluteY,
+        absoluteY,
         kind: 'forward',
         layer: nodeLayer,
         parentId,
       })
-      
-      // Update branch slot to ensure it's tracked
-      if (!branchSlots.has(parentAssignment.branchId)) {
-        branchSlots.set(parentAssignment.branchId, parentAssignment.absoluteY)
-      }
     } else {
       // Side branch: offset vertically from parent
       const sideIndex = sideBranchIndexMap.get(parentAssignment.branchId) ?? 0
@@ -381,7 +408,6 @@ export function computeGraphLayout(
         parentId,
       })
       
-      branchSlots.set(newBranchId, absoluteY)
       sideBranchIndexMap.set(parentAssignment.branchId, sideIndex + 1)
     }
   }

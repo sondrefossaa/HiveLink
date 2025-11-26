@@ -57,12 +57,18 @@ npx prisma db push
 npm run db:seed
 ```
 
-6. Run the development server:
+6. (Optional) Import compound words dataset:
+```bash
+npm run import:words
+```
+This downloads a public word list, identifies compound words, and imports them into your database for faster validation. The dataset is not committed to Git.
+
+7. Run the development server:
 ```bash
 npm run dev
 ```
 
-7. Open [http://localhost:3000](http://localhost:3000) in your browser!
+8. Open [http://localhost:3000](http://localhost:3000) in your browser!
 
 ## 🛠 Tech Stack
 
@@ -103,6 +109,8 @@ hivelink/
 │   ├── validation.ts        # Word validation
 │   ├── compound-utils.ts    # Word parsing
 │   └── player-id.ts         # Player management
+├── scripts/
+│   └── import-compound-words.ts  # Import compound words dataset
 ├── types/
 │   └── index.ts             # TypeScript types
 └── prisma/
@@ -184,7 +192,11 @@ colors: {
 ```
 
 ### Word Validation
-The game uses Datamuse API for word validation. To add a fallback word list, extend `lib/validation.ts`.
+The game validates compound words using:
+1. **Local database** (fast): Compound words stored in Postgres via `npm run import:words`
+2. **Datamuse API** (fallback): External API for words not in the database
+
+To import a comprehensive compound words dataset, run `npm run import:words`. This downloads a public word list, identifies compound words, and bulk-imports them into your Neon database.
 
 ## 🤝 Contributing
 

@@ -1,4 +1,4 @@
-import { parseCompoundWord } from './compound-utils'
+import { parseCompoundWord, countCommonCompoundParts } from './compound-utils'
 import type { ValidationResult } from '@/types'
 
 // In-memory cache for Datamuse API results
@@ -37,14 +37,15 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
     }
     return result
   }
-  
-  // Rate limiting
-  const now = Date.now()
-  const timeSinceLastRequest = now - lastRequestTime
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
+
+  // Prefer local database lookup before hitting external APIs
+  const storedResult = await lookupCompoundWord(normalized)
+  if (storedResult) {
+    validationCache.set(normalized, storedResult)
+    return storedResult
   }
-  lastRequestTime = Date.now()
+  
+  await waitForNextRemoteRequest()
   
   try {
     // Query Datamuse API to check if the word exists
@@ -116,28 +117,45 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
       parts,
       word: normalized,
     }
+    void persistCompoundWord(normalized, parts)
     validationCache.set(normalized, result)
     return result
     
   } catch (error) {
     console.error('Validation error:', error)
-    
-    // Fallback: try to parse locally and be lenient
+
+    // Try a deterministic local fallback so common compounds still work offline
+    const alternativeParts = tryAlternativeParsing(normalized)
+    if (alternativeParts.length >= 2) {
+      const fallbackResult: ValidationResult = {
+        valid: true,
+        parts: alternativeParts,
+        word: normalized,
+      }
+      void persistCompoundWord(normalized, alternativeParts)
+      validationCache.set(normalized, fallbackResult)
+      return fallbackResult
+    }
+
     const parts = parseCompoundWord(normalized)
-    if (parts.length >= 2) {
-      const result: ValidationResult = {
+    const knownParts = countCommonCompoundParts(parts)
+    const looksLikeCompound = parts.length >= 2 && knownParts >= 2
+
+    if (looksLikeCompound) {
+      const fallbackResult: ValidationResult = {
         valid: true,
         parts,
         word: normalized,
       }
-      validationCache.set(normalized, result)
-      return result
+      void persistCompoundWord(normalized, parts)
+      validationCache.set(normalized, fallbackResult)
+      return fallbackResult
     }
-    
+
     return {
       valid: false,
       parts: [],
-      error: 'Could not validate word. Please try again.',
+      error: 'Validation service is unavailable. Please try again.',
       word: normalized,
     }
   }
@@ -334,5 +352,62 @@ export function quickValidate(word: string): { valid: boolean; error?: string } 
  */
 export function clearValidationCache(): void {
   validationCache.clear()
+}
+
+async function lookupCompoundWord(word: string): Promise<ValidationResult | null> {
+  if (typeof window !== 'undefined') {
+    return null
+  }
+
+  try {
+    const prisma = await getPrismaClient()
+    const record = await prisma.compoundWord.findUnique({
+      where: { word },
+    })
+
+    if (!record) {
+      return null
+    }
+
+    return {
+      valid: true,
+      parts: record.parts,
+      word: record.word,
+    }
+  } catch (error) {
+    console.error('Compound word DB lookup failed:', error)
+    return null
+  }
+}
+
+async function persistCompoundWord(word: string, parts: string[]): Promise<void> {
+  if (typeof window !== 'undefined') {
+    return
+  }
+
+  try {
+    const prisma = await getPrismaClient()
+    await prisma.compoundWord.upsert({
+      where: { word },
+      update: { parts },
+      create: { word, parts },
+    })
+  } catch (error) {
+    console.error('Compound word DB persist failed:', error)
+  }
+}
+
+async function getPrismaClient() {
+  const module = await import('./prisma')
+  return module.default
+}
+
+async function waitForNextRemoteRequest(): Promise<void> {
+  const now = Date.now()
+  const timeSinceLastRequest = now - lastRequestTime
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
+  }
+  lastRequestTime = Date.now()
 }
 

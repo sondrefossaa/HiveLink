@@ -8,7 +8,8 @@ interface TopBarProps {
   wordsUsed: number
   layersExplored: number
   onGiveUp: () => void
-  isComplete: boolean
+  onReset?: () => void
+  pathsFound: number
 }
 
 export default function TopBar({
@@ -17,7 +18,8 @@ export default function TopBar({
   wordsUsed,
   layersExplored,
   onGiveUp,
-  isComplete,
+  onReset,
+  pathsFound,
 }: TopBarProps) {
   // Format date for display
   const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -102,7 +104,7 @@ export default function TopBar({
             </div>
 
             {/* Give up button */}
-            {!isComplete && (
+            {pathsFound === 0 && (
               <>
                 <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
                 <button
@@ -125,8 +127,8 @@ export default function TopBar({
               </>
             )}
 
-            {/* Completion badge */}
-            {isComplete && (
+            {/* Paths found badge */}
+            {pathsFound > 0 && (
               <motion.div
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
@@ -141,8 +143,35 @@ export default function TopBar({
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                <span className="text-sm font-medium">Solved!</span>
+                <span className="text-sm font-medium">
+                  {pathsFound} {pathsFound === 1 ? 'path' : 'paths'} found
+                </span>
               </motion.div>
+            )}
+
+            {/* Reset button - always visible in top right */}
+            {onReset && (
+              <>
+                <div className="w-px h-8 bg-hive-graphite" />
+                <button
+                  onClick={onReset}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg
+                             bg-hive-graphite/50 hover:bg-hive-graphite/80 
+                             text-gray-400 hover:text-gray-200
+                             text-sm transition-colors"
+                  aria-label="Reset game"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                    />
+                  </svg>
+                  <span className="hidden sm:inline">Reset</span>
+                </button>
+              </>
             )}
           </div>
         </div>
