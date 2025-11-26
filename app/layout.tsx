@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, Space_Grotesk } from 'next/font/google'
 import './globals.css'
+import { MotionPreferenceProvider } from '@/hooks/useMotionPreference'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -52,7 +53,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
-        {children}
+        <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
       </body>
     </html>
   )

@@ -10,7 +10,7 @@ import {
   generateEdgeId,
   findPathToNode,
 } from '@/lib/compound-utils'
-import { quickValidate } from '@/lib/validation'
+import { quickValidate } from '@/lib/quick-validation'
 import {
   getSavedGameState,
   saveGameState,

@@ -156,12 +156,14 @@ export default function InputBar({
           >
             <input
               ref={inputRef}
+              autoFocus
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
               onKeyDown={handleKeyDown}
               placeholder={isDisabled ? 'Puzzle complete!' : 'Enter a compound word to continue...'}
-              disabled={isDisabled || isLoading}
+              disabled={isDisabled}
+              readOnly={isDisabled || isLoading}
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"

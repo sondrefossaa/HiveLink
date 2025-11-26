@@ -191,3 +191,33 @@ input:-webkit-autofill:focus {
   animation: honeycombPulse 6s ease-in-out infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .honeycomb-pattern {
+    animation: none;
+    opacity: 0.1;
+  }
+
+  .button-pulse,
+  .shimmer,
+  .node-appear,
+  .edge-draw {
+    animation: none;
+  }
+}
+
+html[data-motion='reduced'] .honeycomb-pattern,
+html[data-motion='reduced'] .button-pulse,
+html[data-motion='reduced'] .shimmer,
+html[data-motion='reduced'] .node-appear,
+html[data-motion='reduced'] .edge-draw {
+  animation: none;
+}
+
+html[data-motion='reduced'] .honeycomb-pattern {
+  opacity: 0.1;
+}
+
+html[data-motion='reduced'] .particle-layer-canvas {
+  display: none;
+}
+

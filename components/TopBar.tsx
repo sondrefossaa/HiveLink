@@ -1,6 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { MotionToggle } from './MotionToggle'
 
 interface TopBarProps {
   puzzleNumber: number
@@ -173,6 +174,9 @@ export default function TopBar({
                 </button>
               </>
             )}
+
+            <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
+            <MotionToggle />
           </div>
         </div>
       </div>

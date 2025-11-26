@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import ShareButton from './ShareButton'
 import type { GameStats } from '@/types'
+import { useMotionPreference } from '@/hooks/useMotionPreference'
 
 interface VictoryModalProps {
   isOpen: boolean
@@ -28,51 +29,57 @@ export default function VictoryModal({
   pathsFound,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
+  const { effectivePreference } = useMotionPreference()
 
   // Trigger confetti on open
   useEffect(() => {
-    if (isOpen) {
-      const duration = 3000
-      const animationEnd = Date.now() + duration
-
-      const randomInRange = (min: number, max: number) =>
-        Math.random() * (max - min) + min
-
-      const interval = setInterval(() => {
-        const timeLeft = animationEnd - Date.now()
-
-        if (timeLeft <= 0) {
-          clearInterval(interval)
-          return
-        }
-
-        const particleCount = 50 * (timeLeft / duration)
-
-        // Confetti from both sides
-        confetti({
-          particleCount: Math.floor(particleCount / 2),
-          startVelocity: 30,
-          spread: 60,
-          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
-          colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
-          shapes: ['circle', 'square'],
-          ticks: 200,
-        })
-
-        confetti({
-          particleCount: Math.floor(particleCount / 2),
-          startVelocity: 30,
-          spread: 60,
-          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
-          colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
-          shapes: ['circle', 'square'],
-          ticks: 200,
-        })
-      }, 250)
-
-      return () => clearInterval(interval)
+    if (!isOpen || effectivePreference === 'reduced') {
+      return
     }
-  }, [isOpen])
+
+    const duration = 3000
+    const animationEnd = Date.now() + duration
+
+    const randomInRange = (min: number, max: number) =>
+      Math.random() * (max - min) + min
+
+    const interval = window.setInterval(() => {
+      const timeLeft = animationEnd - Date.now()
+
+      if (timeLeft <= 0) {
+        window.clearInterval(interval)
+        return
+      }
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        return
+      }
+
+      const particleCount = 50 * (timeLeft / duration)
+
+      const sharedConfig = {
+        startVelocity: 30,
+        spread: 60,
+        colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
+        shapes: ['circle', 'square'] as const,
+        ticks: 200,
+      }
+
+      confetti({
+        particleCount: Math.floor(particleCount / 2),
+        origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+        ...sharedConfig,
+      })
+
+      confetti({
+        particleCount: Math.floor(particleCount / 2),
+        origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+        ...sharedConfig,
+      })
+    }, 250)
+
+    return () => window.clearInterval(interval)
+  }, [effectivePreference, isOpen])
 
   // Format time
   const formatTime = useCallback((ms: number) => {

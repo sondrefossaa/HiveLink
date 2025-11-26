@@ -1,12 +1,15 @@
 import { parseCompoundWord, countCommonCompoundParts } from './compound-utils'
 import type { ValidationResult } from '@/types'
+import { datamuseRateLimiter } from './rate-limit'
+import { getPrismaClient } from './prisma-client'
 
 // In-memory cache for Datamuse API results
 const validationCache = new Map<string, ValidationResult>()
 
-// Rate limiting
-let lastRequestTime = 0
-const MIN_REQUEST_INTERVAL = 100 // ms between requests
+type DatamuseEntry = {
+  word: string
+  [key: string]: unknown
+}
 
 /**
  * Validate a compound word using the Datamuse API
@@ -45,19 +48,26 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
     return storedResult
   }
   
-  await waitForNextRemoteRequest()
-  
   try {
-    // Query Datamuse API to check if the word exists
-    const response = await fetch(
-      `https://api.datamuse.com/words?sp=${normalized}&md=d&max=1`
-    )
-    
-    if (!response.ok) {
-      throw new Error('Datamuse API request failed')
-    }
-    
-    const data = await response.json()
+    // Query Datamuse API to check if the word exists using distributed rate limiting
+    const data = (await datamuseRateLimiter.schedule(async () => {
+      const response = await fetch(
+        `https://api.datamuse.com/words?sp=${normalized}&md=d&max=1`,
+        {
+          cache: 'no-store',
+          headers: {
+            'User-Agent': 'HiveLink Compound Validator/1.0',
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Datamuse API request failed')
+      }
+
+      const payload = (await response.json()) as DatamuseEntry[]
+      return payload
+    })) as DatamuseEntry[]
     
     // Check if word exists in the dictionary
     if (!data || data.length === 0) {
@@ -323,31 +333,6 @@ function tryAlternativeParsing(word: string): string[] {
 }
 
 /**
- * Validate word on the client side (quick check before API call)
- */
-export function quickValidate(word: string): { valid: boolean; error?: string } {
-  const normalized = word.toLowerCase().replace(/[^a-z]/g, '')
-  
-  if (normalized.length === 0) {
-    return { valid: false, error: 'Please enter a word' }
-  }
-  
-  if (normalized.length < 4) {
-    return { valid: false, error: 'Word must be at least 4 characters' }
-  }
-  
-  if (normalized.length > 30) {
-    return { valid: false, error: 'Word is too long' }
-  }
-  
-  if (!/^[a-z]+$/.test(normalized)) {
-    return { valid: false, error: 'Word can only contain letters' }
-  }
-  
-  return { valid: true }
-}
-
-/**
  * Clear the validation cache (useful for testing)
  */
 export function clearValidationCache(): void {
@@ -395,19 +380,5 @@ async function persistCompoundWord(word: string, parts: string[]): Promise<void>
   } catch (error) {
     console.error('Compound word DB persist failed:', error)
   }
-}
-
-async function getPrismaClient() {
-  const module = await import('./prisma')
-  return module.default
-}
-
-async function waitForNextRemoteRequest(): Promise<void> {
-  const now = Date.now()
-  const timeSinceLastRequest = now - lastRequestTime
-  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest))
-  }
-  lastRequestTime = Date.now()
 }
 

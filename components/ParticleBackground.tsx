@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useMotionPreference } from '@/hooks/useMotionPreference'
 
 interface Bubble {
   id: string
@@ -11,7 +12,7 @@ interface Bubble {
   opacity: number
   isPopping: boolean
   popProgress: number
-  phase: number // For smooth horizontal drift
+  phase: number
 }
 
 interface Bee {
@@ -26,238 +27,294 @@ interface Bee {
   targetY: number
 }
 
+const BUBBLE_COUNT = 10
+const BEE_COUNT = 3
+const COLLISION_INTERVAL = 3
+
+const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min
+
+const createBubbles = (width: number, height: number): Bubble[] =>
+  Array.from({ length: BUBBLE_COUNT }, (_, i) => ({
+    id: `bubble-${i}`,
+    x: Math.random() * width,
+    y: Math.random() * height,
+    size: 8 + Math.random() * 12,
+    speed: randomInRange(0.15, 0.35),
+    opacity: randomInRange(0.25, 0.6),
+    isPopping: false,
+    popProgress: 0,
+    phase: Math.random() * Math.PI * 2,
+  }))
+
+const createBees = (width: number, height: number): Bee[] =>
+  Array.from({ length: BEE_COUNT }, (_, i) => {
+    const startX = Math.random() * width
+    const startY = Math.random() * height
+
+    return {
+      id: `bee-${i}`,
+      x: startX,
+      y: startY,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: (Math.random() - 0.5) * 0.5,
+      angle: Math.random() * Math.PI * 2,
+      wingPhase: Math.random() * Math.PI * 2,
+      targetX: startX + randomInRange(-300, 300),
+      targetY: startY + randomInRange(-300, 300),
+    }
+  })
+
+const updateBubble = (bubble: Bubble, width: number, height: number): Bubble => {
+  if (bubble.isPopping) {
+    const progress = bubble.popProgress + 0.05
+    if (progress >= 1) {
+      return {
+        ...bubble,
+        x: Math.random() * width,
+        y: height + Math.random() * 200,
+        isPopping: false,
+        popProgress: 0,
+        phase: Math.random() * Math.PI * 2,
+      }
+    }
+
+    return { ...bubble, popProgress: progress }
+  }
+
+  if (Math.random() < 0.00005) {
+    return { ...bubble, isPopping: true, popProgress: 0 }
+  }
+
+  const nextY = bubble.y - bubble.speed
+  const y = nextY < -bubble.size ? height + Math.random() * 200 : nextY
+  const phase = bubble.phase + 0.002
+  let x = bubble.x + Math.sin(phase) * 0.3
+
+  if (x < 0) x = width + x
+  if (x > width) x = x - width
+
+  return { ...bubble, x, y, phase }
+}
+
+const updateBee = (bee: Bee, width: number, height: number): Bee => {
+  const wingPhase = bee.wingPhase + 0.3
+  const dx = bee.targetX - bee.x
+  const dy = bee.targetY - bee.y
+  const distance = Math.sqrt(dx * dx + dy * dy)
+
+  if (distance < 10) {
+    const newTargetX = Math.random() * width
+    const newTargetY = Math.random() * height
+    return {
+      ...bee,
+      targetX: newTargetX,
+      targetY: newTargetY,
+      angle: Math.atan2(dy, dx),
+      wingPhase,
+    }
+  }
+
+  const speed = 0.5
+  const vx = (dx / distance) * speed
+  const vy = (dy / distance) * speed
+  let x = bee.x + vx
+  let y = bee.y + vy
+  let nextVx = vx
+  let nextVy = vy
+
+  if (x < 0 || x > width) {
+    x = Math.max(0, Math.min(width, x))
+    nextVx = -nextVx
+  }
+
+  if (y < 0 || y > height) {
+    y = Math.max(0, Math.min(height, y))
+    nextVy = -nextVy
+  }
+
+  return {
+    ...bee,
+    x,
+    y,
+    vx: nextVx,
+    vy: nextVy,
+    angle: Math.atan2(nextVy, nextVx),
+    wingPhase,
+  }
+}
+
+const drawBubbles = (ctx: CanvasRenderingContext2D, bubbles: Bubble[]) => {
+  bubbles.forEach((bubble) => {
+    ctx.save()
+    ctx.globalAlpha = Math.max(0, bubble.opacity * (bubble.isPopping ? 1 - bubble.popProgress : 1))
+    ctx.beginPath()
+    const radius = bubble.size * (bubble.isPopping ? 1 + bubble.popProgress * 0.8 : 1)
+    ctx.arc(bubble.x, bubble.y, radius, 0, Math.PI * 2)
+    ctx.fillStyle = "rgba(244, 180, 0, 0.18)"
+    ctx.fill()
+    ctx.lineWidth = bubble.isPopping ? 2 - bubble.popProgress : 1
+    ctx.strokeStyle = "rgba(255, 184, 0, 0.45)"
+    ctx.stroke()
+    ctx.restore()
+  })
+}
+
+const drawBee = (ctx: CanvasRenderingContext2D, bee: Bee) => {
+  ctx.save()
+  ctx.translate(bee.x, bee.y)
+  ctx.rotate(bee.angle)
+
+  // wings
+  const wingOffset = Math.sin(bee.wingPhase) * 2
+  ctx.fillStyle = "rgba(255,255,255,0.6)"
+  ctx.beginPath()
+  ctx.ellipse(-2, -6, 6, 3 + wingOffset * 0.3, Math.PI / 6, 0, Math.PI * 2)
+  ctx.ellipse(-2, 6, 6, 3 - wingOffset * 0.3, -Math.PI / 6, 0, Math.PI * 2)
+  ctx.fill()
+
+  // body
+  ctx.fillStyle = "#F9A826"
+  ctx.beginPath()
+  ctx.ellipse(0, 0, 10, 6, 0, 0, Math.PI * 2)
+  ctx.fill()
+
+  // stripes
+  ctx.strokeStyle = "#5C2805"
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(-4, -5)
+  ctx.lineTo(-4, 5)
+  ctx.moveTo(0, -6)
+  ctx.lineTo(0, 6)
+  ctx.moveTo(4, -5)
+  ctx.lineTo(4, 5)
+  ctx.stroke()
+
+  ctx.restore()
+}
+
+const drawBees = (ctx: CanvasRenderingContext2D, bees: Bee[]) => {
+  bees.forEach((bee) => drawBee(ctx, bee))
+}
+
 export default function ParticleBackground() {
-  const [bubbles, setBubbles] = useState<Bubble[]>([])
-  const [bees, setBees] = useState<Bee[]>([])
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationFrameRef = useRef<number>()
-  const containerRef = useRef<HTMLDivElement>(null)
   const bubblesRef = useRef<Bubble[]>([])
   const beesRef = useRef<Bee[]>([])
   const frameCountRef = useRef(0)
-  
-  // Keep refs in sync with state
-  useEffect(() => {
-    bubblesRef.current = bubbles
-  }, [bubbles])
-  
-  useEffect(() => {
-    beesRef.current = bees
-  }, [bees])
+  const lastSizeRef = useRef({ width: 0, height: 0 })
+  const isVisibleRef = useRef(true)
+  const { effectivePreference } = useMotionPreference()
 
-  // Initialize bubbles
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+  const resizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || typeof window === "undefined") return
 
-    const initialBubbles: Bubble[] = []
-    const bubbleCount = 10 // Reduced for better performance
-    const width = window.innerWidth
-    const height = window.innerHeight
-
-    for (let i = 0; i < bubbleCount; i++) {
-      initialBubbles.push({
-        id: `bubble-${i}`,
-        x: Math.random() * width,
-        y: Math.random() * height, // Start bubbles at random positions across screen
-        size: 8 + Math.random() * 12, // Smaller bubbles
-        speed: 0.2 + Math.random() * 0.3, // Slower movement
-        opacity: 0.25 + Math.random() * 0.35, // Slightly higher opacity for visibility
-        isPopping: false,
-        popProgress: 0,
-        phase: Math.random() * Math.PI * 2, // Random starting phase for smooth drift
-      })
+    const { innerWidth, innerHeight, devicePixelRatio } = window
+    if (
+      lastSizeRef.current.width === innerWidth &&
+      lastSizeRef.current.height === innerHeight
+    ) {
+      return
     }
 
-    setBubbles(initialBubbles)
-  }, [])
+    lastSizeRef.current = { width: innerWidth, height: innerHeight }
+    const dpr = Math.min(devicePixelRatio || 1, 2)
+    canvas.width = innerWidth * dpr
+    canvas.height = innerHeight * dpr
+    canvas.style.width = `${innerWidth}px`
+    canvas.style.height = `${innerHeight}px`
 
-  // Initialize bees
-  useEffect(() => {
-    if (typeof window === 'undefined') return
+    const ctx = canvas.getContext("2d")
+    ctx?.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    const beeCount = 3 // Increased for better visibility
-    const initialBees: Bee[] = []
-    const width = window.innerWidth
-    const height = window.innerHeight
-
-    for (let i = 0; i < beeCount; i++) {
-      const startX = Math.random() * width
-      const startY = Math.random() * height
-      
-      initialBees.push({
-        id: `bee-${i}`,
-        x: startX,
-        y: startY,
-        vx: (Math.random() - 0.5) * 0.5,
-        vy: (Math.random() - 0.5) * 0.5,
-        angle: Math.random() * Math.PI * 2,
-        wingPhase: Math.random() * Math.PI * 2,
-        targetX: startX + (Math.random() - 0.5) * 300, // Slower movement
-        targetY: startY + (Math.random() - 0.5) * 300,
-      })
+    if (bubblesRef.current.length === 0) {
+      bubblesRef.current = createBubbles(innerWidth, innerHeight)
     }
 
-    setBees(initialBees)
+    if (beesRef.current.length === 0) {
+      beesRef.current = createBees(innerWidth, innerHeight)
+    }
   }, [])
 
-  // Animation loop
   useEffect(() => {
+    if (effectivePreference === 'reduced') {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = undefined
+      }
+
+      const canvas = canvasRef.current
+      const ctx = canvas?.getContext('2d')
+      if (canvas && ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+      }
+
+      bubblesRef.current = []
+      beesRef.current = []
+      return
+    }
+
+    const canvas = canvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!canvas || !ctx || typeof window === 'undefined') return
+
+    resizeCanvas()
+
+    const handleVisibility = () => {
+      isVisibleRef.current = !document.hidden
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
+    window.addEventListener('resize', resizeCanvas)
+
     const animate = () => {
-      const now = Date.now()
-      const width = typeof window !== 'undefined' ? window.innerWidth : 1920
-      const height = typeof window !== 'undefined' ? window.innerHeight : 1080
+      if (!isVisibleRef.current) {
+        animationFrameRef.current = requestAnimationFrame(animate)
+        return
+      }
 
-      // Update bubbles
-      setBubbles((prev) => {
-        const updated = prev.map((bubble) => {
-          if (bubble.isPopping) {
-            const newProgress = bubble.popProgress + 0.05
-            if (newProgress >= 1) {
-              // Reset bubble at bottom
-              return {
-                ...bubble,
-                x: Math.random() * width,
-                y: height + Math.random() * 200,
-                isPopping: false,
-                popProgress: 0,
-                phase: Math.random() * Math.PI * 2, // Reset phase
-              }
-            }
-            return { ...bubble, popProgress: newProgress }
-          }
+      const width = lastSizeRef.current.width || window.innerWidth
+      const height = lastSizeRef.current.height || window.innerHeight
 
-          // Natural pop chance (very low - reduced for less distraction)
-          if (Math.random() < 0.00005) {
-            return { ...bubble, isPopping: true, popProgress: 0 }
-          }
+      bubblesRef.current = bubblesRef.current.map((bubble) =>
+        updateBubble(bubble, width, height)
+      )
 
-          // Float upward
-          let newY = bubble.y - bubble.speed
-          if (newY < -bubble.size) {
-            // Reset bubble at bottom with random X position
-            return {
-              ...bubble,
-              x: Math.random() * width,
-              y: height + Math.random() * 200,
-              phase: Math.random() * Math.PI * 2,
-            }
-          }
+      beesRef.current = beesRef.current.map((bee) => updateBee(bee, width, height))
 
-          // Smooth horizontal drift using phase
-          const newPhase = bubble.phase + 0.002 // Increment phase smoothly
-          const driftAmount = Math.sin(newPhase) * 0.3 // Smooth sine wave drift
-          let newX = bubble.x + driftAmount
-
-          // Wrap around screen edges properly
-          if (newX < 0) {
-            newX = width + newX
-          } else if (newX > width) {
-            newX = newX - width
-          }
-
-          return {
-            ...bubble,
-            x: newX,
-            y: newY,
-            phase: newPhase,
-          }
-        })
-
-        return updated
-      })
-
-      // Update bees
-      setBees((prev) => {
-        return prev.map((bee) => {
-          // Update wing phase
-          const newWingPhase = bee.wingPhase + 0.3
-
-          // Move towards target with smooth path
-          const dx = bee.targetX - bee.x
-          const dy = bee.targetY - bee.y
-          const distance = Math.sqrt(dx * dx + dy * dy)
-
-          if (distance < 10) {
-            // New target
-            const newTargetX = Math.random() * width
-            const newTargetY = Math.random() * height
-            return {
-              ...bee,
-              targetX: newTargetX,
-              targetY: newTargetY,
-              angle: Math.atan2(dy, dx),
-              wingPhase: newWingPhase,
-            }
-          }
-
-          // Smooth movement towards target (slower for less distraction)
-          const speed = 0.5
-          const newVx = (dx / distance) * speed
-          const newVy = (dy / distance) * speed
-          const newX = bee.x + newVx
-          const newY = bee.y + newVy
-
-          // Boundary bounce
-          let finalX = newX
-          let finalY = newY
-          let finalVx = newVx
-          let finalVy = newVy
-
-          if (newX < 0 || newX > width) {
-            finalX = Math.max(0, Math.min(width, newX))
-            finalVx = -finalVx
-          }
-          if (newY < 0 || newY > height) {
-            finalY = Math.max(0, Math.min(height, newY))
-            finalVy = -finalVy
-          }
-
-          return {
-            ...bee,
-            x: finalX,
-            y: finalY,
-            vx: finalVx,
-            vy: finalVy,
-            angle: Math.atan2(finalVy, finalVx),
-            wingPhase: newWingPhase,
-          }
-        })
-      })
-
-      // Check collisions using refs - throttled for performance
-      // Only check collisions every few frames to reduce lag
-      frameCountRef.current++
-      
-      if (frameCountRef.current % 3 === 0) { // Check collisions every 3 frames
-        const currentBees = beesRef.current
-        const currentBubbles = bubblesRef.current
+      frameCountRef.current += 1
+      if (frameCountRef.current % COLLISION_INTERVAL === 0) {
         const collisionRadius = 30
-        const bubblesToPop: string[] = []
+        const toPop: string[] = []
 
-        currentBees.forEach((bee) => {
-          currentBubbles.forEach((bubble) => {
-            if (bubble.isPopping || bubblesToPop.includes(bubble.id)) return
+        beesRef.current.forEach((bee) => {
+          bubblesRef.current.forEach((bubble) => {
+            if (bubble.isPopping || toPop.includes(bubble.id)) return
 
             const dx = bee.x - bubble.x
             const dy = bee.y - bubble.y
             const distance = Math.sqrt(dx * dx + dy * dy)
 
             if (distance < collisionRadius + bubble.size) {
-              bubblesToPop.push(bubble.id)
+              toPop.push(bubble.id)
             }
           })
         })
 
-        // Pop bubbles in batch
-        if (bubblesToPop.length > 0) {
-          setBubbles((prev) =>
-            prev.map((bubble) =>
-              bubblesToPop.includes(bubble.id)
-                ? { ...bubble, isPopping: true, popProgress: 0 }
-                : bubble
-            )
+        if (toPop.length) {
+          bubblesRef.current = bubblesRef.current.map((bubble) =>
+            toPop.includes(bubble.id)
+              ? { ...bubble, isPopping: true, popProgress: 0 }
+              : bubble
           )
         }
       }
+
+      ctx.clearRect(0, 0, width, height)
+      drawBubbles(ctx, bubblesRef.current)
+      drawBees(ctx, beesRef.current)
 
       animationFrameRef.current = requestAnimationFrame(animate)
     }
@@ -265,11 +322,13 @@ export default function ParticleBackground() {
     animationFrameRef.current = requestAnimationFrame(animate)
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibility)
+      window.removeEventListener('resize', resizeCanvas)
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
       }
     }
-  }, [])
+  }, [effectivePreference, resizeCanvas])
 
   // Honeycomb pattern SVG - realistic beehive pattern with depth
   const HoneycombPattern = () => {
@@ -412,186 +471,19 @@ export default function ParticleBackground() {
     )
   }
 
-  // Bee component - more subtle
-  const BeeSprite = ({ bee }: { bee: Bee }) => {
-    const wingOffset = Math.sin(bee.wingPhase) * 4
-    const rotation = (bee.angle * 180) / Math.PI
-    const wingOpacity = 0.5 + Math.abs(Math.sin(bee.wingPhase)) * 0.2
-
-    return (
-      <div
-        className="absolute"
-        style={{
-          left: `${bee.x}px`,
-          top: `${bee.y}px`,
-          transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
-          pointerEvents: 'none',
-          opacity: 0.85, // More visible bees
-          transition: 'transform 0.1s linear', // Smooth movement
-        }}
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24">
-          {/* Wings - back layer */}
-          <ellipse
-            cx="9"
-            cy="9"
-            rx="3.5"
-            ry="5"
-            fill="#FFB800"
-            opacity={wingOpacity * 0.25}
-            transform={`translate(0, ${wingOffset * 0.8})`}
-          />
-          <ellipse
-            cx="15"
-            cy="9"
-            rx="3.5"
-            ry="5"
-            fill="#FFB800"
-            opacity={wingOpacity * 0.25}
-            transform={`translate(0, ${-wingOffset * 0.8})`}
-          />
-          {/* Body */}
-          <ellipse
-            cx="12"
-            cy="12"
-            rx="6"
-            ry="4"
-            fill="#F4B400"
-            opacity="0.8"
-          />
-          {/* Stripes */}
-          <line x1="9" y1="10" x2="9" y2="14" stroke="#1A1A1A" strokeWidth="1.2" />
-          <line x1="12" y1="10" x2="12" y2="14" stroke="#1A1A1A" strokeWidth="1.2" />
-          <line x1="15" y1="10" x2="15" y2="14" stroke="#1A1A1A" strokeWidth="1.2" />
-          {/* Wings - front layer */}
-          <ellipse
-            cx="8.5"
-            cy="9"
-            rx="3"
-            ry="4.5"
-            fill="#FFB800"
-            opacity={wingOpacity * 0.4}
-            transform={`translate(0, ${wingOffset})`}
-          />
-          <ellipse
-            cx="15.5"
-            cy="9"
-            rx="3"
-            ry="4.5"
-            fill="#FFB800"
-            opacity={wingOpacity * 0.4}
-            transform={`translate(0, ${-wingOffset})`}
-          />
-        </svg>
-      </div>
-    )
-  }
-
-  // Bubble component with lighting simulation
-  const BubbleSprite = ({ bubble }: { bubble: Bubble }) => {
-    if (bubble.isPopping) {
-      const scale = 1 + bubble.popProgress * 2
-      const opacity = (1 - bubble.popProgress) * bubble.opacity
-      const highlightSize = bubble.size * 0.3 * scale
-
-      return (
-        <div
-          className="absolute rounded-full transition-all duration-300 ease-out"
-          style={{
-            left: `${bubble.x}px`,
-            top: `${bubble.y}px`,
-            width: `${bubble.size * scale}px`,
-            height: `${bubble.size * scale}px`,
-            transform: 'translate(-50%, -50%)',
-            background: `radial-gradient(circle at 30% 30%, rgba(255, 184, 0, ${opacity}), rgba(244, 180, 0, ${opacity * 0.6}))`,
-            border: `1px solid rgba(255, 184, 0, ${opacity * 0.5})`,
-            opacity: opacity,
-            pointerEvents: 'none',
-            position: 'relative',
-          }}
-        >
-          {/* Lighting highlight - top left */}
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: `${highlightSize}px`,
-              height: `${highlightSize}px`,
-              top: `${bubble.size * scale * 0.2}px`,
-              left: `${bubble.size * scale * 0.2}px`,
-              background: `radial-gradient(circle, rgba(255, 255, 255, ${opacity * 0.6}), transparent)`,
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
-      )
-    }
-
-    const highlightSize = bubble.size * 0.3
-
-    return (
-      <div
-        className="absolute rounded-full"
-        style={{
-          left: `${bubble.x}px`,
-          top: `${bubble.y}px`,
-          width: `${bubble.size}px`,
-          height: `${bubble.size}px`,
-          transform: 'translate(-50%, -50%)',
-          background: `radial-gradient(circle at 30% 30%, rgba(255, 184, 0, ${bubble.opacity}), rgba(244, 180, 0, ${bubble.opacity * 0.6}))`,
-          border: `1px solid rgba(255, 184, 0, ${bubble.opacity * 0.5})`,
-          boxShadow: `0 0 ${bubble.size * 0.5}px rgba(244, 180, 0, ${bubble.opacity * 0.3})`,
-          pointerEvents: 'none',
-          position: 'relative',
-        }}
-      >
-        {/* Lighting highlight - small lighter circle in top left */}
-        <div
-          className="absolute rounded-full"
-          style={{
-            width: `${highlightSize}px`,
-            height: `${highlightSize}px`,
-            top: `${bubble.size * 0.2}px`,
-            left: `${bubble.size * 0.2}px`,
-            background: `radial-gradient(circle, rgba(255, 255, 255, ${bubble.opacity * 0.7}), transparent)`,
-            pointerEvents: 'none',
-          }}
-        />
-      </div>
-    )
-  }
+  const honeycombBackground = useMemo(() => <HoneycombPattern />, [])
 
   return (
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-0 pointer-events-none overflow-hidden"
-    >
-      {/* Honeycomb pattern - base layer */}
-      <div 
-        style={{ 
-          position: 'absolute', 
-          inset: 0, 
-          zIndex: 0,
-          backgroundColor: 'transparent'
-        }}
-      >
-        <HoneycombPattern />
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0" style={{ zIndex: 0 }}>
+        {honeycombBackground}
       </div>
-
-      {/* Bubbles */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
-        {bubbles.map((bubble) => (
-          <BubbleSprite key={bubble.id} bubble={bubble} />
-        ))}
-      </div>
-
-      {/* Bees */}
-      <div style={{ position: 'absolute', inset: 0, zIndex: 2 }}>
-        {bees.map((bee) => (
-          <BeeSprite key={bee.id} bee={bee} />
-        ))}
-      </div>
-
-      {/* Very subtle gradient overlay for depth - top layer */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full particle-layer-canvas"
+        style={{ zIndex: 1 }}
+        aria-hidden="true"
+      />
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -600,7 +492,7 @@ export default function ParticleBackground() {
             radial-gradient(ellipse at 80% 50%, rgba(244, 180, 0, 0.01) 0%, transparent 50%),
             radial-gradient(ellipse at 50% 100%, rgba(244, 180, 0, 0.015) 0%, transparent 40%)
           `,
-          zIndex: 3,
+          zIndex: 2,
         }}
       />
     </div>

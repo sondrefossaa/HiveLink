@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
-import { forceCollide, forceX, forceY } from 'd3-force'
+import { forceCollide, forceManyBody, forceX, forceY } from 'd3-force'
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
 import { computeGraphLayout, FIXED_HORIZONTAL_SPACING } from '@/lib/graph-layout'
+import { useMotionPreference } from '@/hooks/useMotionPreference'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
@@ -40,17 +41,20 @@ interface ForceLayoutLink extends GraphEdge {
   isPrimary: boolean
 }
 
-const SIMULATION_DURATION_MS = 1000
+const SIMULATION_DURATION_MS = 1100
 const CHARGE_STRENGTH = -520
-const LINK_DISTANCE_FORWARD = 280
-const LINK_DISTANCE_SIDE = 180
-const LINK_STRENGTH_FORWARD = 0.9
-const LINK_STRENGTH_SIDE = 0.25
-const COLLIDE_RADIUS_DEFAULT = 60
-const COLLIDE_RADIUS_ANCHORED = 85
-const COLLIDE_STRENGTH = 0.75
-const POINTER_RADIUS_DEFAULT = 65
-const POINTER_RADIUS_ANCHORED = 90
+const LINK_DISTANCE_FORWARD = FIXED_HORIZONTAL_SPACING - 20
+const LINK_DISTANCE_SIDE = Math.round(FIXED_HORIZONTAL_SPACING * 0.65)
+const LINK_STRENGTH_FORWARD = 0.95
+const LINK_STRENGTH_SIDE = 0.35
+const COLLIDE_RADIUS_DEFAULT = 80
+const COLLIDE_RADIUS_ANCHORED = 95
+const COLLIDE_STRENGTH = 0.8
+const POINTER_RADIUS_DEFAULT = 70
+const POINTER_RADIUS_ANCHORED = 100
+const SAME_LAYER_X_EPSILON = 10
+const NEAR_VERTICAL_HORIZONTAL_DRIFT = 14
+const START_HEIGHT_TOLERANCE = 1.5
 
 const resolveId = (value: string | GraphNode | undefined): string | undefined => {
   if (!value) return undefined
@@ -65,15 +69,32 @@ const getPointerHitRadius = (node: ForceLayoutNode, globalScale: number): number
   return base / Math.max(globalScale, 0.001)
 }
 
-const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number => {
+const MIN_VISUAL_SCALE = 0.2
+
+const getZoomCompensation = (node: ForceLayoutNode, globalScale: number): number => {
+  if (node.isStart || node.isGoal) return 1
+  if (globalScale >= 1) return 1
+  const normalized = Math.max(Math.min(globalScale, 1), MIN_VISUAL_SCALE)
+  return normalized * normalized
+}
+
+const getRenderedNodeSize = (node: ForceLayoutNode, globalScale: number): number => {
   const baseSize = node.isStart || node.isGoal ? 38 : 28
-  const size = baseSize / Math.max(globalScale, 0.001)
+  const inverseScale = 1 / Math.max(globalScale, 0.001)
+  return baseSize * inverseScale * getZoomCompensation(node, globalScale)
+}
+
+const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number => {
+  const size = getRenderedNodeSize(node, globalScale)
   // Use the full size (circumradius) to ensure edges don't overlap with hexagon
   // The hexagon vertices are at distance 'size' from center
   // Adding a small buffer to account for stroke width
   const strokeWidth = 2.5 / Math.max(globalScale, 0.001)
   return size + strokeWidth / 2
 }
+
+const isSideBranchLineage = (node?: { branchId?: string }): boolean =>
+  !!node?.branchId && node.branchId.includes('-side-')
 
 export default function Graph({
   nodes,
@@ -92,12 +113,23 @@ export default function Graph({
   const draggedNodeRef = useRef<string | null>(null)
   const snapBackTimerRef = useRef<number | null>(null)
   const pointerScaleRef = useRef(1)
+  const pageVisibilityRef = useRef(true)
+  const { effectivePreference } = useMotionPreference()
 
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
 
   const refreshGraph = useCallback(() => {
     const api = graphRef.current as (ForceGraphMethods & { refresh?: () => void }) | null
     api?.refresh?.()
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const handleVisibility = () => {
+      pageVisibilityRef.current = !document.hidden
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
   useEffect(() => {
@@ -120,6 +152,16 @@ export default function Graph({
     () => computeGraphLayout(nodes, edges, Math.max(dimensions.height, 480)),
     [nodes, edges, dimensions.height]
   )
+
+  const startAnchor = useMemo(() => {
+    if (!layout.startNodeId) return null
+    return layout.nodeMeta.get(layout.startNodeId) ?? null
+  }, [layout])
+
+  const startAnchorPosition = useMemo(() => {
+    if (!startAnchor) return null
+    return { x: startAnchor.targetX, y: startAnchor.targetY }
+  }, [startAnchor])
 
   // Calculate winning edge IDs for highlighting
   const winningEdgeIds = useMemo(() => {
@@ -161,17 +203,12 @@ export default function Graph({
         parentId: node.parentId,
       }
 
-      // CRITICAL: Pin X position - never let forces override it
+      // CRITICAL: Pin both axis positions so forces only smooth transitions
       base.fx = node.targetX
-      
-      // Pin goal and start nodes completely
-      if (node.isGoal || node.isStart) {
-        base.fy = node.targetY
-      }
+      base.fy = node.targetY
 
-      // Ensure fx/fy are not null (TypeScript compatibility)
       if (base.fx === null) base.fx = node.targetX
-      if (base.fy === null && (node.isGoal || node.isStart)) base.fy = node.targetY
+      if (base.fy === null) base.fy = node.targetY
 
       return base
     })
@@ -191,90 +228,79 @@ export default function Graph({
       }
     })
 
-    return { 
+    return {
       nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
-      links: graphLinks 
+      links: graphLinks,
     }
   }, [layout, edges, winningEdgeIds])
 
-  // Configure forces - X positions are SACRED, forces only fine-tune Y
+  // Configure strict simulation so forces only smooth jitter, never pick layout
   const configureForces = useCallback(() => {
-    if (!graphRef.current) return
-    const fg = graphRef.current
+    const fg = graphRef.current as (ForceGraphMethods & {
+      d3AlphaTarget?: (alpha: number) => ForceGraphMethods
+      d3ReheatSimulation?: () => void
+      graphData?: () => { nodes: ForceLayoutNode[] }
+      d3Force?: (forceName: string, force?: unknown) => any
+    }) | null
 
-    // Link force - stronger for forward links, weaker for side branches
-    const linkForce = fg.d3Force('link')
+    if (!fg) return
+
+    const linkForce = fg.d3Force?.('link')
     if (linkForce) {
       linkForce
-        .distance((link: unknown) => {
-          const l = link as ForceLayoutLink
-          return l.branchType === 'side' ? LINK_DISTANCE_SIDE : LINK_DISTANCE_FORWARD
-        })
-        .strength((link: unknown) => {
-          const l = link as ForceLayoutLink
-          return l.branchType === 'side' ? LINK_STRENGTH_SIDE : LINK_STRENGTH_FORWARD
-        })
+        .distance((link: ForceLayoutLink) =>
+          link.branchType === 'side' ? LINK_DISTANCE_SIDE : LINK_DISTANCE_FORWARD
+        )
+        .strength((link: ForceLayoutLink) =>
+          link.branchType === 'side' ? LINK_STRENGTH_SIDE : LINK_STRENGTH_FORWARD
+        )
     }
 
-    // Charge force - mild repulsion to prevent overlaps
-    const chargeForce = fg.d3Force('charge')
-    if (chargeForce) {
-      chargeForce.strength(CHARGE_STRENGTH).distanceMin(80).distanceMax(1400)
-    }
+    fg.d3Force?.(
+      'charge',
+      forceManyBody<ForceLayoutNode>()
+        .strength(CHARGE_STRENGTH)
+        .distanceMin(80)
+        .distanceMax(1400)
+    )
 
-    // CRITICAL: ForceX pushes nodes to their CORRECT layer position (never changes it)
-    fg.d3Force(
+    fg.d3Force?.(
       'x',
-      forceX((node: any) => {
-        const n = node as ForceLayoutNode
-        return n.targetX ?? 0
-      }).strength(1.0) // Maximum strength - X is immutable
+      forceX<ForceLayoutNode>((node) => node.targetX).strength(1.2)
     )
-    
-    // ForceY pulls nodes toward their ideal Y position (allows slight fine-tuning)
-    fg.d3Force(
+
+    fg.d3Force?.(
       'y',
-      forceY((node: any) => {
-        const n = node as ForceLayoutNode
-        return n.targetY ?? 0
-      }).strength(0.45) // Allow more breathing room vertically
+      forceY<ForceLayoutNode>((node) => node.targetY).strength(0.9)
     )
-    
-    // Collision force - last resort, only if needed
-    fg.d3Force(
+
+    fg.d3Force?.(
       'collide',
-      forceCollide((node: any) => getDynamicCollideRadius(node as ForceLayoutNode)).strength(
+      forceCollide<ForceLayoutNode>((node) => getDynamicCollideRadius(node)).strength(
         COLLIDE_STRENGTH
       )
     )
-    
-    // Disable center force - we control positions
-    fg.d3Force('center', null)
 
-    // Start simulation with high alpha
+    fg.d3Force?.('center', null)
+
     if ('d3AlphaTarget' in fg) {
-      (fg as any).d3AlphaTarget(0.9)
-      ;(fg as any).d3ReheatSimulation()
+      ;(fg as any).d3AlphaTarget(0.95)
+      ;(fg as any).d3ReheatSimulation?.()
 
-      // Settle after simulation duration
       if (settleTimerRef.current) {
         clearTimeout(settleTimerRef.current)
       }
+
       settleTimerRef.current = window.setTimeout(() => {
-        if (fg && 'd3AlphaTarget' in fg) {
+        if ('d3AlphaTarget' in fg) {
           ;(fg as any).d3AlphaTarget(0)
-          // Re-pin X positions after settling
-          if ('graphData' in fg) {
-            const data = (fg as any).graphData()
-            if (data && data.nodes) {
-              data.nodes.forEach((node: any) => {
-                const n = node as ForceLayoutNode
-                if (n) {
-                  n.fx = n.targetX
-                }
-              })
-            }
-          }
+        }
+        const data = fg.graphData?.()
+        if (data?.nodes) {
+          data.nodes.forEach((node) => {
+            node.fx = node.targetX
+            node.fy = node.targetY
+          })
         }
       }, SIMULATION_DURATION_MS)
     }
@@ -312,19 +338,25 @@ export default function Graph({
       animationFrameRef.current = null
     }
 
-    if (!isComplete) {
+    if (!isComplete || effectivePreference === 'reduced') {
+      winningPulseRef.current = 0
       refreshGraph()
       return
     }
 
     const animate = () => {
+      if (!pageVisibilityRef.current) {
+        animationFrameRef.current = requestAnimationFrame(animate)
+        return
+      }
+
       winningPulseRef.current = (performance.now() % 2000) / 2000 // 2 second cycle
       refreshGraph()
       animationFrameRef.current = requestAnimationFrame(animate)
     }
 
     animationFrameRef.current = requestAnimationFrame(animate)
-  }, [isComplete, refreshGraph])
+  }, [effectivePreference, isComplete, refreshGraph])
 
   // Auto-zoom to fit graph
   useEffect(() => {
@@ -340,7 +372,7 @@ export default function Graph({
     const anchorNode = layout.nodeMeta.get(anchorId)
     if (!anchorNode) return
     graphRef.current.centerAt(anchorNode.targetX, anchorNode.targetY, 600)
-  }, [selectedNodeId, layout.farthestNodeId, layout.startNodeId, layout.goalLayer])
+  }, [selectedNodeId, layout.farthestNodeId, layout.startNodeId, layout.goalLayer, layout.nodeMeta])
 
   const handleNodeClick = useCallback(
     (nodeObj: object) => {
@@ -435,8 +467,7 @@ export default function Graph({
       const y = node.y ?? node.targetY
       const isSelected = node.id === selectedNodeId
       const isGoalCompleted = node.isGoal && node.isCompleted
-      const baseSize = node.isStart || node.isGoal ? 38 : 28
-      const size = baseSize / globalScale
+      const size = getRenderedNodeSize(node, globalScale)
 
       // Draw glow/halo
       ctx.save()
@@ -546,93 +577,132 @@ export default function Graph({
       const dx = target.x - source.x
       const dy = target.y - source.y
       const distance = Math.sqrt(dx * dx + dy * dy) || 1
-      
+
       // Check if nodes are on the same layer (same X position)
       // Use targetX to determine layer since it's calculated from layer * FIXED_HORIZONTAL_SPACING
       // Use a threshold to account for floating point precision and small force adjustments
       const sourceTargetX = source.targetX ?? source.x
       const targetTargetX = target.targetX ?? target.x
-      const sameLayer = Math.abs(sourceTargetX - targetTargetX) < 10
-      
-      // For side branches, calculate padded start/end points at node boundaries
+      const sameLayer = Math.abs(sourceTargetX - targetTargetX) < SAME_LAYER_X_EPSILON
+      const horizontalDrift = Math.abs(dx)
+      const nearlyVertical = sameLayer || horizontalDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
+      const shouldRenderStaple = nearlyVertical
+      const isSideLineageEdge =
+        link.branchType === 'side' ||
+        (isSideBranchLineage(source) && isSideBranchLineage(target))
+      const isStapleEdge = shouldRenderStaple
+
+      const needsPaddedEndpoints = isSideLineageEdge || isStapleEdge
+      let sourceRadius = 0
+      let targetRadius = 0
+      if (needsPaddedEndpoints) {
+        sourceRadius = getNodeVisualRadius(source, globalScale)
+        targetRadius = getNodeVisualRadius(target, globalScale)
+      }
+
       let startX = source.x
       let startY = source.y
       let endX = target.x
       let endY = target.y
-      let controlX: number
-      let controlY: number
-      
-      if (link.branchType === 'side') {
+      let controlX = (startX + endX) / 2
+      let controlY = (startY + endY) / 2
+
+      ctx.save()
+      ctx.beginPath()
+
+      const computeCurveStrength = (baseStrength: number) => {
+        if (!startAnchorPosition) return baseStrength
+        const anchorX = startAnchorPosition.x
+        const sourceX = source.targetX ?? source.x ?? anchorX
+        const distanceFromStart = Math.abs(sourceX - anchorX)
+        const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
+        const attenuation = Math.max(0.3, 1 - normalized * 0.7)
+        return baseStrength * attenuation
+      }
+
+      const getCurveMode = () => {
+        if (!startAnchorPosition) return { direction: 1, isFlat: false }
+        const anchorY = startAnchorPosition.y
+        const sourceY = source.targetY ?? source.y ?? anchorY
+        const delta = sourceY - anchorY
+        if (Math.abs(delta) <= START_HEIGHT_TOLERANCE) {
+          return { direction: 0, isFlat: true }
+        }
+        return { direction: delta < 0 ? -1 : 1, isFlat: false }
+      }
+      const { direction: curveDirection, isFlat: isFlatToStart } = getCurveMode()
+
+      if (isStapleEdge) {
+        const verticalDir = dy >= 0 ? 1 : -1
+        startY = source.y + verticalDir * sourceRadius
+        endY = target.y - verticalDir * targetRadius
+
+        ctx.moveTo(startX, startY)
+        ctx.lineTo(endX, endY)
+
+        controlX = (startX + endX) / 2
+        controlY = (startY + endY) / 2
+      } else if (isSideLineageEdge) {
         // Calculate direction vector (normalized)
         const dirX = dx / distance
         const dirY = dy / distance
-        
-        // Get node radii
-        const sourceRadius = getNodeVisualRadius(source, globalScale)
-        const targetRadius = getNodeVisualRadius(target, globalScale)
-        
-        // Offset start point: move from source center by source radius along direction
+
+        // Offset start/end points using node radii so the curve leaves from the hexagon edge
         startX = source.x + dirX * sourceRadius
         startY = source.y + dirY * sourceRadius
-        
-        // Offset end point: move from target center by target radius along reverse direction
         endX = target.x - dirX * targetRadius
         endY = target.y - dirY * targetRadius
-        
-        ctx.save()
-        ctx.beginPath()
+
         ctx.moveTo(startX, startY)
-        
-        if (sameLayer) {
-          // Straight line for nodes on the same layer
-          ctx.lineTo(endX, endY)
-          // Control point for label positioning (midpoint)
+
+        // Curved bezier path for nodes on different layers
+        const paddedDx = endX - startX
+        const paddedDy = endY - startY
+        const paddedDistance = Math.sqrt(paddedDx * paddedDx + paddedDy * paddedDy) || 1
+        const paddedDirX = paddedDx / paddedDistance
+        const paddedDirY = paddedDy / paddedDistance
+
+        if (isFlatToStart) {
           controlX = (startX + endX) / 2
           controlY = (startY + endY) / 2
+          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
         } else {
-          // Curved bezier path for nodes on different layers
-          // Recalculate distance and direction for padded points
-          const paddedDx = endX - startX
-          const paddedDy = endY - startY
-          const paddedDistance = Math.sqrt(paddedDx * paddedDx + paddedDy * paddedDy) || 1
-          
-          // Update for curve calculation
-          const paddedDirX = paddedDx / paddedDistance
-          const paddedDirY = paddedDy / paddedDistance
-          
-          // Curved bezier path - more curve for side branches
-          const curveStrength = 0.4
-          const perpX = -paddedDirY
-          const perpY = paddedDirX
-          controlX = (startX + endX) / 2 + perpX * paddedDistance * curveStrength
-          controlY = (startY + endY) / 2 + perpY * paddedDistance * curveStrength
+          const curveStrength = computeCurveStrength(0.4)
+          const perpX = -paddedDirY * curveDirection
+          const perpY = paddedDirX * curveDirection
+          const horizontalOffset = perpX * paddedDistance * curveStrength
+          const verticalOffset = perpY * paddedDistance * curveStrength
+          controlX = (startX + endX) / 2 + horizontalOffset
+          controlY = (startY + endY) / 2 + verticalOffset
           ctx.quadraticCurveTo(controlX, controlY, endX, endY)
         }
       } else {
-        // Forward branches: use node centers (no padding)
-        ctx.save()
-        ctx.beginPath()
         ctx.moveTo(startX, startY)
-        
+
         if (sameLayer) {
-          // Straight line for nodes on the same layer
           ctx.lineTo(endX, endY)
-          // Control point for label positioning (midpoint)
           controlX = (startX + endX) / 2
           controlY = (startY + endY) / 2
         } else {
-          // Curved bezier path for nodes on different layers
-          const curveStrength = 0.15
-          const perpX = -dy / distance
-          const perpY = dx / distance
-          controlX = (source.x + target.x) / 2 + perpX * distance * curveStrength
-          controlY = (source.y + target.y) / 2 + perpY * distance * curveStrength
-          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
+          if (isFlatToStart) {
+            controlX = (source.x + target.x) / 2
+            controlY = (source.y + target.y) / 2
+            ctx.quadraticCurveTo(controlX, controlY, endX, endY)
+          } else {
+            const curveStrength = computeCurveStrength(0.15)
+            const perpX = (-dy / distance) * curveDirection
+            const perpY = (dx / distance) * curveDirection
+            const horizontalOffset = perpX * distance * curveStrength
+            const verticalOffset = perpY * distance * curveStrength
+            controlX = (source.x + target.x) / 2 + horizontalOffset
+            controlY = (source.y + target.y) / 2 + verticalOffset
+            ctx.quadraticCurveTo(controlX, controlY, endX, endY)
+          }
         }
       }
 
-      // Dash side branches (non-winning)
-      if (link.branchType === 'side' && !link.isWinning) {
+      // Dash stapled edges (non-winning) so all vertical connections look consistent
+      if ((isSideLineageEdge || isStapleEdge) && !link.isWinning) {
         ctx.setLineDash([12 / globalScale, 10 / globalScale])
       } else {
         ctx.setLineDash([])
@@ -646,8 +716,8 @@ export default function Graph({
         const pulse = 0.7 + 0.3 * Math.sin(winningPulseRef.current * Math.PI * 2)
         gradient.addColorStop(0, `rgba(255, 215, 130, ${pulse})`)
         gradient.addColorStop(1, `rgba(244, 201, 89, ${pulse})`)
-      } else if (link.branchType === 'side') {
-        // Side branch: dimmer
+      } else if (isSideLineageEdge || isStapleEdge) {
+        // Side or stapled branch: dimmer
         gradient.addColorStop(0, 'rgba(244, 180, 0, 0.45)')
         gradient.addColorStop(1, 'rgba(255, 220, 120, 0.25)')
       } else {
@@ -659,7 +729,7 @@ export default function Graph({
       ctx.strokeStyle = gradient
       ctx.lineWidth = link.isWinning
         ? (5 + 2 * Math.sin(winningPulseRef.current * Math.PI * 2)) / globalScale
-        : link.branchType === 'side'
+        : isSideLineageEdge || isStapleEdge
         ? 1.8 / globalScale
         : 2.8 / globalScale
       ctx.stroke()
@@ -685,12 +755,12 @@ export default function Graph({
           fontSize + 6
         )
 
-        ctx.fillStyle = link.branchType === 'side' ? '#F6E0A0' : '#F4B400'
+        ctx.fillStyle = (isSideLineageEdge || isStapleEdge) ? '#F6E0A0' : '#F4B400'
         ctx.fillText(link.sharedPart, labelX, labelY)
         ctx.restore()
       }
     },
-    [isComplete]
+    [isComplete, startAnchorPosition]
   )
 
   return (
