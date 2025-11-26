@@ -1,0 +1,179 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --hive-yellow: #F4B400;
+  --hive-gold: #FFB800;
+  --hive-amber: #E6A100;
+  --hive-honey: #D4A000;
+  --hive-dark: #0D0D0D;
+  --hive-charcoal: #1A1A1A;
+  --hive-graphite: #2A2A2A;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--hive-dark);
+  color: white;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--hive-charcoal);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--hive-graphite);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--hive-yellow);
+}
+
+/* Focus styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--hive-yellow);
+  outline-offset: 2px;
+}
+
+/* Input autofill styling */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: white;
+  -webkit-box-shadow: 0 0 0px 1000px var(--hive-graphite) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+/* Particle container */
+.particle-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Graph container */
+.graph-container {
+  position: relative;
+  z-index: 1;
+}
+
+/* Glow effects */
+.glow-yellow {
+  box-shadow: 0 0 20px rgba(244, 180, 0, 0.4);
+}
+
+.glow-yellow-lg {
+  box-shadow: 0 0 40px rgba(244, 180, 0, 0.5);
+}
+
+/* Text gradient */
+.text-gradient-gold {
+  background: linear-gradient(135deg, #FFB800 0%, #F4B400 50%, #E6A100 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Hexagon shape for nodes */
+.hexagon {
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+
+/* Animation for new nodes */
+@keyframes nodeAppear {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.node-appear {
+  animation: nodeAppear 0.4s ease-out forwards;
+}
+
+/* Edge drawing animation */
+@keyframes drawEdge {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.edge-draw {
+  stroke-dasharray: 1000;
+  stroke-dashoffset: 1000;
+  animation: drawEdge 0.5s ease-out forwards;
+}
+
+/* Victory shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(244, 180, 0, 0.2) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Button pulse */
+@keyframes buttonPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(244, 180, 0, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(244, 180, 0, 0);
+  }
+}
+
+.button-pulse {
+  animation: buttonPulse 2s infinite;
+}
+
+/* Prevent layout shift during graph render */
+.force-graph-container canvas {
+  display: block;
+}
+

@@ -1,0 +1,38 @@
+// Prisma schema for HiveLink
+// Using Neon Serverless Postgres
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model DailyPuzzle {
+  id           Int      @id @default(autoincrement())
+  date         DateTime @unique @db.Date
+  startWord    String   @map("start_word")
+  goalWord     String   @map("goal_word")
+  optimalSteps Int?     @map("optimal_steps")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("daily_puzzles")
+}
+
+model Score {
+  id         Int      @id @default(autoincrement())
+  puzzleDate DateTime @map("puzzle_date") @db.Date
+  playerId   String   @map("player_id")
+  wordsUsed  Int      @map("words_used")
+  layers     Int
+  finishedAt DateTime @default(now()) @map("finished_at")
+
+  @@unique([puzzleDate, playerId])
+  @@index([puzzleDate])
+  @@index([playerId])
+  @@map("scores")
+}
+

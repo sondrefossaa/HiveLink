@@ -1,0 +1,289 @@
+'use client'
+
+import { useEffect, useCallback, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import confetti from 'canvas-confetti'
+import ShareButton from './ShareButton'
+import type { GameStats } from '@/types'
+
+interface VictoryModalProps {
+  isOpen: boolean
+  stats: GameStats
+  puzzleNumber: number
+  onClose: () => void
+  path: string[]
+}
+
+export default function VictoryModal({
+  isOpen,
+  stats,
+  puzzleNumber,
+  onClose,
+  path,
+}: VictoryModalProps) {
+  const [showDetails, setShowDetails] = useState(false)
+
+  // Trigger confetti on open
+  useEffect(() => {
+    if (isOpen) {
+      const duration = 3000
+      const animationEnd = Date.now() + duration
+
+      const randomInRange = (min: number, max: number) =>
+        Math.random() * (max - min) + min
+
+      const interval = setInterval(() => {
+        const timeLeft = animationEnd - Date.now()
+
+        if (timeLeft <= 0) {
+          clearInterval(interval)
+          return
+        }
+
+        const particleCount = 50 * (timeLeft / duration)
+
+        // Confetti from both sides
+        confetti({
+          particleCount: Math.floor(particleCount / 2),
+          startVelocity: 30,
+          spread: 60,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+          colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
+          shapes: ['circle', 'square'],
+          ticks: 200,
+        })
+
+        confetti({
+          particleCount: Math.floor(particleCount / 2),
+          startVelocity: 30,
+          spread: 60,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+          colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
+          shapes: ['circle', 'square'],
+          ticks: 200,
+        })
+      }, 250)
+
+      return () => clearInterval(interval)
+    }
+  }, [isOpen])
+
+  // Format time
+  const formatTime = useCallback((ms: number) => {
+    const seconds = Math.floor(ms / 1000)
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return minutes > 0
+      ? `${minutes}m ${remainingSeconds}s`
+      : `${remainingSeconds}s`
+  }, [])
+
+  // Calculate performance rating
+  const getPerformanceRating = useCallback(() => {
+    const optimal = stats.optimalSteps || stats.wordsUsed
+    const ratio = stats.wordsUsed / optimal
+
+    if (ratio <= 1) return { emoji: '🏆', text: 'Perfect!', color: 'text-yellow-400' }
+    if (ratio <= 1.2) return { emoji: '⭐', text: 'Excellent!', color: 'text-green-400' }
+    if (ratio <= 1.5) return { emoji: '👍', text: 'Great!', color: 'text-blue-400' }
+    if (ratio <= 2) return { emoji: '✓', text: 'Good', color: 'text-gray-400' }
+    return { emoji: '📚', text: 'Completed', color: 'text-gray-500' }
+  }, [stats])
+
+  const rating = getPerformanceRating()
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={onClose}
+        >
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0, y: 20 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            exit={{ scale: 0.9, opacity: 0, y: 20 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-hive-charcoal rounded-2xl 
+                       border border-hive-graphite shadow-2xl overflow-hidden"
+          >
+            {/* Header glow */}
+            <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-hive-yellow/10 to-transparent" />
+
+            {/* Content */}
+            <div className="relative p-6">
+              {/* Trophy icon */}
+              <motion.div
+                initial={{ scale: 0, rotate: -180 }}
+                animate={{ scale: 1, rotate: 0 }}
+                transition={{ type: 'spring', delay: 0.2, damping: 15 }}
+                className="w-20 h-20 mx-auto mb-4 rounded-full 
+                          bg-gradient-to-br from-hive-yellow to-hive-amber
+                          flex items-center justify-center shadow-hive-glow-lg"
+              >
+                <span className="text-4xl">{rating.emoji}</span>
+              </motion.div>
+
+              {/* Title */}
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="text-2xl font-bold text-center text-white mb-1"
+              >
+                Puzzle Solved!
+              </motion.h2>
+
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.4 }}
+                className={`text-center font-medium ${rating.color} mb-6`}
+              >
+                {rating.text}
+              </motion.p>
+
+              {/* Stats grid */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5 }}
+                className="grid grid-cols-3 gap-4 mb-6"
+              >
+                <div className="text-center p-3 rounded-xl bg-hive-dark/50">
+                  <div className="text-2xl font-bold text-hive-yellow">
+                    {stats.wordsUsed}
+                  </div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide">
+                    Words
+                  </div>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-hive-dark/50">
+                  <div className="text-2xl font-bold text-hive-yellow">
+                    {stats.layersExplored}
+                  </div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide">
+                    Layers
+                  </div>
+                </div>
+                <div className="text-center p-3 rounded-xl bg-hive-dark/50">
+                  <div className="text-2xl font-bold text-hive-yellow">
+                    {formatTime(stats.timeElapsed)}
+                  </div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide">
+                    Time
+                  </div>
+                </div>
+              </motion.div>
+
+              {/* Optimal comparison */}
+              {stats.optimalSteps && stats.wordsUsed > stats.optimalSteps && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.6 }}
+                  className="text-center text-sm text-gray-400 mb-6"
+                >
+                  Optimal solution: {stats.optimalSteps} words
+                </motion.p>
+              )}
+
+              {/* Path toggle */}
+              <motion.button
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.7 }}
+                onClick={() => setShowDetails(!showDetails)}
+                className="w-full py-2 text-sm text-gray-400 hover:text-white
+                          flex items-center justify-center gap-2 transition-colors"
+              >
+                <span>{showDetails ? 'Hide' : 'Show'} your path</span>
+                <motion.svg
+                  animate={{ rotate: showDetails ? 180 : 0 }}
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 9l-7 7-7-7"
+                  />
+                </motion.svg>
+              </motion.button>
+
+              {/* Path display */}
+              <AnimatePresence>
+                {showDetails && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="py-4 flex flex-wrap items-center justify-center gap-2">
+                      {path.map((word, index) => (
+                        <span key={index} className="flex items-center gap-2">
+                          <span
+                            className={`px-2 py-1 rounded text-sm
+                                       ${index === 0 ? 'bg-hive-yellow text-hive-dark font-medium' : ''}
+                                       ${index === path.length - 1 ? 'bg-green-500 text-white font-medium' : ''}
+                                       ${index > 0 && index < path.length - 1 ? 'bg-hive-graphite text-gray-300' : ''}`}
+                          >
+                            {word}
+                          </span>
+                          {index < path.length - 1 && (
+                            <span className="text-hive-yellow">→</span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Actions */}
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.8 }}
+                className="flex gap-3 mt-6"
+              >
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 rounded-xl bg-hive-graphite hover:bg-hive-slate
+                            text-white font-medium transition-colors"
+                >
+                  Close
+                </button>
+                <ShareButton
+                  puzzleNumber={puzzleNumber}
+                  wordsUsed={stats.wordsUsed}
+                  layers={stats.layersExplored}
+                  path={path}
+                  won={true}
+                />
+              </motion.div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+}
+
