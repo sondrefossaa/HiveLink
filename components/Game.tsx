@@ -78,6 +78,8 @@ export default function Game() {
     setShowGiveUp(false)
   }, [gameState])
 
+  const pathsFound = gameState.winningPath.length > 0 ? 1 : 0
+
   // Loading state
   if (puzzleLoading) {
     return (
@@ -137,7 +139,7 @@ export default function Game() {
         layersExplored={gameState.maxLayer}
         onGiveUp={handleGiveUp}
         onReset={() => gameState.reset()}
-        pathsFound={gameState.winningPath.length > 0 ? 1 : 0}
+        pathsFound={pathsFound}
       />
 
       {/* Main game area */}
@@ -207,11 +209,13 @@ export default function Game() {
         stats={gameStats}
         puzzleNumber={puzzle.puzzleNumber}
         onClose={() => setShowVictory(false)}
+        onContinue={() => setShowVictory(false)}
         onTryAgain={() => {
           gameState.reset()
           setShowVictory(false)
         }}
         path={gameState.winningPath}
+        pathsFound={pathsFound}
       />
 
       {/* How to play tutorial */}

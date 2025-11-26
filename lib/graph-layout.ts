@@ -1,13 +1,14 @@
 import type { GraphEdge, GraphNode } from '@/types'
 
 export const FIXED_HORIZONTAL_SPACING = 300
-const BASE_SIDE_BRANCH_VERTICAL_OFFSET = 120
 const BASE_FORWARD_CONFLICT_SPACING = 150
 const BASE_CANVAS_HEIGHT = 640
 const MIN_VERTICAL_SCALE = 1
 const MAX_VERTICAL_SCALE = 1.8
 const MIN_GOAL_LAYER = 8
 const MAX_GOAL_LAYER = 12
+const MAX_OFFSET_STEPS = 10
+const MIN_LAYER_SPACING = 48
 
 type BranchKind = 'origin' | 'forward' | 'side'
 
@@ -132,39 +133,8 @@ function selectPrimaryParent(
   return chosen ?? parents[0]
 }
 
-const calculateSideBranchOffset = (index: number, unit: number): number => {
-  const magnitude = Math.floor(index / 2) + 1
-  const direction = index % 2 === 0 ? 1 : -1
-  return direction * magnitude * unit
-}
-
-const claimSideBranchOffset = (
-  registry: Map<string, number>,
-  branchId: string,
-  unit: number
-): { offset: number; index: number } => {
-  const nextIndex = registry.get(branchId) ?? 0
-  registry.set(branchId, nextIndex + 1)
-  return { offset: calculateSideBranchOffset(nextIndex, unit), index: nextIndex }
-}
-
-const calculateForwardConflictOffset = (slotIndex: number, unit: number): number => {
-  if (slotIndex === 0) return 0
-  const magnitude = Math.floor((slotIndex + 1) / 2)
-  const direction = slotIndex % 2 === 1 ? 1 : -1
-  return direction * magnitude * unit
-}
-
-const claimForwardConflictSlot = (
-  registry: Map<string, number>,
-  branchId: string,
-  layer: number
-): number => {
-  const key = `${branchId}:${layer}`
-  const slotIndex = (registry.get(key) ?? 0) + 1
-  registry.set(key, slotIndex)
-  return slotIndex
-}
+const clampValue = (value: number, min: number, max: number): number =>
+  Math.max(min, Math.min(max, value))
 
 /**
  * MAIN LAYOUT FUNCTION - Enforces strict layout rules
@@ -186,8 +156,8 @@ export function computeGraphLayout(
     MIN_VERTICAL_SCALE,
     Math.min(MAX_VERTICAL_SCALE, safeCanvasHeight / BASE_CANVAS_HEIGHT)
   )
-  const sideOffsetUnit = BASE_SIDE_BRANCH_VERTICAL_OFFSET * verticalScale
   const forwardConflictUnit = BASE_FORWARD_CONFLICT_SPACING * verticalScale
+  const verticalMargin = Math.max(MIN_LAYER_SPACING, forwardConflictUnit * 0.5)
   
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
   
@@ -232,13 +202,82 @@ export function computeGraphLayout(
   const centerY = safeCanvasHeight / 2
   
   const branchAssignments = new Map<string, BranchAssignment>()
-  const sideOffsetRegistry = new Map<string, number>()
-  const forwardConflictRegistry = new Map<string, number>()
-  const branchLayerOccupancy = new Map<string, string>()
+  const layerOccupancy = new Map<string, number[]>()
+  const globalLayerOccupancy = new Map<number, number[]>()
+  const getLayerKey = (layer: number, parentId?: string) => `${layer}:${parentId ?? 'root'}`
+
+  const registerLayerPosition = (layer: number, position: number, parentId?: string) => {
+    const clamped = clampValue(position, verticalMargin, safeCanvasHeight - verticalMargin)
+    const key = getLayerKey(layer, parentId)
+    const entries = layerOccupancy.get(key) ?? []
+    entries.push(clamped)
+    layerOccupancy.set(key, entries)
+
+    const globalEntries = globalLayerOccupancy.get(layer) ?? []
+    globalEntries.push(clamped)
+    globalLayerOccupancy.set(layer, globalEntries)
+    return clamped
+  }
+
+  const selectLayerPosition = (
+    layer: number,
+    preferredY: number,
+    parentId?: string,
+    parentY?: number
+  ): number => {
+    const key = getLayerKey(layer, parentId)
+    const takenPerEdge = layerOccupancy.get(key) ?? []
+    const takenGlobal = globalLayerOccupancy.get(layer) ?? []
+
+    const offsets: number[] = [0]
+    for (let step = 1; step <= MAX_OFFSET_STEPS; step++) {
+      const delta = step * forwardConflictUnit * 0.35 + MIN_LAYER_SPACING
+      offsets.push(delta, -delta)
+    }
+
+    let bestCandidate: number | undefined
+    let bestScore = -Infinity
+
+    for (const offset of offsets) {
+      const candidate = clampValue(preferredY + offset, verticalMargin, safeCanvasHeight - verticalMargin)
+      const minEdgeDistance = takenPerEdge.reduce(
+        (acc, value) => Math.min(acc, Math.abs(value - candidate)),
+        Number.POSITIVE_INFINITY
+      )
+      const minGlobalDistance = takenGlobal.reduce(
+        (acc, value) => Math.min(acc, Math.abs(value - candidate)),
+        Number.POSITIVE_INFINITY
+      )
+
+      // Skip outright if candidate would collide with existing node
+      if (Number.isFinite(minGlobalDistance) && minGlobalDistance < MIN_LAYER_SPACING * 0.65) {
+        continue
+      }
+
+      const edgeSpacingScore = Number.isFinite(minEdgeDistance)
+        ? Math.min(minEdgeDistance, MIN_LAYER_SPACING) / MIN_LAYER_SPACING
+        : 1
+      const globalSpacingScore = Number.isFinite(minGlobalDistance)
+        ? Math.min(minGlobalDistance, MIN_LAYER_SPACING * 1.2) / (MIN_LAYER_SPACING * 1.2)
+        : 1
+      const closenessScore = parentY === undefined
+        ? 1
+        : Math.max(0, 1 - Math.abs(candidate - parentY) / (forwardConflictUnit * 4))
+      const score = closenessScore * 0.6 + edgeSpacingScore * 0.2 + globalSpacingScore * 0.2
+
+      if (score > bestScore) {
+        bestScore = score
+        bestCandidate = candidate
+      }
+    }
+
+    const fallbackCandidate = bestCandidate ?? clampValue(preferredY, verticalMargin, safeCanvasHeight - verticalMargin)
+    return registerLayerPosition(layer, fallbackCandidate, parentId)
+  }
 
   branchAssignments.set(startNode.id, {
     branchId: 'branch-main',
-    absoluteY: centerY,
+    absoluteY: registerLayerPosition(0, centerY),
     kind: 'origin',
     layer: 0,
   })
@@ -262,27 +301,12 @@ export function computeGraphLayout(
     const parentNode = parentId ? nodeMap.get(parentId) : undefined
     const branchKind = determineBranchKind(connectingEdge, parentNode, node)
 
-    let branchId = baseAssignment.branchId
-    let absoluteY = baseAssignment.absoluteY
-    let branchType: BranchKind = branchKind === 'side' ? 'side' : 'forward'
+    const branchId = baseAssignment.branchId
+    const branchType: BranchKind = branchKind
 
-    if (branchKind === 'side') {
-      const { offset, index } = claimSideBranchOffset(
-        sideOffsetRegistry,
-        baseAssignment.branchId,
-        sideOffsetUnit
-      )
-      branchId = `${baseAssignment.branchId}-side-${index}`
-      absoluteY = baseAssignment.absoluteY + offset
-    } else {
-      const occupancyKey = `${branchId}:${nodeLayer}`
-      if (branchLayerOccupancy.has(occupancyKey)) {
-        const conflictSlot = claimForwardConflictSlot(forwardConflictRegistry, branchId, nodeLayer)
-        absoluteY =
-          baseAssignment.absoluteY + calculateForwardConflictOffset(conflictSlot, forwardConflictUnit)
-      }
-      branchLayerOccupancy.set(occupancyKey, node.id)
-    }
+    const preferredY = parentAssignment?.absoluteY ?? centerY
+    const alignmentTarget = parentAssignment?.absoluteY
+    const absoluteY = selectLayerPosition(nodeLayer, preferredY, parentId, alignmentTarget)
 
     branchAssignments.set(node.id, {
       branchId,
@@ -297,7 +321,7 @@ export function computeGraphLayout(
   if (goalNode) {
     branchAssignments.set(goalNode.id, {
       branchId: 'branch-goal',
-      absoluteY: centerY,
+      absoluteY: registerLayerPosition(goalLayer, centerY),
       kind: 'origin',
       layer: goalLayer,
     })
