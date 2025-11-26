@@ -228,9 +228,75 @@ export default function Graph({
       }
     })
 
+    // Remove duplicate edges and edges that span over other connected nodes on the same layer
+    // (e.g., if A→B→C exist on same layer, remove A→C as it overlaps visually)
+    const seenEdges = new Set<string>()
+    const edgeSet = new Set<string>()
+    
+    // First pass: collect all edges
+    graphLinks.forEach((link) => {
+      const sourceId = typeof link.source === 'string' ? link.source : link.source
+      const targetId = typeof link.target === 'string' ? link.target : link.target
+      edgeSet.add(`${sourceId}->${targetId}`)
+    })
+    
+    // Build adjacency for same-layer nodes
+    const nodeById = new Map(graphNodes.map((n) => [n.id, n]))
+    
+    const uniqueLinks = graphLinks.filter((link) => {
+      const sourceId = typeof link.source === 'string' ? link.source : link.source
+      const targetId = typeof link.target === 'string' ? link.target : link.target
+      const key = `${sourceId}->${targetId}`
+      const reverseKey = `${targetId}->${sourceId}`
+      
+      // Skip exact duplicates
+      if (seenEdges.has(key) || seenEdges.has(reverseKey)) {
+        return false
+      }
+      
+      const sourceNode = nodeById.get(sourceId)
+      const targetNode = nodeById.get(targetId)
+      
+      // Check if source and target are on the same layer (vertical edge)
+      if (sourceNode && targetNode) {
+        const sameLayer = Math.abs(sourceNode.targetX - targetNode.targetX) < 50
+        
+        if (sameLayer) {
+          // Check if there's an intermediate node that both connect to
+          // If A→B and B→C exist, then A→C should be removed
+          const hasIntermediateNode = graphNodes.some((node) => {
+            if (node.id === sourceId || node.id === targetId) return false
+            
+            // Check if this node is on the same layer
+            if (Math.abs(node.targetX - sourceNode.targetX) > 50) return false
+            
+            // Check if this node is vertically between source and target
+            const minY = Math.min(sourceNode.targetY, targetNode.targetY)
+            const maxY = Math.max(sourceNode.targetY, targetNode.targetY)
+            if (node.targetY <= minY || node.targetY >= maxY) return false
+            
+            // Check if edges exist through this intermediate node
+            const hasPathThrough = 
+              (edgeSet.has(`${sourceId}->${node.id}`) || edgeSet.has(`${node.id}->${sourceId}`)) &&
+              (edgeSet.has(`${node.id}->${targetId}`) || edgeSet.has(`${targetId}->${node.id}`))
+            
+            return hasPathThrough
+          })
+          
+          if (hasIntermediateNode) {
+            // This edge spans over an intermediate connected node - remove it
+            return false
+          }
+        }
+      }
+      
+      seenEdges.add(key)
+      return true
+    })
+
     return {
       nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
-      links: graphLinks,
+      links: uniqueLinks,
     }
   }, [layout, edges, winningEdgeIds])
 
@@ -358,15 +424,30 @@ export default function Graph({
     animationFrameRef.current = requestAnimationFrame(animate)
   }, [effectivePreference, isComplete, refreshGraph])
 
-  // Auto-zoom to fit graph
+  // Track if initial centering has happened
+  const hasInitializedRef = useRef(false)
+
+  // Handle initial graph render - zoom to fit after first frame
+  const handleRenderFrame = useCallback(() => {
+    if (hasInitializedRef.current) return
+    if (!graphRef.current) return
+    
+    // Mark as initialized and zoom to fit
+    hasInitializedRef.current = true
+    graphRef.current.zoomToFit(400, 80)
+  }, [])
+
+  // Auto-zoom to fit graph (skip on initial load - handled by onRenderFramePost)
   useEffect(() => {
     if (!graphRef.current || nodes.length < 2) return
+    if (!hasInitializedRef.current) return // Skip initial load
     graphRef.current.zoomToFit(500, 60)
   }, [dimensions.width, dimensions.height, layout.maxLayer, nodes.length])
 
-  // Center on selected node or frontier
+  // Center on selected node or frontier (skip on initial load)
   useEffect(() => {
     if (!graphRef.current) return
+    if (!hasInitializedRef.current) return // Skip initial load
     const anchorId = selectedNodeId ?? layout.farthestNodeId ?? layout.startNodeId
     if (!anchorId) return
     const anchorNode = layout.nodeMeta.get(anchorId)
@@ -743,8 +824,11 @@ export default function Graph({
         ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        const labelX = controlX
-        const labelY = controlY
+        
+        // Calculate the actual midpoint on the quadratic Bezier curve at t=0.5
+        // Formula: B(0.5) = 0.25*start + 0.5*control + 0.25*end
+        const labelX = 0.25 * startX + 0.5 * controlX + 0.25 * endX
+        const labelY = 0.25 * startY + 0.5 * controlY + 0.25 * endY
         const labelWidth = ctx.measureText(link.sharedPart).width
 
         ctx.fillStyle = 'rgba(7, 6, 4, 0.85)'
@@ -781,6 +865,7 @@ export default function Graph({
           onNodeClick={handleNodeClick}
           onNodeDrag={handleNodeDrag}
           onNodeDragEnd={handleNodeDragEnd}
+          onRenderFramePost={handleRenderFrame}
           nodePointerAreaPaint={(nodeObj, color, ctx) => {
             const node = nodeObj as ForceLayoutNode
             const globalScale = pointerScaleRef.current || 1

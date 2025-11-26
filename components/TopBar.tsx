@@ -2,15 +2,29 @@
 
 import { motion } from 'framer-motion'
 import { MotionToggle } from './MotionToggle'
+import type { PuzzleDifficulty, PuzzleMode } from '@/types'
 
 interface TopBarProps {
-  puzzleNumber: number
-  date: string
+  puzzleNumber?: number
+  date?: string
   wordsUsed: number
   layersExplored: number
   onGiveUp: () => void
-  onReset?: () => void
   pathsFound: number
+  mode: PuzzleMode
+  onModeChange: (mode: PuzzleMode) => void
+  difficulty: PuzzleDifficulty
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void
+  onGeneratePractice: () => void
+  isGeneratingPractice: boolean
+  isDaily: boolean
+  parValue?: number
+}
+
+const difficultyLabels: Record<PuzzleDifficulty, string> = {
+  easy: 'Easy',
+  medium: 'Medium',
+  hard: 'Hard',
 }
 
 export default function TopBar({
@@ -19,26 +33,36 @@ export default function TopBar({
   wordsUsed,
   layersExplored,
   onGiveUp,
-  onReset,
   pathsFound,
+  mode,
+  onModeChange,
+  difficulty,
+  onDifficultyChange,
+  onGeneratePractice,
+  isGeneratingPractice,
+  isDaily,
+  parValue,
 }: TopBarProps) {
   // Format date for display
-  const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  })
+  const formattedDate = date
+    ? new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      })
+    : null
 
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed top-0 left-0 right-0 z-40 bg-gradient-to-b from-hive-dark via-hive-dark/95 to-transparent"
+      className="fixed top-0 left-0 right-0 z-40"
     >
-      <div className="max-w-7xl mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
+      <div className="bg-hive-dark/95 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Logo and puzzle info */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-1 min-w-[220px]">
             {/* Logo */}
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 relative">
@@ -62,15 +86,47 @@ export default function TopBar({
 
             {/* Puzzle info */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
-                #{puzzleNumber}
-              </span>
-              <span className="text-gray-400 hidden sm:inline">{formattedDate}</span>
+              {isDaily ? (
+                <>
+                  <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
+                    #{puzzleNumber}
+                  </span>
+                  {formattedDate && (
+                    <span className="text-gray-400 hidden sm:inline">{formattedDate}</span>
+                  )}
+                </>
+              ) : (
+                <span className="bg-hive-yellow/10 text-hive-yellow px-3 py-1 rounded-full font-medium">
+                  Practice · {difficultyLabels[difficulty]}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Mode selector */}
+          <div className="order-3 w-full md:order-2 md:w-auto flex justify-center">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 uppercase tracking-wide text-[10px]">Mode</span>
+              <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
+                {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
+                  <button
+                    key={option}
+                    onClick={() => onModeChange(option)}
+                    className={`px-3 py-1 rounded-full transition-colors ${
+                      mode === option
+                        ? 'bg-hive-yellow text-hive-dark'
+                        : 'text-gray-300 hover:text-white'
+                    }`}
+                  >
+                    {option === 'daily' ? 'Daily' : 'Practice'}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Stats */}
-          <div className="flex items-center gap-3 sm:gap-6">
+          <div className="flex items-center gap-3 sm:gap-6 flex-1 md:flex-none justify-end order-2 md:order-3">
             {/* Words used */}
             <div className="text-center">
               <motion.div
@@ -104,16 +160,37 @@ export default function TopBar({
               </div>
             </div>
 
+            {/* Divider */}
+            {parValue && (
+              <>
+                <div className="w-px h-8 bg-hive-graphite" />
+                <div className="text-center">
+                  <motion.div
+                    key={parValue}
+                    initial={{ scale: 1.2 }}
+                    animate={{ scale: 1 }}
+                    className="text-lg sm:text-xl font-bold text-hive-yellow"
+                  >
+                    {parValue}
+                  </motion.div>
+                  <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
+                    Target
+                  </div>
+                </div>
+              </>
+            )}
+
             {/* Give up button */}
             {pathsFound === 0 && (
               <>
                 <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
                 <button
                   onClick={onGiveUp}
-                  className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg
+                  className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg
                              bg-hive-graphite/50 hover:bg-hive-graphite/80 
                              text-gray-400 hover:text-gray-200
                              text-sm transition-colors"
+                  title="Give Up"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -123,7 +200,7 @@ export default function TopBar({
                       d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
                     />
                   </svg>
-                  <span>Give Up</span>
+                  <span className="hidden sm:inline">Give Up</span>
                 </button>
               </>
             )}
@@ -150,34 +227,41 @@ export default function TopBar({
               </motion.div>
             )}
 
-            {/* Reset button - always visible in top right */}
-            {onReset && (
-              <>
-                <div className="w-px h-8 bg-hive-graphite" />
-                <button
-                  onClick={onReset}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg
-                             bg-hive-graphite/50 hover:bg-hive-graphite/80 
-                             text-gray-400 hover:text-gray-200
-                             text-sm transition-colors"
-                  aria-label="Reset game"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                    />
-                  </svg>
-                  <span className="hidden sm:inline">Reset</span>
-                </button>
-              </>
-            )}
-
             <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
             <MotionToggle />
           </div>
+        </div>
+
+        {/* Practice controls */}
+        {mode === 'practice' && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="flex flex-wrap items-center justify-end gap-2 text-sm mt-2 pt-2 border-t border-white/5"
+          >
+            <label className="text-gray-400 text-[10px] uppercase tracking-wide">Difficulty</label>
+            <select
+              value={difficulty}
+              onChange={(event) => onDifficultyChange(event.target.value as PuzzleDifficulty)}
+              className="bg-hive-graphite/70 border border-hive-graphite rounded-lg px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-hive-yellow/50"
+            >
+              {(['easy', 'medium', 'hard'] as PuzzleDifficulty[]).map((level) => (
+                <option key={level} value={level}>
+                  {difficultyLabels[level]}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => {
+                void onGeneratePractice()
+              }}
+              disabled={isGeneratingPractice}
+              className="px-3 py-1.5 rounded-lg bg-hive-yellow text-hive-dark font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors"
+            >
+              {isGeneratingPractice ? 'Generating…' : 'New Puzzle'}
+            </button>
+          </motion.div>
+        )}
         </div>
       </div>
     </motion.header>

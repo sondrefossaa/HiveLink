@@ -27,14 +27,36 @@ export interface GraphData {
 }
 
 // Puzzle Types
+export type PuzzleMode = 'daily' | 'practice';
+
+export type PuzzleDifficulty = 'easy' | 'medium' | 'hard';
+
 export interface DailyPuzzle {
   id: number;
   puzzleNumber: number;
   date: string;
   startWord: string;
   goalWord: string;
-  optimalSteps?: number;
+  optimalSteps: number;
+  isDaily: true;
+  mode: 'daily';
 }
+
+export interface PracticePuzzle {
+  id: string;
+  startWord: string;
+  goalWord: string;
+  optimalSteps: number;
+  difficulty: PuzzleDifficulty;
+  seed: string;
+  isDaily: false;
+  mode: 'practice';
+  solutionPath?: string[];
+  puzzleNumber?: number;
+  date?: string;
+}
+
+export type PuzzleInstance = DailyPuzzle | PracticePuzzle;
 
 // Score Types
 export interface Score {
@@ -44,6 +66,7 @@ export interface Score {
   wordsUsed: number;
   layers: number;
   finishedAt: string;
+  isDaily: boolean;
 }
 
 export interface LeaderboardEntry {
@@ -108,42 +131,6 @@ export interface ApiResponse<T> {
   success: boolean;
   data?: T;
   error?: string;
-}
-
-// Component Props Types
-export interface TopBarProps {
-  puzzleNumber: number;
-  date: string;
-  wordsUsed: number;
-  layersExplored: number;
-  onGiveUp: () => void;
-  isComplete: boolean;
-}
-
-export interface InputBarProps {
-  onSubmit: (word: string) => Promise<void>;
-  isLoading: boolean;
-  isDisabled: boolean;
-  error: string | null;
-  selectedNode: GraphNode | null;
-}
-
-export interface GraphProps {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  selectedNodeId: string | null;
-  onNodeSelect: (nodeId: string) => void;
-  goalWord: string;
-  isComplete: boolean;
-  winningPath: string[];
-}
-
-export interface VictoryModalProps {
-  isOpen: boolean;
-  stats: GameStats;
-  puzzleNumber: number;
-  onClose: () => void;
-  path: string[];
 }
 
 // Compound Word Types

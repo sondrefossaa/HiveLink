@@ -10,12 +10,14 @@ import { useMotionPreference } from '@/hooks/useMotionPreference'
 interface VictoryModalProps {
   isOpen: boolean
   stats: GameStats
-  puzzleNumber: number
+  puzzleNumber?: number
   onClose: () => void
   onContinue: () => void
   onTryAgain: () => void
   path: string[]
   pathsFound: number
+  isDaily: boolean
+  parValue?: number
 }
 
 export default function VictoryModal({
@@ -27,6 +29,8 @@ export default function VictoryModal({
   onTryAgain,
   path,
   pathsFound,
+  isDaily,
+  parValue,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const { effectivePreference } = useMotionPreference()
@@ -61,7 +65,7 @@ export default function VictoryModal({
         startVelocity: 30,
         spread: 60,
         colors: ['#F4B400', '#FFB800', '#E6A100', '#22c55e', '#ffffff'],
-        shapes: ['circle', 'square'] as const,
+        shapes: ['circle', 'square'] as ('circle' | 'square')[],
         ticks: 200,
       }
 
@@ -169,12 +173,34 @@ export default function VictoryModal({
                 {rating.text}
               </motion.p>
 
+              {!isDaily && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.45 }}
+                  className="mb-4 px-3 py-2 rounded-xl bg-hive-yellow/10 text-hive-yellow text-sm text-center"
+                >
+                  Practice game · Does not count toward streak or stats
+                </motion.div>
+              )}
+
+              {parValue && (
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.5 }}
+                  className="text-center text-sm text-gray-300 mb-2"
+                >
+                  Par: {parValue} words
+                </motion.p>
+              )}
+
               {/* Multiple paths indicator */}
               {pathsFound > 1 && (
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ delay: 0.45 }}
+                  transition={{ delay: 0.55 }}
                   className="text-center text-sm text-gray-400 mb-6"
                 >
                   {pathsFound} paths found! Keep exploring to find more.
@@ -299,13 +325,15 @@ export default function VictoryModal({
                 >
                   Close
                 </button>
-                <ShareButton
-                  puzzleNumber={puzzleNumber}
-                  wordsUsed={stats.wordsUsed}
-                  layers={stats.layersExplored}
-                  path={path}
-                  won={true}
-                />
+                {isDaily && typeof puzzleNumber === 'number' && (
+                  <ShareButton
+                    puzzleNumber={puzzleNumber}
+                    wordsUsed={stats.wordsUsed}
+                    layers={stats.layersExplored}
+                    path={path}
+                    won={true}
+                  />
+                )}
               </div>
               <div className="flex gap-3">
                 <button

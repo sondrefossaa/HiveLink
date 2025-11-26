@@ -8,7 +8,7 @@ const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { playerId, wordsUsed, layers, puzzleDate } = body
+    const { playerId, wordsUsed, layers, puzzleDate, isDaily = true } = body
 
     // Validate input
     if (!playerId || typeof playerId !== 'string') {
@@ -28,6 +28,13 @@ export async function POST(request: NextRequest) {
     if (typeof layers !== 'number' || layers < 1) {
       return NextResponse.json(
         { success: false, error: 'Invalid layers count' },
+        { status: 400 }
+      )
+    }
+
+    if (!isDaily) {
+      return NextResponse.json(
+        { success: false, error: 'Practice scores are not tracked' },
         { status: 400 }
       )
     }
@@ -72,6 +79,7 @@ export async function POST(request: NextRequest) {
             wordsUsed,
             layers,
             finishedAt: new Date(),
+            isDaily: true,
           },
         })
 
@@ -107,6 +115,7 @@ export async function POST(request: NextRequest) {
         playerId,
         wordsUsed,
         layers,
+        isDaily: true,
       },
     })
 

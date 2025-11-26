@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { GraphNode, GraphEdge, GameState, ValidationResult, DailyPuzzle } from '@/types'
+import type { GraphNode, GraphEdge, GameState, ValidationResult, PuzzleInstance } from '@/types'
 import {
   parseCompoundWord,
   findAllConnections,
@@ -36,14 +36,17 @@ interface UseGameStateResult extends GameState {
   winningPath: string[]
   startTime: number
   submitScore: () => Promise<void>
+  allowExploration: boolean
+  enableExploration: () => void
 }
 
-export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
+export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult {
   const [nodes, setNodes] = useState<GraphNode[]>([])
   const [edges, setEdges] = useState<GraphEdge[]>([])
   const [wordsUsed, setWordsUsed] = useState(0)
   const [maxLayer, setMaxLayer] = useState(0)
   const [isComplete, setIsComplete] = useState(false)
+  const [allowExploration, setAllowExploration] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -55,10 +58,12 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
   useEffect(() => {
     if (!puzzle) return
 
-    const puzzleDate = puzzle.date
+    const persistenceKey = puzzle.isDaily ? puzzle.date : undefined
 
-    // Check for saved state
-    const savedState = getSavedGameState(puzzleDate) as SavedState | null
+    // Check for saved state (daily puzzles only)
+    const savedState = persistenceKey
+      ? (getSavedGameState(persistenceKey) as SavedState | null)
+      : null
     
     if (savedState && savedState.nodes && savedState.nodes.length > 0) {
       setNodes(savedState.nodes)
@@ -106,6 +111,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
     setWordsUsed(0)
     setMaxLayer(0)
     setIsComplete(false)
+    setAllowExploration(false)
     setWinningPath([])
     setSelectedNodeId('start')
     scoreSubmittedRef.current = false
@@ -123,7 +129,9 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       isComplete,
     }
 
-    saveGameState(puzzle.date, state)
+    if (puzzle.isDaily) {
+      saveGameState(puzzle.date, state)
+    }
   }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete])
 
   const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
@@ -131,7 +139,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
       return { success: false, error: 'Puzzle not loaded' }
     }
 
-    if (isComplete) {
+    if (isComplete && !allowExploration) {
       return { success: false, error: 'Puzzle already completed' }
     }
 
@@ -246,8 +254,11 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
 
       if (isWinningWord) {
         setIsComplete(true)
-        markPuzzleCompleted(puzzle.date)
-        updatePlayerStats(wordsUsed + 1, true)
+        setAllowExploration(false)
+        if (puzzle.isDaily) {
+          markPuzzleCompleted(puzzle.date)
+          updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
+        }
 
         // Calculate winning path
         const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, ...newEdges])
@@ -301,17 +312,26 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
     setWordsUsed(0)
     setMaxLayer(0)
     setIsComplete(false)
+    setAllowExploration(false)
     setWinningPath([])
     setSelectedNodeId('start')
     setError(null)
     scoreSubmittedRef.current = false
 
     // Clear saved state
-    saveGameState(puzzle.date, null)
+    if (puzzle.isDaily) {
+      saveGameState(puzzle.date, null)
+    }
   }, [puzzle])
 
+  const enableExploration = useCallback(() => {
+    if (!isComplete) return
+    setAllowExploration(true)
+    setError(null)
+  }, [isComplete])
+
   const submitScore = useCallback(async () => {
-    if (!puzzle || !isComplete || scoreSubmittedRef.current) return
+    if (!puzzle || !puzzle.isDaily || !isComplete || scoreSubmittedRef.current) return
 
     try {
       const playerId = getPlayerId()
@@ -324,6 +344,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
           wordsUsed,
           layers: maxLayer,
           puzzleDate: puzzle.date,
+          isDaily: puzzle.isDaily,
         }),
       })
 
@@ -335,7 +356,7 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
 
   // Auto-submit score when game is complete
   useEffect(() => {
-    if (isComplete && !scoreSubmittedRef.current) {
+    if (isComplete && puzzle?.isDaily && !scoreSubmittedRef.current) {
       submitScore()
     }
   }, [isComplete, submitScore])
@@ -355,6 +376,8 @@ export function useGameState(puzzle: DailyPuzzle | null): UseGameStateResult {
     winningPath,
     startTime,
     submitScore,
+    allowExploration,
+    enableExploration,
   }
 }
 

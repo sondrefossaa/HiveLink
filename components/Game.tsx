@@ -36,7 +36,17 @@ const Graph = dynamic(() => import('./Graph'), {
 })
 
 export default function Game() {
-  const { puzzle, isLoading: puzzleLoading, error: puzzleError } = usePuzzle()
+  const {
+    puzzle,
+    isLoading: puzzleLoading,
+    error: puzzleError,
+    mode,
+    setMode,
+    difficulty,
+    setDifficulty,
+    generatePracticePuzzle,
+    isGeneratingPractice,
+  } = usePuzzle()
   const gameState = useGameState(puzzle)
   const [showVictory, setShowVictory] = useState(false)
   const [showGiveUp, setShowGiveUp] = useState(false)
@@ -49,11 +59,11 @@ export default function Game() {
 
   // Check for victory
   useMemo(() => {
-    if (gameState.isComplete && !showVictory) {
+    if (gameState.isComplete && !showVictory && !gameState.allowExploration) {
       // Small delay for the animation to show
       setTimeout(handleVictory, 500)
     }
-  }, [gameState.isComplete, showVictory, handleVictory])
+  }, [gameState.isComplete, showVictory, handleVictory, gameState.allowExploration])
 
   // Get selected node
   const selectedNode = useMemo(() => {
@@ -129,6 +139,8 @@ export default function Game() {
 
   if (!puzzle) return null
 
+  const isDailyPuzzle = puzzle.isDaily
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top bar */}
@@ -138,8 +150,15 @@ export default function Game() {
         wordsUsed={gameState.wordsUsed}
         layersExplored={gameState.maxLayer}
         onGiveUp={handleGiveUp}
-        onReset={() => gameState.reset()}
         pathsFound={pathsFound}
+        mode={mode}
+        onModeChange={setMode}
+        difficulty={difficulty}
+        onDifficultyChange={setDifficulty}
+        onGeneratePractice={generatePracticePuzzle}
+        isGeneratingPractice={isGeneratingPractice}
+        isDaily={isDailyPuzzle}
+        parValue={puzzle.optimalSteps}
       />
 
       {/* Main game area */}
@@ -195,13 +214,15 @@ export default function Game() {
       </main>
 
       {/* Input bar */}
-      <InputBar
-        onSubmit={gameState.addWord}
-        isLoading={gameState.isLoading}
-        isDisabled={gameState.isComplete}
-        error={gameState.error}
-        selectedNode={selectedNode}
-      />
+      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-gradient-to-t from-hive-dark via-hive-dark/95 to-transparent backdrop-blur-sm z-30">
+        <InputBar
+          onSubmit={gameState.addWord}
+          isLoading={gameState.isLoading}
+          isDisabled={gameState.isComplete && !gameState.allowExploration}
+          error={gameState.error}
+          selectedNode={selectedNode}
+        />
+      </div>
 
       {/* Victory modal */}
       <VictoryModal
@@ -209,13 +230,18 @@ export default function Game() {
         stats={gameStats}
         puzzleNumber={puzzle.puzzleNumber}
         onClose={() => setShowVictory(false)}
-        onContinue={() => setShowVictory(false)}
+        onContinue={() => {
+          gameState.enableExploration()
+          setShowVictory(false)
+        }}
         onTryAgain={() => {
           gameState.reset()
           setShowVictory(false)
         }}
         path={gameState.winningPath}
         pathsFound={pathsFound}
+        isDaily={isDailyPuzzle}
+        parValue={puzzle.optimalSteps}
       />
 
       {/* How to play tutorial */}

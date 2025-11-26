@@ -28,6 +28,7 @@ model Score {
   wordsUsed  Int      @map("words_used")
   layers     Int
   finishedAt DateTime @default(now()) @map("finished_at")
+  isDaily    Boolean  @default(true) @map("is_daily")
 
   @@unique([puzzleDate, playerId])
   @@index([puzzleDate])

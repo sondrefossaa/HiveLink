@@ -215,11 +215,19 @@ export function getPlayerStats(): {
 /**
  * Update player statistics after a game
  */
-export function updatePlayerStats(wordsUsed: number, won: boolean): void {
+export function updatePlayerStats(
+  wordsUsed: number,
+  won: boolean,
+  options?: { isDaily?: boolean }
+): void {
   if (typeof window === 'undefined') {
     return
   }
   
+  if (options?.isDaily === false) {
+    return
+  }
+
   try {
     const stats = getPlayerStats()
     

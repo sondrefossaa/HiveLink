@@ -2,15 +2,19 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 
 // Cache the puzzle for 5 minutes to reduce database load
+type CachedDailyPuzzle = {
+  id: number
+  puzzleNumber: number
+  date: string
+  startWord: string
+  goalWord: string
+  optimalSteps: number
+  isDaily: true
+  mode: 'daily'
+}
+
 let cachedPuzzle: {
-  data: {
-    id: number
-    puzzleNumber: number
-    date: string
-    startWord: string
-    goalWord: string
-    optimalSteps: number | null
-  } | null
+  data: CachedDailyPuzzle | null
   timestamp: number
 } | null = null
 
@@ -61,6 +65,8 @@ export async function GET() {
             startWord: 'butterfly',
             goalWord: 'moonshine',
             optimalSteps: 6,
+            isDaily: true,
+            mode: 'daily',
           },
         })
       }
@@ -77,13 +83,15 @@ export async function GET() {
         (today.getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24)
       )
 
-      const responseData = {
+      const responseData: CachedDailyPuzzle = {
         id: latestPuzzle.id,
         puzzleNumber: daysDiff + 1,
         date: latestPuzzle.date.toISOString().split('T')[0],
         startWord: latestPuzzle.startWord,
         goalWord: latestPuzzle.goalWord,
-        optimalSteps: latestPuzzle.optimalSteps,
+        optimalSteps: latestPuzzle.optimalSteps ?? 6,
+        isDaily: true,
+        mode: 'daily',
       }
 
       // Update cache
@@ -110,13 +118,15 @@ export async function GET() {
       (today.getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24)
     )
 
-    const responseData = {
+    const responseData: CachedDailyPuzzle = {
       id: puzzle.id,
       puzzleNumber: daysDiff + 1,
       date: puzzle.date.toISOString().split('T')[0],
       startWord: puzzle.startWord,
       goalWord: puzzle.goalWord,
-      optimalSteps: puzzle.optimalSteps,
+      optimalSteps: puzzle.optimalSteps ?? 6,
+      isDaily: true,
+      mode: 'daily',
     }
 
     // Update cache
@@ -143,6 +153,8 @@ export async function GET() {
         startWord: 'butterfly',
         goalWord: 'moonshine',
         optimalSteps: 6,
+        isDaily: true,
+        mode: 'daily',
       },
     })
   }

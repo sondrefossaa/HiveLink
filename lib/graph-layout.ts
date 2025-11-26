@@ -357,9 +357,9 @@ export function computeGraphLayout(
     // CRITICAL: X position is FIXED based on layer
     const targetX = computedLayer * FIXED_HORIZONTAL_SPACING
     
-    // Y position is calculated from branch assignment
+    // Y position is calculated from branch assignment, centered around 0
     const absoluteY = assignment.absoluteY
-    const targetY = absoluteY // Use absolute Y directly (canvas coordinates)
+    const targetY = absoluteY - centerY // Center around Y=0 for proper camera positioning
     
     return {
       ...node,
