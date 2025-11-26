@@ -1,11 +1,12 @@
 'use client'
 
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { forceX, forceY, forceCollide } from 'd3-force'
-import type { GraphNode, GraphEdge } from '@/types'
+import type { ForceGraphMethods } from 'react-force-graph-2d'
+import { forceCollide, forceX, forceY } from 'd3-force'
+import type { GraphEdge, GraphNode, GraphProps } from '@/types'
+import { computeGraphLayout, FIXED_HORIZONTAL_SPACING } from '@/lib/graph-layout'
 
-// Dynamically import ForceGraph2D to avoid SSR issues
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
   loading: () => (
@@ -15,34 +16,43 @@ const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ),
 })
 
-interface GraphProps {
-  nodes: GraphNode[]
-  edges: GraphEdge[]
-  selectedNodeId: string | null
-  onNodeSelect: (nodeId: string) => void
-  goalWord: string
-  isComplete: boolean
-}
+type BranchKind = 'origin' | 'forward' | 'side'
 
-interface ForceGraphNode extends Omit<GraphNode, 'fx' | 'fy'> {
+interface ForceLayoutNode extends GraphNode {
+  targetX: number
+  targetY: number
+  absoluteY: number
+  branchId: string
+  branchType: BranchKind
+  parentId?: string
+  computedLayer: number
   x?: number
   y?: number
   vx?: number
   vy?: number
-  fx?: number
-  fy?: number
+  fx?: number | null
+  fy?: number | null
 }
 
-interface ForceGraphLink {
-  source: string | ForceGraphNode
-  target: string | ForceGraphNode
-  sharedPart: string
+interface ForceLayoutLink extends GraphEdge {
+  branchType: 'forward' | 'side'
+  isWinning: boolean
+  isPrimary: boolean
 }
 
-// Graph coordinate constants - using centered coordinate system
-const GRAPH_SPAN = 600 // Total horizontal span from start to goal
-const START_X = -GRAPH_SPAN / 2 // Start node at left
-const GOAL_X = GRAPH_SPAN / 2 // Goal node at right
+const SIMULATION_DURATION_MS = 1000
+const CHARGE_STRENGTH = -450
+const LINK_DISTANCE_FORWARD = 280
+const LINK_DISTANCE_SIDE = 180
+const LINK_STRENGTH_FORWARD = 0.9
+const LINK_STRENGTH_SIDE = 0.25
+const COLLIDE_RADIUS = 80
+const COLLIDE_STRENGTH = 0.6
+
+const resolveId = (value: string | GraphNode | undefined): string | undefined => {
+  if (!value) return undefined
+  return typeof value === 'string' ? value : value.id
+}
 
 export default function Graph({
   nodes,
@@ -51,21 +61,31 @@ export default function Graph({
   onNodeSelect,
   goalWord,
   isComplete,
+  winningPath,
 }: GraphProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<any>(null)
-  const [dimensions, setDimensions] = useState({ width: 800, height: 500 })
+  const settleTimerRef = useRef<number | null>(null)
+  const winningPulseRef = useRef(0)
+  const animationFrameRef = useRef<number | null>(null)
+  const draggedNodeRef = useRef<string | null>(null)
+  const snapBackTimerRef = useRef<number | null>(null)
 
-  // Update dimensions on resize
+  const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
+
+  const refreshGraph = useCallback(() => {
+    const api = graphRef.current as (ForceGraphMethods & { refresh?: () => void }) | null
+    api?.refresh?.()
+  }, [])
+
   useEffect(() => {
     const updateDimensions = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setDimensions({
-          width: rect.width || 800,
-          height: rect.height || 500,
-        })
-      }
+      if (!containerRef.current) return
+      const rect = containerRef.current.getBoundingClientRect()
+      setDimensions({
+        width: rect.width || 800,
+        height: rect.height || 520,
+      })
     }
 
     updateDimensions()
@@ -73,308 +93,505 @@ export default function Graph({
     return () => window.removeEventListener('resize', updateDimensions)
   }, [])
 
-  // Calculate target X position for a node based on layer and direction
-  const getTargetX = useCallback((node: GraphNode, maxLayer: number) => {
-    if (node.isStart) return START_X
-    if (node.isGoal) return GOAL_X
-    
-    // Base position: interpolate between start and goal based on layer
-    const layerProgress = node.layer / (maxLayer + 1)
-    let targetX = START_X + layerProgress * GRAPH_SPAN
-    
-    // Adjust based on expansion direction
-    if (node.expandsForward === true) {
-      // Forward expansion: push further toward goal
-      targetX += GRAPH_SPAN * 0.08
-    } else if (node.expandsForward === false) {
-      // Backward expansion: keep closer to parent position
-      targetX -= GRAPH_SPAN * 0.03
-    }
-    
-    return targetX
-  }, [])
+  // Compute layout with strict rules
+  const layout = useMemo(
+    () => computeGraphLayout(nodes, edges, Math.max(dimensions.height, 480)),
+    [nodes, edges, dimensions.height]
+  )
 
-  // Transform data for force-graph
+  // Calculate winning edge IDs for highlighting
+  const winningEdgeIds = useMemo(() => {
+    if (!isComplete || winningPath.length < 2) {
+      return new Set<string>()
+    }
+
+    const wordToNode = new Map(nodes.map((node) => [node.word.toLowerCase(), node.id]))
+    const chain = new Set<string>()
+
+    for (let i = 0; i < winningPath.length - 1; i++) {
+      const fromId = wordToNode.get(winningPath[i].toLowerCase())
+      const toId = wordToNode.get(winningPath[i + 1].toLowerCase())
+      if (!fromId || !toId) continue
+      const connectingEdge = edges.find(
+        (edge) => resolveId(edge.source) === fromId && resolveId(edge.target) === toId
+      )
+      if (connectingEdge) {
+        chain.add(connectingEdge.id)
+      }
+    }
+
+    return chain
+  }, [edges, nodes, winningPath, isComplete])
+
+  // Prepare graph data with layout positions
   const graphData = useMemo(() => {
-    const maxLayer = Math.max(...nodes.filter(n => n.layer >= 0).map(n => n.layer), 1)
-    
-    const graphNodes: ForceGraphNode[] = nodes.map(node => {
-      const targetX = getTargetX(node, maxLayer)
-      
-      return {
+    const graphNodes: ForceLayoutNode[] = layout.nodes.map((node) => {
+      const base: ForceLayoutNode = {
         ...node,
-        // Set fixed positions for start and goal nodes
-        fx: node.isStart ? START_X : node.isGoal ? GOAL_X : undefined,
-        fy: node.isStart || node.isGoal ? 0 : undefined,
-        // Initialize position for new nodes (helps prevent random drift)
-        x: node.x ?? targetX,
-        y: node.y ?? 0,
+        x: node.x ?? node.targetX,
+        y: node.y ?? node.targetY,
+        targetX: node.targetX,
+        targetY: node.targetY,
+        absoluteY: node.absoluteY,
+        branchType: node.branchType,
+        computedLayer: node.computedLayer,
+        branchId: node.branchId,
+        parentId: node.parentId,
+      }
+
+      // CRITICAL: Pin X position - never let forces override it
+      base.fx = node.targetX
+      
+      // Pin goal and start nodes completely
+      if (node.isGoal || node.isStart) {
+        base.fy = node.targetY
+      }
+
+      // Ensure fx/fy are not null (TypeScript compatibility)
+      if (base.fx === null) base.fx = node.targetX
+      if (base.fy === null && (node.isGoal || node.isStart)) base.fy = node.targetY
+
+      return base
+    })
+
+    const graphLinks: ForceLayoutLink[] = edges.map((edge) => {
+      const targetId = resolveId(edge.target)
+      const sourceId = resolveId(edge.source)
+      const targetMeta = targetId ? layout.nodeMeta.get(targetId) : undefined
+
+      return {
+        ...edge,
+        source: sourceId ?? edge.source,
+        target: targetId ?? edge.target,
+        branchType: targetMeta?.branchType === 'side' ? 'side' : 'forward',
+        isWinning: winningEdgeIds.has(edge.id),
+        isPrimary: targetMeta?.parentId === sourceId,
       }
     })
 
-    const graphLinks: ForceGraphLink[] = edges.map(edge => ({
-      source: edge.source,
-      target: edge.target,
-      sharedPart: edge.sharedPart,
-    }))
+    return { 
+      nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
+      links: graphLinks 
+    }
+  }, [layout, edges, winningEdgeIds])
 
-    return { nodes: graphNodes, links: graphLinks }
-  }, [nodes, edges, getTargetX])
+  // Configure forces - X positions are SACRED, forces only fine-tune Y
+  const configureForces = useCallback(() => {
+    if (!graphRef.current) return
+    const fg = graphRef.current
 
-  // Custom node rendering
+    // Link force - stronger for forward links, weaker for side branches
+    const linkForce = fg.d3Force('link')
+    if (linkForce) {
+      linkForce
+        .distance((link: unknown) => {
+          const l = link as ForceLayoutLink
+          return l.branchType === 'side' ? LINK_DISTANCE_SIDE : LINK_DISTANCE_FORWARD
+        })
+        .strength((link: unknown) => {
+          const l = link as ForceLayoutLink
+          return l.branchType === 'side' ? LINK_STRENGTH_SIDE : LINK_STRENGTH_FORWARD
+        })
+    }
+
+    // Charge force - mild repulsion to prevent overlaps
+    const chargeForce = fg.d3Force('charge')
+    if (chargeForce) {
+      chargeForce.strength(CHARGE_STRENGTH).distanceMax(900)
+    }
+
+    // CRITICAL: ForceX pushes nodes to their CORRECT layer position (never changes it)
+    fg.d3Force(
+      'x',
+      forceX((node: any) => {
+        const n = node as ForceLayoutNode
+        return n.targetX ?? 0
+      }).strength(1.0) // Maximum strength - X is immutable
+    )
+    
+    // ForceY pulls nodes toward their ideal Y position (allows slight fine-tuning)
+    fg.d3Force(
+      'y',
+      forceY((node: any) => {
+        const n = node as ForceLayoutNode
+        return n.targetY ?? 0
+      }).strength(0.85) // Strong but allows slight adjustment
+    )
+    
+    // Collision force - last resort, only if needed
+    fg.d3Force('collide', forceCollide(COLLIDE_RADIUS).strength(COLLIDE_STRENGTH))
+    
+    // Disable center force - we control positions
+    fg.d3Force('center', null)
+
+    // Start simulation with high alpha
+    if ('d3AlphaTarget' in fg) {
+      (fg as any).d3AlphaTarget(0.9)
+      ;(fg as any).d3ReheatSimulation()
+
+      // Settle after simulation duration
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current)
+      }
+      settleTimerRef.current = window.setTimeout(() => {
+        if (fg && 'd3AlphaTarget' in fg) {
+          ;(fg as any).d3AlphaTarget(0)
+          // Re-pin X positions after settling
+          if ('graphData' in fg) {
+            const data = (fg as any).graphData()
+            if (data && data.nodes) {
+              data.nodes.forEach((node: any) => {
+                const n = node as ForceLayoutNode
+                if (n) {
+                  n.fx = n.targetX
+                }
+              })
+            }
+          }
+        }
+      }, SIMULATION_DURATION_MS)
+    }
+  }, [])
+
+  // Reconfigure forces when graph data changes
+  useEffect(() => {
+    const timer = setTimeout(configureForces, 100)
+    return () => clearTimeout(timer)
+  }, [configureForces, graphData.nodes.length, graphData.links.length])
+
+  // Cleanup timers
+  useEffect(() => {
+    return () => {
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+        animationFrameRef.current = null
+      }
+      if (snapBackTimerRef.current) {
+        clearTimeout(snapBackTimerRef.current)
+        snapBackTimerRef.current = null
+      }
+    }
+  }, [])
+
+  // Animate winning path pulse
+  useEffect(() => {
+    if (!graphRef.current) return
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current)
+      animationFrameRef.current = null
+    }
+
+    if (!isComplete) {
+      refreshGraph()
+      return
+    }
+
+    const animate = () => {
+      winningPulseRef.current = (performance.now() % 2000) / 2000 // 2 second cycle
+      refreshGraph()
+      animationFrameRef.current = requestAnimationFrame(animate)
+    }
+
+    animationFrameRef.current = requestAnimationFrame(animate)
+  }, [isComplete, refreshGraph])
+
+  // Auto-zoom to fit graph
+  useEffect(() => {
+    if (!graphRef.current || nodes.length < 2) return
+    graphRef.current.zoomToFit(500, 60)
+  }, [dimensions.width, dimensions.height, layout.maxLayer, nodes.length])
+
+  // Center on selected node or frontier
+  useEffect(() => {
+    if (!graphRef.current) return
+    const anchorId = selectedNodeId ?? layout.farthestNodeId ?? layout.startNodeId
+    if (!anchorId) return
+    const anchorNode = layout.nodeMeta.get(anchorId)
+    if (!anchorNode) return
+    graphRef.current.centerAt(anchorNode.targetX, anchorNode.targetY, 600)
+  }, [selectedNodeId, layout.farthestNodeId, layout.startNodeId, layout.goalLayer])
+
+  const handleNodeClick = useCallback(
+    (nodeObj: object) => {
+      const node = nodeObj as ForceLayoutNode
+      if (node.isGoal && !node.isCompleted) return
+      onNodeSelect(node.id)
+    },
+    [onNodeSelect]
+  )
+
+  // Handle node dragging - enforce X constraint and allow Y movement
+  const handleNodeDrag = useCallback((nodeObj: any) => {
+    const node = nodeObj as ForceLayoutNode
+    if (!node) return
+    
+    // Don't allow dragging start/goal nodes
+    if (node.isStart || (node.isGoal && !node.isCompleted)) {
+      // Re-pin immediately
+      node.fx = node.targetX
+      node.fy = node.targetY
+      return
+    }
+    
+    // Track that we're dragging this node
+    if (!draggedNodeRef.current) {
+      draggedNodeRef.current = node.id
+    }
+    
+    // CRITICAL: Lock X position - node cannot move horizontally
+    node.fx = node.targetX
+    if (typeof node.x === 'number') {
+      node.x = node.targetX
+    }
+    
+    // Allow Y to move freely during drag
+    node.fy = null
+    
+    // Reheat simulation for smooth dragging
+    if (graphRef.current && 'd3ReheatSimulation' in graphRef.current) {
+      ;(graphRef.current as any).d3ReheatSimulation()
+    }
+  }, [])
+
+  // Handle node drag end - snap back to target position
+  const handleNodeDragEnd = useCallback((nodeObj: any) => {
+    const node = nodeObj as ForceLayoutNode
+    if (!node) return
+    
+    const wasDragging = draggedNodeRef.current === node.id
+    draggedNodeRef.current = null
+    
+    if (!wasDragging) return
+    
+    // Clear any existing snap-back timer
+    if (snapBackTimerRef.current) {
+      clearTimeout(snapBackTimerRef.current)
+      snapBackTimerRef.current = null
+    }
+    
+    // Re-enable forces to snap back smoothly
+    node.fx = node.targetX // Re-pin X
+    node.fy = node.targetY // Re-pin Y to snap back
+    
+    // Reheat simulation to animate the snap-back
+    if (graphRef.current && 'd3ReheatSimulation' in graphRef.current) {
+      ;(graphRef.current as any).d3AlphaTarget(0.3)
+      ;(graphRef.current as any).d3ReheatSimulation()
+    }
+    
+    // After snap-back animation, ensure position is locked
+    snapBackTimerRef.current = window.setTimeout(() => {
+      if (node) {
+        node.fx = node.targetX
+        node.fy = node.targetY
+      }
+      
+      if (graphRef.current && 'd3AlphaTarget' in graphRef.current) {
+        ;(graphRef.current as any).d3AlphaTarget(0)
+      }
+      
+      snapBackTimerRef.current = null
+      refreshGraph()
+    }, 600) // Snap-back duration
+  }, [refreshGraph])
+
+  // Custom node rendering with hexagon shape
   const drawNode = useCallback(
     (nodeObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const node = nodeObj as ForceGraphNode
-      const label = node.word
-      const fontSize = Math.max(12 / globalScale, 10)
+      const node = nodeObj as ForceLayoutNode
+      const x = node.x ?? node.targetX
+      const y = node.y ?? node.targetY
       const isSelected = node.id === selectedNodeId
-      const isStartOrGoal = node.isStart || node.isGoal
       const isGoalCompleted = node.isGoal && node.isCompleted
-
-      // Node size
-      const baseSize = isStartOrGoal ? 35 : 25
+      const baseSize = node.isStart || node.isGoal ? 38 : 28
       const size = baseSize / globalScale
 
-      // Get position
-      const x = node.x || 0
-      const y = node.y || 0
+      // Draw glow/halo
+      ctx.save()
+      ctx.beginPath()
+      ctx.fillStyle = isSelected
+        ? 'rgba(244, 180, 0, 0.4)'
+        : node.isGoal
+        ? 'rgba(244, 180, 0, 0.25)'
+        : 'rgba(244, 180, 0, 0.15)'
+      ctx.arc(x, y, size * 1.6, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.restore()
 
-      // Draw glow for selected/special nodes
-      if (isSelected || isStartOrGoal || isGoalCompleted) {
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2)
-        if (isGoalCompleted) {
-          gradient.addColorStop(0, 'rgba(34, 197, 94, 0.4)')
-          gradient.addColorStop(1, 'rgba(34, 197, 94, 0)')
-        } else if (node.isGoal) {
-          gradient.addColorStop(0, 'rgba(244, 180, 0, 0.3)')
-          gradient.addColorStop(1, 'rgba(244, 180, 0, 0)')
-        } else if (isSelected) {
-          gradient.addColorStop(0, 'rgba(255, 184, 0, 0.5)')
-          gradient.addColorStop(1, 'rgba(255, 184, 0, 0)')
-        } else {
-          gradient.addColorStop(0, 'rgba(244, 180, 0, 0.3)')
-          gradient.addColorStop(1, 'rgba(244, 180, 0, 0)')
-        }
-        ctx.fillStyle = gradient
-        ctx.beginPath()
-        ctx.arc(x, y, size * 2, 0, 2 * Math.PI)
-        ctx.fill()
-      }
-
-      // Draw hexagonal node
+      // Draw hexagon
+      ctx.save()
       ctx.beginPath()
       const sides = 6
-      const angle = Math.PI / 6 // Start at flat top
+      const angle = Math.PI / 6
       for (let i = 0; i < sides; i++) {
         const a = angle + (i * 2 * Math.PI) / sides
         const px = x + size * Math.cos(a)
         const py = y + size * Math.sin(a)
-        if (i === 0) {
-          ctx.moveTo(px, py)
-        } else {
-          ctx.lineTo(px, py)
-        }
+        if (i === 0) ctx.moveTo(px, py)
+        else ctx.lineTo(px, py)
       }
       ctx.closePath()
 
-      // Fill color based on state
-      if (isGoalCompleted) {
-        ctx.fillStyle = '#22c55e' // Green for completed goal
-      } else if (node.isGoal) {
-        ctx.fillStyle = '#2A2A2A'
-      } else if (node.isStart) {
-        ctx.fillStyle = '#F4B400'
-      } else if (isSelected) {
-        ctx.fillStyle = '#FFB800'
-      } else {
-        ctx.fillStyle = '#3A3A3A'
-      }
+      ctx.fillStyle = node.isGoal
+        ? '#1C170F'
+        : node.isStart
+        ? '#F4B400'
+        : isGoalCompleted
+        ? '#22c55e'
+        : '#0F0D09'
+      ctx.shadowColor = isSelected ? 'rgba(255, 196, 0, 0.9)' : 'rgba(244, 180, 0, 0.45)'
+      ctx.shadowBlur = isSelected ? 25 : 12
       ctx.fill()
 
-      // Border
-      ctx.strokeStyle = isSelected ? '#FFB800' : isStartOrGoal ? '#F4B400' : '#5A5A5A'
-      ctx.lineWidth = isSelected ? 3 / globalScale : 2 / globalScale
+      ctx.lineWidth = 2.5 / globalScale
+      ctx.strokeStyle = node.isGoal
+        ? '#F4B400'
+        : node.isStart
+        ? '#1A1406'
+        : isSelected
+        ? '#FFD369'
+        : '#3C3223'
       ctx.stroke()
+      ctx.restore()
 
-      // Draw text
-      ctx.font = `${isStartOrGoal ? 'bold' : 'normal'} ${fontSize}px Inter, system-ui, sans-serif`
+      // Draw text with perfect readability
+      const label = node.word.length > 14 ? `${node.word.slice(0, 12)}…` : node.word
+      const fontSize = Math.max(16 / globalScale, 12)
+
+      ctx.save()
+      ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       
-      // Text color
-      if (node.isStart || isSelected) {
-        ctx.fillStyle = '#0D0D0D'
-      } else if (isGoalCompleted) {
-        ctx.fillStyle = '#ffffff'
-      } else {
-        ctx.fillStyle = '#ffffff'
-      }
+      // Text shadow/outline for readability
+      ctx.lineWidth = 4 / globalScale
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
+      ctx.strokeText(label, x, y)
+      
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillText(label, x, y)
+      ctx.restore()
 
-      // Truncate long words
-      const maxChars = 12
-      const displayLabel = label.length > maxChars ? label.slice(0, maxChars - 2) + '...' : label
-      ctx.fillText(displayLabel, x, y)
-
-      // Draw parts below for selected node
+      // Draw parts when selected
       if (isSelected && node.parts.length > 1) {
-        ctx.font = `${fontSize * 0.7}px Inter, system-ui, sans-serif`
-        ctx.fillStyle = '#F4B400'
+        ctx.save()
         const partsText = node.parts.join(' + ')
-        ctx.fillText(partsText, x, y + size + fontSize * 0.8)
+        const partFontSize = Math.max(fontSize * 0.65, 10)
+        ctx.font = `500 ${partFontSize}px Inter, system-ui, sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'top'
+        ctx.fillStyle = '#F4B400'
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'
+        ctx.lineWidth = 3 / globalScale
+        ctx.strokeText(partsText, x, y + size + partFontSize * 0.4)
+        ctx.fillText(partsText, x, y + size + partFontSize * 0.4)
+        ctx.restore()
       }
     },
     [selectedNodeId]
   )
 
-  // Custom link rendering
+  // Custom link rendering with curved bezier edges
   const drawLink = useCallback(
     (linkObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const link = linkObj as ForceGraphLink
-      // Handle both string IDs and resolved node objects
-      const sourceNode = typeof link.source === 'string' ? null : link.source as ForceGraphNode
-      const targetNode = typeof link.target === 'string' ? null : link.target as ForceGraphNode
+      const link = linkObj as ForceLayoutLink & {
+        source: ForceLayoutNode
+        target: ForceLayoutNode
+      }
+      const source = link.source
+      const target = link.target
+      if (
+        !source ||
+        !target ||
+        typeof source.x !== 'number' ||
+        typeof source.y !== 'number' ||
+        typeof target.x !== 'number' ||
+        typeof target.y !== 'number'
+      ) {
+        return
+      }
 
-      // Skip if nodes aren't resolved yet or don't have coordinates
-      if (!sourceNode || !targetNode) return
-      if (typeof sourceNode.x !== 'number' || typeof sourceNode.y !== 'number') return
-      if (typeof targetNode.x !== 'number' || typeof targetNode.y !== 'number') return
-
-      const isWinningEdge =
-        isComplete &&
-        ((targetNode.isGoal && targetNode.isCompleted) ||
-          (sourceNode.isGoal && sourceNode.isCompleted))
-
-      ctx.beginPath()
-
-      // Calculate control point for curved line
-      const midX = (sourceNode.x + targetNode.x) / 2
-      const midY = (sourceNode.y + targetNode.y) / 2
-      const dx = targetNode.x - sourceNode.x
-      const dy = targetNode.y - sourceNode.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
+      const dx = target.x - source.x
+      const dy = target.y - source.y
+      const distance = Math.sqrt(dx * dx + dy * dy) || 1
       
-      // Curve amount based on distance (avoid NaN if nodes overlap)
-      if (dist === 0) return
-      const curveOffset = Math.min(dist * 0.15, 30)
-      const perpX = -dy / dist
-      const perpY = dx / dist
-      const controlX = midX + perpX * curveOffset
-      const controlY = midY + perpY * curveOffset
+      // Curved bezier path - more curve for side branches
+      const curveStrength = link.branchType === 'side' ? 0.4 : 0.15
+      const perpX = -dy / distance
+      const perpY = dx / distance
+      const controlX = (source.x + target.x) / 2 + perpX * distance * curveStrength
+      const controlY = (source.y + target.y) / 2 + perpY * distance * curveStrength
 
-      ctx.moveTo(sourceNode.x, sourceNode.y)
-      ctx.quadraticCurveTo(controlX, controlY, targetNode.x, targetNode.y)
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(source.x, source.y)
+      ctx.quadraticCurveTo(controlX, controlY, target.x, target.y)
 
-      // Gradient stroke
-      const gradient = ctx.createLinearGradient(
-        sourceNode.x,
-        sourceNode.y,
-        targetNode.x,
-        targetNode.y
-      )
-
-      if (isWinningEdge) {
-        gradient.addColorStop(0, '#22c55e')
-        gradient.addColorStop(1, '#16a34a')
+      // Dash side branches (non-winning)
+      if (link.branchType === 'side' && !link.isWinning) {
+        ctx.setLineDash([12 / globalScale, 10 / globalScale])
       } else {
-        gradient.addColorStop(0, 'rgba(244, 180, 0, 0.6)')
-        gradient.addColorStop(1, 'rgba(255, 184, 0, 0.6)')
+        ctx.setLineDash([])
+      }
+
+      // Create gradient for edge color
+      const gradient = ctx.createLinearGradient(source.x, source.y, target.x, target.y)
+      
+      if (link.isWinning && isComplete) {
+        // Winning path: animated golden glow
+        const pulse = 0.7 + 0.3 * Math.sin(winningPulseRef.current * Math.PI * 2)
+        gradient.addColorStop(0, `rgba(255, 215, 130, ${pulse})`)
+        gradient.addColorStop(1, `rgba(244, 201, 89, ${pulse})`)
+      } else if (link.branchType === 'side') {
+        // Side branch: dimmer
+        gradient.addColorStop(0, 'rgba(244, 180, 0, 0.45)')
+        gradient.addColorStop(1, 'rgba(255, 220, 120, 0.25)')
+      } else {
+        // Forward branch: bright honey-yellow
+        gradient.addColorStop(0, '#F4B400')
+        gradient.addColorStop(1, '#FFD369')
       }
 
       ctx.strokeStyle = gradient
-      ctx.lineWidth = isWinningEdge ? 3 / globalScale : 2 / globalScale
+      ctx.lineWidth = link.isWinning
+        ? (5 + 2 * Math.sin(winningPulseRef.current * Math.PI * 2)) / globalScale
+        : link.branchType === 'side'
+        ? 1.8 / globalScale
+        : 2.8 / globalScale
       ctx.stroke()
+      ctx.setLineDash([])
+      ctx.restore()
 
-      // Draw shared part label at midpoint
+      // Draw shared part label on edge
       if (link.sharedPart && globalScale > 0.5) {
-        const labelX = controlX
-        const labelY = controlY
-        const fontSize = Math.max(9 / globalScale, 8)
-
-        ctx.font = `${fontSize}px Inter, system-ui, sans-serif`
+        ctx.save()
+        const fontSize = Math.max(10 / globalScale, 8)
+        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
+        const labelX = controlX
+        const labelY = controlY
+        const labelWidth = ctx.measureText(link.sharedPart).width
 
-        // Background
-        const textWidth = ctx.measureText(link.sharedPart).width
-        ctx.fillStyle = 'rgba(13, 13, 13, 0.8)'
+        ctx.fillStyle = 'rgba(7, 6, 4, 0.85)'
         ctx.fillRect(
-          labelX - textWidth / 2 - 4,
-          labelY - fontSize / 2 - 2,
-          textWidth + 8,
-          fontSize + 4
+          labelX - labelWidth / 2 - 6,
+          labelY - fontSize / 2 - 3,
+          labelWidth + 12,
+          fontSize + 6
         )
 
-        // Text
-        ctx.fillStyle = isWinningEdge ? '#22c55e' : '#F4B400'
+        ctx.fillStyle = link.branchType === 'side' ? '#F6E0A0' : '#F4B400'
         ctx.fillText(link.sharedPart, labelX, labelY)
+        ctx.restore()
       }
     },
     [isComplete]
   )
-
-  // Handle node click
-  const handleNodeClick = useCallback(
-    (nodeObj: object) => {
-      const node = nodeObj as ForceGraphNode
-      if (!node.isGoal || node.isCompleted) {
-        onNodeSelect(node.id)
-      }
-    },
-    [onNodeSelect]
-  )
-
-  // Zoom to fit when nodes change
-  useEffect(() => {
-    if (graphRef.current && nodes.length > 2) {
-      setTimeout(() => {
-        graphRef.current?.zoomToFit(400, 50)
-      }, 500)
-    }
-  }, [nodes.length])
-
-  // Configure force simulation via ref
-  const configureForces = useCallback(() => {
-    if (!graphRef.current) return
-
-    const fg = graphRef.current
-    const maxLayer = Math.max(...nodes.filter(n => n.layer >= 0).map(n => n.layer), 1)
-
-    // Configure link force
-    const linkForce = fg.d3Force('link')
-    if (linkForce) {
-      linkForce.distance(120).strength(0.3)
-    }
-
-    // Configure charge (repulsion) force - reduced to prevent pushing nodes away
-    const chargeForce = fg.d3Force('charge')
-    if (chargeForce) {
-      chargeForce.strength(-150).distanceMax(300)
-    }
-
-    // Remove default center force - we use x/y positioning forces instead
-    fg.d3Force('center', null)
-
-    // Position nodes horizontally using graph-centered coordinates
-    fg.d3Force('x', forceX((node: ForceGraphNode) => {
-      return getTargetX(node as GraphNode, maxLayer)
-    }).strength(0.8)) // Strong force to keep nodes in position
-
-    // Center nodes vertically at y=0 (graph center)
-    fg.d3Force('y', forceY(0).strength(0.3))
-
-    // Add collision detection
-    fg.d3Force('collide', forceCollide(50).strength(0.8).iterations(2))
-
-    // Reheat simulation to apply new forces
-    fg.d3ReheatSimulation()
-  }, [nodes, getTargetX])
-
-  // Run force configuration when graph is ready and when dependencies change
-  useEffect(() => {
-    // Small delay to ensure graph is mounted
-    const timer = setTimeout(configureForces, 100)
-    return () => clearTimeout(timer)
-  }, [configureForces])
 
   return (
     <div
@@ -392,32 +609,31 @@ export default function Graph({
           nodeCanvasObject={drawNode}
           linkCanvasObject={drawLink}
           onNodeClick={handleNodeClick}
+          onNodeDrag={handleNodeDrag}
+          onNodeDragEnd={handleNodeDragEnd}
           nodePointerAreaPaint={(nodeObj, color, ctx) => {
-            const node = nodeObj as ForceGraphNode
-            const size = node.isStart || node.isGoal ? 35 : 25
+            const node = nodeObj as ForceLayoutNode
+            const size = node.isGoal || node.isStart ? 40 : 30
             ctx.fillStyle = color
             ctx.beginPath()
-            ctx.arc(node.x || 0, node.y || 0, size, 0, 2 * Math.PI)
+            ctx.arc(node.x ?? node.targetX, node.y ?? node.targetY, size, 0, Math.PI * 2)
             ctx.fill()
           }}
-          enablePanInteraction={true}
-          enableZoomInteraction={true}
-          minZoom={0.3}
+          enablePanInteraction
+          enableZoomInteraction
+          minZoom={0.25}
           maxZoom={3}
+          d3VelocityDecay={0.5}
           d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
-          cooldownTicks={100}
-          warmupTicks={50}
+          cooldownTicks={0}
+          warmupTicks={0}
         />
       )}
 
-      {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-2">
         <button
-          onClick={() => graphRef.current?.zoom(1.5, 400)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 
-                     text-hive-yellow flex items-center justify-center transition-colors
-                     border border-hive-slate/50"
+          onClick={() => graphRef.current?.zoom(1.4, 400)}
+          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
           aria-label="Zoom in"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,10 +641,8 @@ export default function Graph({
           </svg>
         </button>
         <button
-          onClick={() => graphRef.current?.zoom(0.67, 400)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 
-                     text-hive-yellow flex items-center justify-center transition-colors
-                     border border-hive-slate/50"
+          onClick={() => graphRef.current?.zoom(0.7, 400)}
+          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
           aria-label="Zoom out"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -436,10 +650,8 @@ export default function Graph({
           </svg>
         </button>
         <button
-          onClick={() => graphRef.current?.zoomToFit(400, 50)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 
-                     text-hive-yellow flex items-center justify-center transition-colors
-                     border border-hive-slate/50"
+          onClick={() => graphRef.current?.zoomToFit(500, 80)}
+          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
           aria-label="Fit to screen"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -453,22 +665,33 @@ export default function Graph({
         </button>
       </div>
 
-      {/* Legend */}
-      <div className="absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
+        <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-hive-yellow rounded-sm" />
-          <span className="text-gray-300">Start</span>
+          <span className="text-gray-300">Start / Main highway</span>
         </div>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-3 h-3 bg-hive-graphite border border-hive-yellow rounded-sm" />
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 border border-hive-yellow rounded-sm" />
           <span className="text-gray-300">Goal</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-green-500 rounded-sm" />
-          <span className="text-gray-300">Completed</span>
+          <div className="w-6 h-0.5 bg-hive-yellow" />
+          <span className="text-gray-300">Forward branch</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-0.5 border-t border-dashed border-hive-yellow" />
+          <span className="text-gray-300">Side branches</span>
+        </div>
+        {isComplete && (
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-0.5 bg-gradient-to-r from-yellow-300 to-yellow-500" />
+            <span className="text-gray-300">Winning chain</span>
+          </div>
+        )}
+        <div className="text-[10px] text-gray-400 pt-1 border-t border-white/10">
+          Goal anchor: {goalWord}
         </div>
       </div>
     </div>
   )
 }
-

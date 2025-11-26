@@ -134,6 +134,8 @@ export interface GraphProps {
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string) => void;
   goalWord: string;
+  isComplete: boolean;
+  winningPath: string[];
 }
 
 export interface VictoryModalProps {

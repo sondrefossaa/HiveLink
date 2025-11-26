@@ -150,6 +150,7 @@ export default function Game() {
             onNodeSelect={gameState.selectNode}
             goalWord={puzzle.goalWord}
             isComplete={gameState.isComplete}
+            winningPath={gameState.winningPath}
           />
         </div>
 
