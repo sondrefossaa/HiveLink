@@ -207,17 +207,63 @@ export default function Game() {
 
       {/* Main game area */}
       <main className="flex-1 pt-16 pb-32 relative">
+        {/* Mobile Start/Goal Display */}
+        <div 
+          className="md:hidden absolute left-0 right-0 z-20 flex justify-between px-4 pointer-events-none transition-[top] duration-300 ease-in-out"
+          style={{ top: '140px' }}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-hive-yellow/30 shadow-lg"
+          >
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Start</div>
+            <div className="text-sm font-bold text-hive-yellow leading-none">{puzzle.startWord}</div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border shadow-lg
+                       ${gameState.isComplete ? 'border-green-500/50' : 'border-hive-graphite'}`}
+          >
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5 text-right">Goal</div>
+            <div className={`text-sm font-bold leading-none ${gameState.isComplete ? 'text-green-400' : 'text-white'}`}>
+              {puzzle.goalWord}
+            </div>
+          </motion.div>
+        </div>
+
         {/* Graph container */}
-        <div className="absolute inset-0 pt-16 pb-32">
-          <Graph
-            nodes={gameState.nodes}
-            edges={gameState.edges}
-            selectedNodeId={gameState.selectedNodeId}
-            onNodeSelect={gameState.selectNode}
-            goalWord={puzzle.goalWord}
-            isComplete={gameState.isComplete}
-            winningPath={gameState.winningPath}
-          />
+        <div className="absolute inset-0 pb-32 pt-44 md:pt-16 transition-[padding] duration-300 ease-in-out">
+          {gameState.nodes.length > 0 ? (
+            <Graph
+              nodes={gameState.nodes}
+              edges={gameState.edges}
+              selectedNodeId={gameState.selectedNodeId}
+              onNodeSelect={gameState.selectNode}
+              goalWord={puzzle.goalWord}
+              isComplete={gameState.isComplete}
+              winningPath={gameState.winningPath}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-hive-yellow"
+              >
+                <div className="flex items-center gap-3">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                    className="w-8 h-8 border-2 border-hive-yellow border-t-transparent rounded-full"
+                  />
+                  <span>Loading graph...</span>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
 
         {/* Mini map for large graphs */}

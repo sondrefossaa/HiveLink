@@ -50,8 +50,9 @@ const LINK_STRENGTH_SIDE = 0.35
 const COLLIDE_RADIUS_DEFAULT = 80
 const COLLIDE_RADIUS_ANCHORED = 95
 const COLLIDE_STRENGTH = 0.8
-const POINTER_RADIUS_DEFAULT = 70
-const POINTER_RADIUS_ANCHORED = 100
+// Reduced pointer radius to prevent overlap (40px radius = 80px diameter on screen)
+const POINTER_RADIUS_DEFAULT = 40
+const POINTER_RADIUS_ANCHORED = 60
 const SAME_LAYER_X_EPSILON = 10
 const NEAR_VERTICAL_HORIZONTAL_DRIFT = 14
 const START_HEIGHT_TOLERANCE = 1.5
@@ -938,7 +939,7 @@ export default function Graph({
   return (
     <div
       ref={containerRef}
-      className="w-full h-full relative overflow-hidden bg-transparent"
+      className="w-full h-full relative overflow-hidden bg-transparent touch-none"
       style={{ minHeight: '400px' }}
     >
       {typeof window !== 'undefined' && (
@@ -974,42 +975,7 @@ export default function Graph({
         />
       )}
 
-      <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-        <button
-          onClick={() => graphRef.current?.zoom(1.4, 400)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
-          aria-label="Zoom in"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12M6 12h12" />
-          </svg>
-        </button>
-        <button
-          onClick={() => graphRef.current?.zoom(0.7, 400)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
-          aria-label="Zoom out"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 12h12" />
-          </svg>
-        </button>
-        <button
-          onClick={() => graphRef.current?.zoomToFit(500, 80)}
-          className="w-10 h-10 rounded-lg bg-hive-graphite/80 hover:bg-hive-slate/80 text-hive-yellow flex items-center justify-center border border-hive-slate/50 transition"
-          aria-label="Fit to screen"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-            />
-          </svg>
-        </button>
-      </div>
-
-      <div className="absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
+      <div className="hidden md:block absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-hive-yellow rounded-sm" />
           <span className="text-gray-300">Start / Main highway</span>

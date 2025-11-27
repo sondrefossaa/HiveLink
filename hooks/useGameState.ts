@@ -61,6 +61,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [startTime, setStartTime] = useState(() => Date.now())
   const [finalTimeElapsed, setFinalTimeElapsed] = useState<number | null>(null)
   const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
+  const [loadedPuzzleKey, setLoadedPuzzleKey] = useState<string | number | null>(null)
   const scoreSubmittedRef = useRef(false)
 
   // Helper to check if a path is unique (different intermediate words)
@@ -146,6 +147,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           setAllPaths(savedState.allPaths)
         }
       }
+      setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
       return
     }
 
@@ -186,6 +188,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setStartTime(Date.now())
     setFinalTimeElapsed(null)
     scoreSubmittedRef.current = false
+    setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
   }, [puzzle])
 
   // Save state when it changes
@@ -490,22 +493,25 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
   }, [isComplete, submitScore])
 
+  const currentKey = puzzle ? (puzzle.isDaily ? puzzle.date : puzzle.id) : null
+  const isStateSync = currentKey === loadedPuzzleKey
+
   return {
-    nodes,
-    edges,
-    wordsUsed,
-    maxLayer,
-    isComplete,
+    nodes: isStateSync ? nodes : [],
+    edges: isStateSync ? edges : [],
+    wordsUsed: isStateSync ? wordsUsed : 0,
+    maxLayer: isStateSync ? maxLayer : 0,
+    isComplete: isStateSync ? isComplete : false,
     isLoading,
-    selectedNodeId,
-    error,
+    selectedNodeId: isStateSync ? selectedNodeId : null,
+    error: isStateSync ? error : null,
     addWord,
     selectNode,
     reset,
-    winningPath,
-    allPaths,
-    startTime,
-    finalTimeElapsed,
+    winningPath: isStateSync ? winningPath : [],
+    allPaths: isStateSync ? allPaths : [],
+    startTime: isStateSync ? startTime : Date.now(),
+    finalTimeElapsed: isStateSync ? finalTimeElapsed : null,
     submitScore,
     allowExploration,
     enableExploration,
