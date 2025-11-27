@@ -27,6 +27,8 @@ interface SavedState {
   maxLayer: number
   isComplete: boolean
   completedAt?: string
+  startTime?: number
+  finalTimeElapsed?: number
 }
 
 interface UseGameStateResult extends GameState {
@@ -35,6 +37,7 @@ interface UseGameStateResult extends GameState {
   reset: () => void
   winningPath: string[]
   startTime: number
+  finalTimeElapsed: number | null
   submitScore: () => Promise<void>
   allowExploration: boolean
   enableExploration: () => void
@@ -52,7 +55,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [winningPath, setWinningPath] = useState<string[]>([])
-  const [startTime] = useState(() => Date.now())
+  const [startTime, setStartTime] = useState(() => Date.now())
+  const [finalTimeElapsed, setFinalTimeElapsed] = useState<number | null>(null)
   const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
   const scoreSubmittedRef = useRef(false)
 
@@ -73,6 +77,14 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       setWordsUsed(savedState.wordsUsed || 0)
       setMaxLayer(savedState.maxLayer || 0)
       setIsComplete(savedState.isComplete || false)
+      
+      // Restore timing data
+      if (savedState.startTime) {
+        setStartTime(savedState.startTime)
+      }
+      if (savedState.finalTimeElapsed) {
+        setFinalTimeElapsed(savedState.finalTimeElapsed)
+      }
       
       // Mark as restored complete so we don't auto-show victory modal
       if (savedState.isComplete) {
@@ -151,6 +163,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setWinningPath([])
     setSelectedNodeId('start')
     setWasRestoredComplete(false)
+    setStartTime(Date.now())
+    setFinalTimeElapsed(null)
     scoreSubmittedRef.current = false
   }, [puzzle])
 
@@ -164,12 +178,14 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       wordsUsed,
       maxLayer,
       isComplete,
+      startTime,
+      finalTimeElapsed: finalTimeElapsed ?? undefined,
     }
 
     if (puzzle.isDaily) {
       saveGameState(puzzle.date, state)
     }
-  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete])
+  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed])
 
   const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
     if (!puzzle) {
@@ -303,6 +319,10 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       setSelectedNodeId(newNode.id)
 
       if (isWinningWord) {
+        // Lock in the final time before setting complete
+        const elapsed = Date.now() - startTime
+        setFinalTimeElapsed(elapsed)
+        
         setIsComplete(true)
         setAllowExploration(false)
         if (puzzle.isDaily) {
@@ -430,6 +450,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     reset,
     winningPath,
     startTime,
+    finalTimeElapsed,
     submitScore,
     allowExploration,
     enableExploration,

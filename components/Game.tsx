@@ -74,9 +74,10 @@ export default function Game() {
   const gameStats: GameStats = useMemo(() => ({
     wordsUsed: gameState.wordsUsed,
     layersExplored: gameState.maxLayer,
-    timeElapsed: Date.now() - gameState.startTime,
+    // Use finalTimeElapsed if game is complete (prevents cheating by refresh)
+    timeElapsed: gameState.finalTimeElapsed ?? (Date.now() - gameState.startTime),
     optimalSteps: puzzle?.optimalSteps || undefined,
-  }), [gameState.wordsUsed, gameState.maxLayer, gameState.startTime, puzzle?.optimalSteps])
+  }), [gameState.wordsUsed, gameState.maxLayer, gameState.startTime, gameState.finalTimeElapsed, puzzle?.optimalSteps])
 
   // Handle give up
   const handleGiveUp = useCallback(() => {
