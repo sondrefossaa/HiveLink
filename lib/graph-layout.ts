@@ -1,8 +1,9 @@
 import type { GraphEdge, GraphNode } from '@/types'
 
-export const FIXED_HORIZONTAL_SPACING = 300
+export const FIXED_LAYER_SPACING = 300
+export const FIXED_HORIZONTAL_SPACING = FIXED_LAYER_SPACING
 const BASE_FORWARD_CONFLICT_SPACING = 150
-const BASE_CANVAS_HEIGHT = 640
+const BASE_CANVAS_SIZE = 640
 const MIN_VERTICAL_SCALE = 1
 const MAX_VERTICAL_SCALE = 1.8
 const MIN_GOAL_LAYER = 8
@@ -14,7 +15,7 @@ type BranchKind = 'origin' | 'forward' | 'side'
 
 interface BranchAssignment {
   branchId: string
-  absoluteY: number
+  crossAxisPos: number
   parentId?: string
   kind: BranchKind
   layer: number
@@ -142,7 +143,8 @@ const clampValue = (value: number, min: number, max: number): number =>
 export function computeGraphLayout(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  canvasHeight: number
+  canvasCrossAxisSize: number,
+  orientation: 'horizontal' | 'vertical' = 'horizontal'
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
   const goalNode = nodes.find((node) => node.id === 'goal') || nodes.find((node) => node.isGoal)
@@ -151,13 +153,13 @@ export function computeGraphLayout(
     throw new Error('Start node is required')
   }
   
-  const safeCanvasHeight = Math.max(canvasHeight, 480)
-  const verticalScale = Math.max(
+  const safeCanvasSize = Math.max(canvasCrossAxisSize, 480)
+  const scale = Math.max(
     MIN_VERTICAL_SCALE,
-    Math.min(MAX_VERTICAL_SCALE, safeCanvasHeight / BASE_CANVAS_HEIGHT)
+    Math.min(MAX_VERTICAL_SCALE, safeCanvasSize / BASE_CANVAS_SIZE)
   )
-  const forwardConflictUnit = BASE_FORWARD_CONFLICT_SPACING * verticalScale
-  const verticalMargin = Math.max(MIN_LAYER_SPACING, forwardConflictUnit * 0.5)
+  const forwardConflictUnit = BASE_FORWARD_CONFLICT_SPACING * scale
+  const crossAxisMargin = Math.max(MIN_LAYER_SPACING, forwardConflictUnit * 0.5)
   
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
   
@@ -198,8 +200,8 @@ export function computeGraphLayout(
   const maxLayer = nonGoalLayers.length > 0 ? Math.max(...nonGoalLayers) : 0
   const goalLayer = clampGoalLayer(Math.max(maxLayer + 1, MIN_GOAL_LAYER))
   
-  // Goal node is pinned at max layer, vertically centered
-  const centerY = safeCanvasHeight / 2
+  // Goal node is pinned at max layer, centered in cross axis
+  const centerCrossAxis = safeCanvasSize / 2
   
   const branchAssignments = new Map<string, BranchAssignment>()
   const layerOccupancy = new Map<string, number[]>()
@@ -207,7 +209,7 @@ export function computeGraphLayout(
   const getLayerKey = (layer: number, parentId?: string) => `${layer}:${parentId ?? 'root'}`
 
   const registerLayerPosition = (layer: number, position: number, parentId?: string) => {
-    const clamped = clampValue(position, verticalMargin, safeCanvasHeight - verticalMargin)
+    const clamped = clampValue(position, crossAxisMargin, safeCanvasSize - crossAxisMargin)
     const key = getLayerKey(layer, parentId)
     const entries = layerOccupancy.get(key) ?? []
     entries.push(clamped)
@@ -221,9 +223,9 @@ export function computeGraphLayout(
 
   const selectLayerPosition = (
     layer: number,
-    preferredY: number,
+    preferredPos: number,
     parentId?: string,
-    parentY?: number
+    parentPos?: number
   ): number => {
     const key = getLayerKey(layer, parentId)
     const takenPerEdge = layerOccupancy.get(key) ?? []
@@ -239,7 +241,7 @@ export function computeGraphLayout(
     let bestScore = -Infinity
 
     for (const offset of offsets) {
-      const candidate = clampValue(preferredY + offset, verticalMargin, safeCanvasHeight - verticalMargin)
+      const candidate = clampValue(preferredPos + offset, crossAxisMargin, safeCanvasSize - crossAxisMargin)
       const minEdgeDistance = takenPerEdge.reduce(
         (acc, value) => Math.min(acc, Math.abs(value - candidate)),
         Number.POSITIVE_INFINITY
@@ -260,9 +262,9 @@ export function computeGraphLayout(
       const globalSpacingScore = Number.isFinite(minGlobalDistance)
         ? Math.min(minGlobalDistance, MIN_LAYER_SPACING * 1.2) / (MIN_LAYER_SPACING * 1.2)
         : 1
-      const closenessScore = parentY === undefined
+      const closenessScore = parentPos === undefined
         ? 1
-        : Math.max(0, 1 - Math.abs(candidate - parentY) / (forwardConflictUnit * 4))
+        : Math.max(0, 1 - Math.abs(candidate - parentPos) / (forwardConflictUnit * 4))
       const score = closenessScore * 0.6 + edgeSpacingScore * 0.2 + globalSpacingScore * 0.2
 
       if (score > bestScore) {
@@ -271,13 +273,13 @@ export function computeGraphLayout(
       }
     }
 
-    const fallbackCandidate = bestCandidate ?? clampValue(preferredY, verticalMargin, safeCanvasHeight - verticalMargin)
+    const fallbackCandidate = bestCandidate ?? clampValue(preferredPos, crossAxisMargin, safeCanvasSize - crossAxisMargin)
     return registerLayerPosition(layer, fallbackCandidate, parentId)
   }
 
   branchAssignments.set(startNode.id, {
     branchId: 'branch-main',
-    absoluteY: registerLayerPosition(0, centerY),
+    crossAxisPos: registerLayerPosition(0, centerCrossAxis),
     kind: 'origin',
     layer: 0,
   })
@@ -304,24 +306,24 @@ export function computeGraphLayout(
     const branchId = baseAssignment.branchId
     const branchType: BranchKind = branchKind
 
-    const preferredY = parentAssignment?.absoluteY ?? centerY
-    const alignmentTarget = parentAssignment?.absoluteY
-    const absoluteY = selectLayerPosition(nodeLayer, preferredY, parentId, alignmentTarget)
+    const preferredPos = parentAssignment?.crossAxisPos ?? centerCrossAxis
+    const alignmentTarget = parentAssignment?.crossAxisPos
+    const crossAxisPos = selectLayerPosition(nodeLayer, preferredPos, parentId, alignmentTarget)
 
     branchAssignments.set(node.id, {
       branchId,
-      absoluteY,
+      crossAxisPos,
       kind: branchType,
       layer: nodeLayer,
       parentId,
     })
   }
   
-  // Goal node is pinned at goal layer, vertically centered
+  // Goal node is pinned at goal layer, centered in cross axis
   if (goalNode) {
     branchAssignments.set(goalNode.id, {
       branchId: 'branch-goal',
-      absoluteY: registerLayerPosition(goalLayer, centerY),
+      crossAxisPos: registerLayerPosition(goalLayer, centerCrossAxis),
       kind: 'origin',
       layer: goalLayer,
     })
@@ -349,17 +351,25 @@ export function computeGraphLayout(
       branchAssignments.get(node.id) ??
       ({
         branchId: 'branch-main',
-        absoluteY: centerY,
+        crossAxisPos: centerCrossAxis,
         kind: node.isStart ? 'origin' : 'forward',
         layer: computedLayer,
       } as BranchAssignment)
     
-    // CRITICAL: X position is FIXED based on layer
-    const targetX = computedLayer * FIXED_HORIZONTAL_SPACING
-    
-    // Y position is calculated from branch assignment, centered around 0
-    const absoluteY = assignment.absoluteY
-    const targetY = absoluteY - centerY // Center around Y=0 for proper camera positioning
+    const layerPos = computedLayer * FIXED_LAYER_SPACING
+    const crossAxisPos = assignment.crossAxisPos
+    const relativeCrossAxisPos = crossAxisPos - centerCrossAxis
+
+    let targetX: number
+    let targetY: number
+
+    if (orientation === 'horizontal') {
+      targetX = layerPos
+      targetY = relativeCrossAxisPos
+    } else {
+      targetX = relativeCrossAxisPos
+      targetY = layerPos
+    }
     
     return {
       ...node,
@@ -367,7 +377,7 @@ export function computeGraphLayout(
       computedLayer,
       targetX,
       targetY,
-      absoluteY,
+      absoluteY: crossAxisPos,
       branchId: assignment.branchId,
       parentId: assignment.parentId,
       branchType: assignment.kind,

@@ -117,6 +117,7 @@ export default function Graph({
   const { effectivePreference } = useMotionPreference()
 
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
 
   const refreshGraph = useCallback(() => {
     const api = graphRef.current as (ForceGraphMethods & { refresh?: () => void }) | null
@@ -140,6 +141,7 @@ export default function Graph({
         width: rect.width || 800,
         height: rect.height || 520,
       })
+      setOrientation(rect.width < 768 ? 'vertical' : 'horizontal')
     }
 
     updateDimensions()
@@ -149,8 +151,13 @@ export default function Graph({
 
   // Compute layout with strict rules
   const layout = useMemo(
-    () => computeGraphLayout(nodes, edges, Math.max(dimensions.height, 480)),
-    [nodes, edges, dimensions.height]
+    () => computeGraphLayout(
+      nodes, 
+      edges, 
+      orientation === 'horizontal' ? Math.max(dimensions.height, 480) : Math.max(dimensions.width, 350),
+      orientation
+    ),
+    [nodes, edges, dimensions.height, dimensions.width, orientation]
   )
 
   const startAnchor = useMemo(() => {
@@ -363,12 +370,12 @@ export default function Graph({
 
     fg.d3Force?.(
       'x',
-      forceX<ForceLayoutNode>((node) => node.targetX).strength(1.2)
+      forceX<ForceLayoutNode>((node) => node.targetX).strength(orientation === 'horizontal' ? 1.2 : 0.9)
     )
 
     fg.d3Force?.(
       'y',
-      forceY<ForceLayoutNode>((node) => node.targetY).strength(0.9)
+      forceY<ForceLayoutNode>((node) => node.targetY).strength(orientation === 'horizontal' ? 0.9 : 1.2)
     )
 
     fg.d3Force?.(
@@ -401,7 +408,7 @@ export default function Graph({
         }
       }, SIMULATION_DURATION_MS)
     }
-  }, [])
+  }, [orientation])
 
   // Reconfigure forces when graph data changes
   useEffect(() => {
@@ -513,14 +520,19 @@ export default function Graph({
       draggedNodeRef.current = node.id
     }
     
-    // CRITICAL: Lock X position - node cannot move horizontally
-    node.fx = node.targetX
-    if (typeof node.x === 'number') {
-      node.x = node.targetX
+    if (orientation === 'horizontal') {
+      // CRITICAL: Lock X position - node cannot move horizontally
+      node.fx = node.targetX
+      if (typeof node.x === 'number') node.x = node.targetX
+      // Allow Y to move freely during drag
+      node.fy = null
+    } else {
+      // CRITICAL: Lock Y position - node cannot move vertically
+      node.fy = node.targetY
+      if (typeof node.y === 'number') node.y = node.targetY
+      // Allow X to move freely during drag
+      node.fx = null
     }
-    
-    // Allow Y to move freely during drag
-    node.fy = null
     
     // Reheat simulation for smooth dragging
     if (graphRef.current && 'd3ReheatSimulation' in graphRef.current) {
@@ -724,15 +736,20 @@ export default function Graph({
       const dy = target.y - source.y
       const distance = Math.sqrt(dx * dx + dy * dy) || 1
 
-      // Check if nodes are on the same layer (same X position)
-      // Use targetX to determine layer since it's calculated from layer * FIXED_HORIZONTAL_SPACING
-      // Use a threshold to account for floating point precision and small force adjustments
+      // Check if nodes are on the same layer
       const sourceTargetX = source.targetX ?? source.x
       const targetTargetX = target.targetX ?? target.x
-      const sameLayer = Math.abs(sourceTargetX - targetTargetX) < SAME_LAYER_X_EPSILON
-      const horizontalDrift = Math.abs(dx)
-      const nearlyVertical = sameLayer || horizontalDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
-      const shouldRenderStaple = nearlyVertical
+      const sourceTargetY = source.targetY ?? source.y
+      const targetTargetY = target.targetY ?? target.y
+      
+      const sameLayer = orientation === 'horizontal'
+        ? Math.abs(sourceTargetX - targetTargetX) < SAME_LAYER_X_EPSILON
+        : Math.abs(sourceTargetY - targetTargetY) < SAME_LAYER_X_EPSILON
+
+      const mainAxisDrift = orientation === 'horizontal' ? Math.abs(dx) : Math.abs(dy)
+      const nearlyPerpendicular = sameLayer || mainAxisDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
+      const shouldRenderStaple = nearlyPerpendicular
+      
       const isSideLineageEdge =
         link.branchType === 'side' ||
         (isSideBranchLineage(source) && isSideBranchLineage(target))
@@ -758,9 +775,9 @@ export default function Graph({
 
       const computeCurveStrength = (baseStrength: number) => {
         if (!startAnchorPosition) return baseStrength
-        const anchorX = startAnchorPosition.x
-        const sourceX = source.targetX ?? source.x ?? anchorX
-        const distanceFromStart = Math.abs(sourceX - anchorX)
+        const anchorPos = orientation === 'horizontal' ? startAnchorPosition.x : startAnchorPosition.y
+        const sourcePos = orientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorPos) : (source.targetY ?? source.y ?? anchorPos)
+        const distanceFromStart = Math.abs(sourcePos - anchorPos)
         const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
         const attenuation = Math.max(0.3, 1 - normalized * 0.7)
         return baseStrength * attenuation
@@ -768,9 +785,9 @@ export default function Graph({
 
       const getCurveMode = () => {
         if (!startAnchorPosition) return { direction: 1, isFlat: false }
-        const anchorY = startAnchorPosition.y
-        const sourceY = source.targetY ?? source.y ?? anchorY
-        const delta = sourceY - anchorY
+        const anchorCross = orientation === 'horizontal' ? startAnchorPosition.y : startAnchorPosition.x
+        const sourceCross = orientation === 'horizontal' ? (source.targetY ?? source.y ?? anchorCross) : (source.targetX ?? source.x ?? anchorCross)
+        const delta = sourceCross - anchorCross
         if (Math.abs(delta) <= START_HEIGHT_TOLERANCE) {
           return { direction: 0, isFlat: true }
         }
@@ -779,9 +796,15 @@ export default function Graph({
       const { direction: curveDirection, isFlat: isFlatToStart } = getCurveMode()
 
       if (isStapleEdge) {
-        const verticalDir = dy >= 0 ? 1 : -1
-        startY = source.y + verticalDir * sourceRadius
-        endY = target.y - verticalDir * targetRadius
+        if (orientation === 'horizontal') {
+          const verticalDir = dy >= 0 ? 1 : -1
+          startY = source.y + verticalDir * sourceRadius
+          endY = target.y - verticalDir * targetRadius
+        } else {
+          const horizontalDir = dx >= 0 ? 1 : -1
+          startX = source.x + horizontalDir * sourceRadius
+          endX = target.x - horizontalDir * targetRadius
+        }
 
         ctx.moveTo(startX, startY)
         ctx.lineTo(endX, endY)
@@ -909,7 +932,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [isComplete, startAnchorPosition]
+    [isComplete, startAnchorPosition, orientation]
   )
 
   return (

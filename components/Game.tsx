@@ -227,7 +227,7 @@ export default function Game() {
         )}
 
         {/* Start/Goal labels */}
-        <div className="absolute top-1/2 -translate-y-1/2 left-4 z-10">
+        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-4 z-10">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -238,7 +238,7 @@ export default function Game() {
           </motion.div>
         </div>
 
-        <div className="absolute top-1/2 -translate-y-1/2 right-4 z-10">
+        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-4 z-10">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
