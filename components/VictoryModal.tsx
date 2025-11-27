@@ -621,7 +621,7 @@ export default function VictoryModal({
               </div>
               <div className="flex gap-3">
                 <button
-                  onClick={onContinue}
+                  onClick={() => { onClose(); onContinue(); }}
                   className="flex-1 py-3 rounded-xl bg-hive-yellow hover:bg-hive-gold
                             text-hive-dark font-medium transition-colors shadow-hive-glow
                             flex items-center justify-center gap-2"

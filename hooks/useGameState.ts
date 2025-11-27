@@ -434,7 +434,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   }, [puzzle])
 
   const enableExploration = useCallback(() => {
-    //if (!isComplete) return
+    if (!isComplete) return
     setAllowExploration(true)
     setError(null)
   }, [isComplete])
