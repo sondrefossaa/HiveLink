@@ -36,6 +36,9 @@ export interface GraphProps {
   winningPath: string[];
 }
 
+// Share Types
+export type ShareStatus = 'playing' | 'won' | 'gave-up';
+
 // Puzzle Types
 export type PuzzleMode = 'daily' | 'practice';
 

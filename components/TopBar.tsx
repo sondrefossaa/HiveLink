@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { MotionToggle } from './MotionToggle'
+import ShareButton from './ShareButton'
 import type { PuzzleDifficulty, PuzzleMode } from '@/types'
 
 interface TopBarProps {
@@ -19,6 +20,11 @@ interface TopBarProps {
   isGeneratingPractice: boolean
   isDaily: boolean
   parValue?: number
+  // Sharing props
+  startWord: string
+  goalWord: string
+  startTime: number
+  isComplete: boolean
 }
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
@@ -42,6 +48,10 @@ export default function TopBar({
   isGeneratingPractice,
   isDaily,
   parValue,
+  startWord,
+  goalWord,
+  startTime,
+  isComplete,
 }: TopBarProps) {
   // Format date for display
   const formattedDate = date
@@ -228,6 +238,21 @@ export default function TopBar({
             )}
 
             <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
+            
+            {/* Share button - always visible */}
+            <ShareButton
+              puzzleNumber={puzzleNumber}
+              wordsUsed={wordsUsed}
+              layers={layersExplored}
+              status={isComplete ? 'won' : 'playing'}
+              timeElapsed={Date.now() - startTime}
+              startWord={startWord}
+              goalWord={goalWord}
+              isDaily={isDaily}
+              difficulty={difficulty}
+              compact
+            />
+            
             <MotionToggle />
           </div>
         </div>

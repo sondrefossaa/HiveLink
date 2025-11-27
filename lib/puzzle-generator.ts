@@ -121,9 +121,41 @@ function startAndGoalSharePart(chain: WordEntry[]): boolean {
   return Boolean(findSharedPart(start.parts, goal.parts))
 }
 
+// Find a word entry by word name
+function findWordEntry(word: string): WordEntry | null {
+  const normalized = word.toLowerCase()
+  return WORDS.find((entry) => entry.word === normalized) || null
+}
+
 export async function generatePracticePuzzle(
-  difficulty: PuzzleDifficulty
+  difficulty: PuzzleDifficulty,
+  sharedStartWord?: string,
+  sharedGoalWord?: string
 ): Promise<GeneratedPuzzle> {
+  // If start and goal words are provided (shared puzzle), create a fixed puzzle
+  if (sharedStartWord && sharedGoalWord) {
+    const startEntry = findWordEntry(sharedStartWord)
+    const goalEntry = findWordEntry(sharedGoalWord)
+    
+    if (!startEntry || !goalEntry) {
+      throw new Error('Invalid shared puzzle words')
+    }
+
+    const seed = `shared-${sharedStartWord}-${sharedGoalWord}-${difficulty}`
+    
+    return {
+      id: seed,
+      seed,
+      difficulty,
+      startWord: startEntry.word,
+      goalWord: goalEntry.word,
+      optimalSteps: 5, // Default optimal steps for shared puzzles
+      isDaily: false,
+      mode: 'practice',
+      solutionPath: [startEntry.word, goalEntry.word], // Minimal path
+    }
+  }
+
   const range = DIFFICULTY_LENGTHS[difficulty] ?? DIFFICULTY_LENGTHS.medium
   const targetLength = randomInt(range.min, range.max)
   const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)

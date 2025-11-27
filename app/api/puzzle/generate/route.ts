@@ -9,8 +9,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const difficultyParam = (searchParams.get('difficulty') || 'medium').toLowerCase() as PuzzleDifficulty
     const difficulty = ALLOWED_DIFFICULTIES.includes(difficultyParam) ? difficultyParam : 'medium'
+    
+    // Check for shared puzzle params (start/goal words)
+    const startWord = searchParams.get('start')?.toLowerCase()
+    const goalWord = searchParams.get('goal')?.toLowerCase()
 
-    const puzzle = await generatePracticePuzzle(difficulty)
+    const puzzle = await generatePracticePuzzle(difficulty, startWord || undefined, goalWord || undefined)
 
     return NextResponse.json({
       success: true,

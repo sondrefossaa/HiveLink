@@ -159,6 +159,10 @@ export default function Game() {
         isGeneratingPractice={isGeneratingPractice}
         isDaily={isDailyPuzzle}
         parValue={puzzle.optimalSteps}
+        startWord={puzzle.startWord}
+        goalWord={puzzle.goalWord}
+        startTime={gameState.startTime}
+        isComplete={gameState.isComplete}
       />
 
       {/* Main game area */}
@@ -245,6 +249,9 @@ export default function Game() {
         pathsFound={pathsFound}
         isDaily={isDailyPuzzle}
         parValue={puzzle.optimalSteps}
+        startWord={puzzle.startWord}
+        goalWord={puzzle.goalWord}
+        difficulty={difficulty}
       />
 
       {/* How to play tutorial */}

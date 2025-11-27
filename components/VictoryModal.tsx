@@ -4,7 +4,7 @@ import { useEffect, useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import ShareButton from './ShareButton'
-import type { GameStats } from '@/types'
+import type { GameStats, PuzzleDifficulty } from '@/types'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
 
 interface VictoryModalProps {
@@ -18,6 +18,10 @@ interface VictoryModalProps {
   pathsFound: number
   isDaily: boolean
   parValue?: number
+  // Sharing props
+  startWord: string
+  goalWord: string
+  difficulty?: PuzzleDifficulty
 }
 
 export default function VictoryModal({
@@ -31,6 +35,9 @@ export default function VictoryModal({
   pathsFound,
   isDaily,
   parValue,
+  startWord,
+  goalWord,
+  difficulty,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const { effectivePreference } = useMotionPreference()
@@ -325,15 +332,17 @@ export default function VictoryModal({
                 >
                   Close
                 </button>
-                {isDaily && typeof puzzleNumber === 'number' && (
-                  <ShareButton
-                    puzzleNumber={puzzleNumber}
-                    wordsUsed={stats.wordsUsed}
-                    layers={stats.layersExplored}
-                    path={path}
-                    won={true}
-                  />
-                )}
+                <ShareButton
+                  puzzleNumber={puzzleNumber}
+                  wordsUsed={stats.wordsUsed}
+                  layers={stats.layersExplored}
+                  status="won"
+                  timeElapsed={stats.timeElapsed}
+                  startWord={startWord}
+                  goalWord={goalWord}
+                  isDaily={isDaily}
+                  difficulty={difficulty}
+                />
               </div>
               <div className="flex gap-3">
                 <button

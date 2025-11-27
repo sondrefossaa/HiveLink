@@ -230,15 +230,28 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         return { success: false, error: err }
       }
 
-      // Check if this connects to the goal node (winning condition)
-      const connectsToGoal = connectionResult.connections.some(conn => conn.node.isGoal)
+      // Separate connections to goal vs non-goal nodes
+      const nonGoalConnections = connectionResult.connections.filter(c => !c.node.isGoal)
+      const goalConnections = connectionResult.connections.filter(c => c.node.isGoal)
       
       // Check if this is the goal word itself
-      const isWinningWord = isGoalWord(normalized, puzzle.goalWord) || connectsToGoal
+      const isTheGoalWord = isGoalWord(normalized, puzzle.goalWord)
+      
+      // To win by connecting to goal, the word must ALSO connect to at least one non-goal node
+      // This ensures there's a path from start -> ... -> this word -> goal
+      const connectsToGoal = goalConnections.length > 0 && nonGoalConnections.length > 0
+      
+      // Must have at least one non-goal connection (unless it's the goal word itself)
+      if (!isTheGoalWord && nonGoalConnections.length === 0) {
+        const err = 'Words must create a series of connections from start toward the goal'
+        setError(err)
+        return { success: false, error: err }
+      }
+      
+      const isWinningWord = isTheGoalWord || connectsToGoal
 
       // Determine direction based on which part of the primary parent is shared
-      // Find the highest-layer non-goal connection to use as primary parent
-      const nonGoalConnections = connectionResult.connections.filter(c => !c.node.isGoal)
+      // Use the highest-layer non-goal connection as primary parent
       const primaryConnection = nonGoalConnections.length > 0
         ? nonGoalConnections.reduce((a, b) => a.node.layer > b.node.layer ? a : b)
         : connectionResult.connections[0]
