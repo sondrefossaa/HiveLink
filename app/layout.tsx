@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   description: 'Chain compound words from start to goal in this daily puzzle game. A new challenge every day!',
   keywords: ['puzzle', 'word game', 'compound words', 'daily puzzle', 'wordle', 'hivelink'],
   authors: [{ name: 'HiveLink' }],
-  metadataBase: new URL('https://hive-link-ten.vercel.app'),
+  metadataBase: new URL('https://hivelink.buzz'),
   openGraph: {
     title: 'HiveLink - Daily Compound Word Puzzle',
     description: 'Chain compound words from start to goal in this daily puzzle game.',

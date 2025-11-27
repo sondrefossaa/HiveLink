@@ -47,7 +47,7 @@ export default function ShareButton({
 
   // Generate share URL with puzzle info
   const generateShareUrl = useCallback(() => {
-    const baseUrl = 'https://hive-link-ten.vercel.app/'
+    const baseUrl = 'https://hivelink.buzz/'
     const params = new URLSearchParams()
     
     if (isDaily && puzzleNumber) {
