@@ -975,33 +975,7 @@ export default function Graph({
         />
       )}
 
-      <div className="hidden lg:block absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-hive-yellow rounded-sm" />
-          <span className="text-gray-300">Start / Main highway</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 border border-hive-yellow rounded-sm" />
-          <span className="text-gray-300">Goal</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-0.5 bg-hive-yellow" />
-          <span className="text-gray-300">Forward branch</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-0.5 border-t border-dashed border-hive-yellow" />
-          <span className="text-gray-300">Side branches</span>
-        </div>
-        {isComplete && (
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-0.5 bg-gradient-to-r from-yellow-300 to-yellow-500" />
-            <span className="text-gray-300">Winning chain</span>
-          </div>
-        )}
-        <div className="text-[10px] text-gray-400 pt-1 border-t border-white/10">
-          Goal anchor: {goalWord}
-        </div>
-      </div>
+      {/* Legend removed and moved to HowToPlay */}
     </div>
   )
 }

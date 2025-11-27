@@ -112,6 +112,33 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                   </li>
                 </ul>
               </div>
+
+              {/* Map Legend */}
+              <div>
+                <h3 className="text-lg font-semibold text-hive-yellow mb-2">Map Legend</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-300 bg-hive-dark/30 p-4 rounded-xl border border-hive-graphite/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 bg-hive-yellow rounded-sm shadow-lg shadow-hive-yellow/20" />
+                    <span>Start / Main highway</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-4 h-4 border-2 border-hive-yellow rounded-sm" />
+                    <span>Goal Node</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-0.5 bg-hive-yellow" />
+                    <span>Forward branch</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-0.5 border-t-2 border-dashed border-hive-yellow" />
+                    <span>Side branches</span>
+                  </div>
+                  <div className="flex items-center gap-3 sm:col-span-2">
+                    <div className="w-8 h-0.5 bg-gradient-to-r from-yellow-300 to-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]" />
+                    <span>Winning chain (Golden Glow)</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
         </motion.div>
