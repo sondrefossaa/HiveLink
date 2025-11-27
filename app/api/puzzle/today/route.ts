@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
+import { generateDailyPuzzle } from '@/lib/puzzle-generator'
 
 // Cache the puzzle for 5 minutes to reduce database load
 type CachedDailyPuzzle = {
@@ -20,6 +21,16 @@ let cachedPuzzle: {
 
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
+// Calculate puzzle number based on a fixed epoch date
+function calculatePuzzleNumber(date: Date): number {
+  // Epoch: November 27, 2024 - Puzzle #1
+  const epochDate = new Date('2024-11-27T00:00:00Z')
+  const daysDiff = Math.floor(
+    (date.getTime() - epochDate.getTime()) / (1000 * 60 * 60 * 24)
+  )
+  return Math.max(1, daysDiff + 1)
+}
+
 export async function GET() {
   try {
     // Check cache
@@ -38,89 +49,69 @@ export async function GET() {
     // Get today's date in UTC
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
 
     // Fetch today's puzzle
-    const puzzle = await prisma.dailyPuzzle.findUnique({
+    let puzzle = await prisma.dailyPuzzle.findUnique({
       where: {
         date: today,
       },
     })
 
+    // If no puzzle exists for today, generate one automatically
     if (!puzzle) {
-      // Fallback: get the most recent puzzle
-      const latestPuzzle = await prisma.dailyPuzzle.findFirst({
-        orderBy: {
-          date: 'desc',
-        },
-      })
-
-      if (!latestPuzzle) {
-        // No puzzles at all - return a default
-        return NextResponse.json({
-          success: true,
-          data: {
-            id: 0,
-            puzzleNumber: 1,
-            date: today.toISOString().split('T')[0],
-            startWord: 'butterfly',
-            goalWord: 'moonshine',
-            optimalSteps: 6,
-            isDaily: true,
-            mode: 'daily',
+      console.log(`No puzzle found for ${todayStr}, generating one...`)
+      
+      try {
+        // Generate a medium difficulty puzzle for the daily
+        const generated = await generateDailyPuzzle(today)
+        
+        // Use upsert to handle race conditions
+        puzzle = await prisma.dailyPuzzle.upsert({
+          where: { date: today },
+          update: {}, // Don't update if exists
+          create: {
+            date: today,
+            startWord: generated.startWord,
+            goalWord: generated.goalWord,
+            optimalSteps: generated.optimalSteps,
           },
         })
+        
+        console.log(`Daily puzzle for ${todayStr}: ${puzzle.startWord} -> ${puzzle.goalWord}`)
+      } catch (genError) {
+        console.error('Failed to generate daily puzzle:', genError)
+        
+        // Try to fetch again in case of race condition
+        puzzle = await prisma.dailyPuzzle.findUnique({
+          where: { date: today },
+        })
+        
+        if (!puzzle) {
+          // Return a fallback puzzle
+          const puzzleNumber = calculatePuzzleNumber(today)
+          return NextResponse.json({
+            success: true,
+            data: {
+              id: 0,
+              puzzleNumber,
+              date: todayStr,
+              startWord: 'butterfly',
+              goalWord: 'moonshine',
+              optimalSteps: 6,
+              isDaily: true,
+              mode: 'daily',
+            },
+          })
+        }
       }
-
-      // Calculate puzzle number based on days since first puzzle
-      const firstPuzzle = await prisma.dailyPuzzle.findFirst({
-        orderBy: {
-          date: 'asc',
-        },
-      })
-
-      const firstDate = firstPuzzle?.date || latestPuzzle.date
-      const daysDiff = Math.floor(
-        (today.getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24)
-      )
-
-      const responseData: CachedDailyPuzzle = {
-        id: latestPuzzle.id,
-        puzzleNumber: daysDiff + 1,
-        date: latestPuzzle.date.toISOString().split('T')[0],
-        startWord: latestPuzzle.startWord,
-        goalWord: latestPuzzle.goalWord,
-        optimalSteps: latestPuzzle.optimalSteps ?? 6,
-        isDaily: true,
-        mode: 'daily',
-      }
-
-      // Update cache
-      cachedPuzzle = {
-        data: responseData,
-        timestamp: now,
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: responseData,
-      })
     }
 
-    // Calculate puzzle number
-    const firstPuzzle = await prisma.dailyPuzzle.findFirst({
-      orderBy: {
-        date: 'asc',
-      },
-    })
-
-    const firstDate = firstPuzzle?.date || puzzle.date
-    const daysDiff = Math.floor(
-      (today.getTime() - new Date(firstDate).getTime()) / (1000 * 60 * 60 * 24)
-    )
+    const puzzleNumber = calculatePuzzleNumber(today)
 
     const responseData: CachedDailyPuzzle = {
       id: puzzle.id,
-      puzzleNumber: daysDiff + 1,
+      puzzleNumber,
       date: puzzle.date.toISOString().split('T')[0],
       startWord: puzzle.startWord,
       goalWord: puzzle.goalWord,
@@ -143,13 +134,17 @@ export async function GET() {
     console.error('Error fetching today\'s puzzle:', error)
 
     // Return a fallback puzzle on error
-    const today = new Date().toISOString().split('T')[0]
+    const today = new Date()
+    today.setUTCHours(0, 0, 0, 0)
+    const todayStr = today.toISOString().split('T')[0]
+    const puzzleNumber = calculatePuzzleNumber(today)
+    
     return NextResponse.json({
       success: true,
       data: {
         id: 0,
-        puzzleNumber: 1,
-        date: today,
+        puzzleNumber,
+        date: todayStr,
         startWord: 'butterfly',
         goalWord: 'moonshine',
         optimalSteps: 6,

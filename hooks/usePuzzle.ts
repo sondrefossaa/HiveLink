@@ -67,31 +67,30 @@ interface UsePuzzleResult {
 }
 
 export function usePuzzle(): UsePuzzleResult {
-  // Check for shared puzzle params on mount (before any state initialization)
-  const sharedParams = useRef<SharedPuzzleParams | null>(null)
-  const hasCheckedUrlParams = useRef(false)
+  // Read URL params on first render (but don't clear yet)
+  // Using a ref to store the initial params so they persist across strict mode double-mounting
+  const initialParamsRef = useRef<SharedPuzzleParams | null | undefined>(undefined)
   
-  if (!hasCheckedUrlParams.current && typeof window !== 'undefined') {
-    sharedParams.current = getSharedPuzzleParams()
-    hasCheckedUrlParams.current = true
-    if (sharedParams.current) {
-      clearUrlParams()
-    }
+  if (initialParamsRef.current === undefined) {
+    initialParamsRef.current = getSharedPuzzleParams()
   }
+  
+  const sharedParams = initialParamsRef.current
+  const sharedPuzzleLoadedRef = useRef(false)
+  const urlClearedRef = useRef(false)
 
   // Determine initial mode based on URL params
-  const initialMode: PuzzleMode = sharedParams.current?.startWord ? 'practice' : 'daily'
-  const initialDifficulty: PuzzleDifficulty = sharedParams.current?.difficulty || 'medium'
+  const initialMode: PuzzleMode = sharedParams?.startWord ? 'practice' : 'daily'
+  const initialDifficulty: PuzzleDifficulty = sharedParams?.difficulty || 'medium'
 
   const [dailyPuzzle, setDailyPuzzle] = useState<DailyPuzzle | null>(null)
   const [practicePuzzle, setPracticePuzzle] = useState<PracticePuzzle | null>(null)
   const [dailyLoading, setDailyLoading] = useState(true)
-  const [practiceLoading, setPracticeLoading] = useState(!!sharedParams.current?.startWord)
+  const [practiceLoading, setPracticeLoading] = useState(!!sharedParams?.startWord)
   const [error, setError] = useState<string | null>(null)
   const [mode, setModeState] = useState<PuzzleMode>(initialMode)
   const [difficulty, setDifficultyState] = useState<PuzzleDifficulty>(initialDifficulty)
   const previousDifficultyRef = useRef<PuzzleDifficulty>(initialDifficulty)
-  const sharedPuzzleLoadedRef = useRef(false)
 
   const fetchPuzzle = useCallback(async () => {
     setDailyLoading(true)
@@ -136,9 +135,8 @@ export function usePuzzle(): UsePuzzleResult {
     setError(null)
 
     try {
-      const response = await fetch(
-        `/api/puzzle/generate?difficulty=${sharedDifficulty}&start=${encodeURIComponent(startWord)}&goal=${encodeURIComponent(goalWord)}`
-      )
+      const url = `/api/puzzle/generate?difficulty=${sharedDifficulty}&start=${encodeURIComponent(startWord)}&goal=${encodeURIComponent(goalWord)}`
+      const response = await fetch(url)
       const data = await response.json()
 
       if (!data.success || !data.data) {
@@ -146,7 +144,12 @@ export function usePuzzle(): UsePuzzleResult {
       }
 
       setPracticePuzzle(data.data as PracticePuzzle)
-      sharedPuzzleLoadedRef.current = true
+      
+      // Clear URL params after successful load
+      if (!urlClearedRef.current) {
+        clearUrlParams()
+        urlClearedRef.current = true
+      }
     } catch (err) {
       console.error('Error generating shared practice puzzle:', err)
       setError(err instanceof Error ? err.message : 'Failed to generate practice puzzle')
@@ -157,21 +160,26 @@ export function usePuzzle(): UsePuzzleResult {
 
   // Handle URL params on initial load (shared puzzle links) - runs once on mount
   useEffect(() => {
-    const params = sharedParams.current
-    if (!params) return
+    // Skip if no shared params
+    if (!sharedParams) return
+    
+    // Skip if already loaded
     if (sharedPuzzleLoadedRef.current) return
 
-    if (params.startWord && params.goalWord) {
+    if (sharedParams.startWord && sharedParams.goalWord) {
+      // Mark as loading to prevent race with auto-generate
+      sharedPuzzleLoadedRef.current = true
+      
       // Shared practice puzzle - mode/difficulty already set in initial state
       void generateSharedPracticePuzzle(
-        params.startWord,
-        params.goalWord,
-        params.difficulty || 'medium'
+        sharedParams.startWord,
+        sharedParams.goalWord,
+        sharedParams.difficulty || 'medium'
       )
     }
     // For daily puzzles, we just load the current day's puzzle
     // (puzzle number in URL is informational - we always load today's puzzle)
-  }, [generateSharedPracticePuzzle])
+  }, [generateSharedPracticePuzzle, sharedParams])
 
   useEffect(() => {
     fetchPuzzle()
@@ -229,9 +237,9 @@ export function usePuzzle(): UsePuzzleResult {
     if (mode !== 'practice') return
     if (practicePuzzle || practiceLoading) return
     // Don't auto-generate if we have shared params - we're loading that instead
-    if (sharedParams.current?.startWord && sharedParams.current?.goalWord) return
+    if (sharedParams?.startWord && sharedParams?.goalWord) return
     void generatePracticePuzzle()
-  }, [mode, practicePuzzle, practiceLoading, generatePracticePuzzle])
+  }, [mode, practicePuzzle, practiceLoading, generatePracticePuzzle, sharedParams])
 
   useEffect(() => {
     if (mode !== 'practice') {

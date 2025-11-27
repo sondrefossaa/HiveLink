@@ -253,7 +253,7 @@ export default function TopBar({
               compact
             />
             
-            <MotionToggle />
+            {/* <MotionToggle /> */}
           </div>
         </div>
 

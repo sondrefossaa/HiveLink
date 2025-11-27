@@ -104,7 +104,9 @@ export default function Game() {
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             className="w-16 h-16 mx-auto mb-4 border-4 border-hive-yellow border-t-transparent rounded-full"
           />
-          <p className="text-hive-yellow text-lg">Loading today&apos;s puzzle...</p>
+          <p className="text-hive-yellow text-lg">
+            {mode === 'daily' ? "Loading today's puzzle..." : "Loading puzzle..."}
+          </p>
         </motion.div>
       </div>
     )

@@ -12,6 +12,13 @@ interface GeneratedPuzzle extends PracticePuzzle {
   solutionPath: string[]
 }
 
+interface DailyPuzzleResult {
+  startWord: string
+  goalWord: string
+  optimalSteps: number
+  solutionPath: string[]
+}
+
 const RAW_WORDS = (compoundWords as CompoundWord[]).map((entry) => ({
   word: entry.word.toLowerCase(),
   parts: entry.parts.map((part) => part.toLowerCase()),
@@ -42,13 +49,44 @@ function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
   return index
 }
 
+// Seeded random number generator (Mulberry32)
+function createSeededRandom(seed: number): () => number {
+  return function() {
+    let t = seed += 0x6D2B79F5
+    t = Math.imul(t ^ t >>> 15, t | 1)
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61)
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+
+// Convert date to a seed number
+function dateToSeed(date: Date): number {
+  const year = date.getUTCFullYear()
+  const month = date.getUTCMonth()
+  const day = date.getUTCDate()
+  // Create a unique number from the date
+  return year * 10000 + month * 100 + day
+}
+
 function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min
+}
+
+function seededRandomInt(min: number, max: number, random: () => number): number {
+  return Math.floor(random() * (max - min + 1)) + min
 }
 
 function shuffleInPlace<T>(array: T[]): T[] {
   for (let i = array.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1))
+    ;[array[i], array[j]] = [array[j], array[i]]
+  }
+  return array
+}
+
+function seededShuffleInPlace<T>(array: T[], random: () => number): T[] {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
     ;[array[i], array[j]] = [array[j], array[i]]
   }
   return array
@@ -138,7 +176,7 @@ export async function generatePracticePuzzle(
     const goalEntry = findWordEntry(sharedGoalWord)
     
     if (!startEntry || !goalEntry) {
-      throw new Error('Invalid shared puzzle words')
+      throw new Error(`Invalid shared puzzle words: ${sharedStartWord} -> ${sharedGoalWord}`)
     }
 
     const seed = `shared-${sharedStartWord}-${sharedGoalWord}-${difficulty}`
@@ -205,6 +243,110 @@ export async function generatePracticePuzzle(
     optimalSteps,
     isDaily: false,
     mode: 'practice',
+    solutionPath: wordsOnly,
+  }
+}
+
+// Seeded versions for daily puzzle generation
+function pickSeededRandomStart(random: () => number): WordEntry {
+  const layeredWords = WORDS.filter((entry) => new Set(entry.parts).size >= 2)
+  const pool = layeredWords.length > 0 ? layeredWords : WORDS
+  return pool[seededRandomInt(0, pool.length - 1, random)]
+}
+
+function pickSeededNextWord(current: WordEntry, used: Set<string>, random: () => number): WordEntry | null {
+  const parts = seededShuffleInPlace(Array.from(new Set(current.parts)), random)
+
+  for (const part of parts) {
+    const candidates = PART_INDEX.get(part)
+    if (!candidates) continue
+
+    const shuffled = seededShuffleInPlace([...candidates], random)
+    for (const candidate of shuffled) {
+      if (candidate.word === current.word) continue
+      if (used.has(candidate.word)) continue
+
+      const shared = findSharedPart(current.parts, candidate.parts)
+      if (!shared) continue
+
+      used.add(candidate.word)
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function attemptSeededBuildChain(targetLength: number, random: () => number): WordEntry[] | null {
+  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
+    const chain: WordEntry[] = []
+    const used = new Set<string>()
+    const start = pickSeededRandomStart(random)
+    chain.push(start)
+    used.add(start.word)
+
+    let success = true
+
+    while (chain.length < targetLength) {
+      const next = pickSeededNextWord(chain[chain.length - 1], used, random)
+      if (!next) {
+        success = false
+        break
+      }
+      chain.push(next)
+    }
+
+    if (success && chain.length === targetLength) {
+      return chain
+    }
+  }
+
+  return null
+}
+
+/**
+ * Generate a daily puzzle for a specific date.
+ * Uses a seeded random number generator to ensure the same puzzle
+ * is generated for the same date, even across different servers.
+ */
+export async function generateDailyPuzzle(date: Date): Promise<DailyPuzzleResult> {
+  const seed = dateToSeed(date)
+  const random = createSeededRandom(seed)
+  
+  // Daily puzzles are always medium difficulty
+  const range = DIFFICULTY_LENGTHS.medium
+  const targetLength = seededRandomInt(range.min, range.max, random)
+  const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)
+
+  let chain: WordEntry[] | null = null
+
+  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
+    const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
+    const candidate = attemptSeededBuildChain(lengthChoice, random)
+    if (!candidate) {
+      continue
+    }
+
+    // For medium difficulty, avoid puzzles where start and goal share a part
+    if (startAndGoalSharePart(candidate)) {
+      continue
+    }
+
+    chain = candidate
+    break
+  }
+
+  if (!chain) {
+    throw new Error('Unable to generate a valid daily puzzle')
+  }
+
+  const wordsOnly = chain.map((entry) => entry.word)
+  const optimalSteps = Math.max(1, chain.length - 1)
+
+  return {
+    startWord: chain[0].word,
+    goalWord: chain[chain.length - 1].word,
+    optimalSteps,
     solutionPath: wordsOnly,
   }
 }

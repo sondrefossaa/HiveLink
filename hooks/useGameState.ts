@@ -150,6 +150,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setAllowExploration(false)
     setWinningPath([])
     setSelectedNodeId('start')
+    setWasRestoredComplete(false)
     scoreSubmittedRef.current = false
   }, [puzzle])
 

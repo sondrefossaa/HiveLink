@@ -65,6 +65,28 @@ export default function ShareButton({
     return `${baseUrl}?${params.toString()}`
   }, [isDaily, puzzleNumber, startWord, goalWord, difficulty])
 
+  // Generate OG image URL for social sharing
+  const generateOgImageUrl = useCallback(() => {
+    // Use relative URL so it works in both dev and production
+    const baseUrl = '/api/og'
+    const params = new URLSearchParams()
+    
+    params.set('status', status)
+    params.set('start', startWord)
+    params.set('goal', goalWord)
+    params.set('words', wordsUsed.toString())
+    params.set('layers', layers.toString())
+    params.set('time', formatTime(timeElapsed))
+    
+    if (isDaily && puzzleNumber) {
+      params.set('puzzle', puzzleNumber.toString())
+    } else if (difficulty) {
+      params.set('difficulty', difficulty)
+    }
+    
+    return `${baseUrl}?${params.toString()}`
+  }, [status, startWord, goalWord, wordsUsed, layers, timeElapsed, isDaily, puzzleNumber, difficulty, formatTime])
+
   const generateShareText = useCallback(() => {
     // Status emoji and text
     const statusConfig = {
@@ -100,12 +122,39 @@ Play: ${shareUrl}`
 
   const handleShare = useCallback(async () => {
     const text = generateShareText()
+    const shareUrl = generateShareUrl()
+    const imageUrl = generateOgImageUrl()
 
-    // Try native share first (mobile)
+    // Try native share with image first (mobile)
     if (navigator.share) {
       try {
+        // Try to fetch the OG image and share it as a file
+        const canShareFiles = navigator.canShare && navigator.canShare({ files: [new File([], 'test.png', { type: 'image/png' })] })
+        
+        if (canShareFiles) {
+          try {
+            const response = await fetch(imageUrl)
+            const blob = await response.blob()
+            const file = new File([blob], 'hivelink-result.png', { type: 'image/png' })
+            
+            await navigator.share({
+              title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Practice',
+              text,
+              url: shareUrl,
+              files: [file],
+            })
+            return
+          } catch (imgErr) {
+            // Image fetch failed, fall back to text-only share
+            console.log('Image share failed, falling back to text:', imgErr)
+          }
+        }
+        
+        // Fall back to text-only share
         await navigator.share({
+          title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Practice',
           text,
+          url: shareUrl,
         })
         return
       } catch (err) {
@@ -113,7 +162,7 @@ Play: ${shareUrl}`
       }
     }
 
-    // Fall back to clipboard
+    // Fall back to clipboard - copy text with link (image doesn't include link)
     try {
       await navigator.clipboard.writeText(text)
       setCopied(true)
@@ -121,7 +170,7 @@ Play: ${shareUrl}`
     } catch (err) {
       console.error('Failed to copy:', err)
     }
-  }, [generateShareText])
+  }, [generateShareText, generateShareUrl, generateOgImageUrl, isDaily, puzzleNumber])
 
   // Compact mode for TopBar - just an icon button
   if (compact) {
