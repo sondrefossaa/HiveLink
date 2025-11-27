@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { usePuzzle } from '@/hooks/usePuzzle'
@@ -50,20 +50,32 @@ export default function Game() {
   const gameState = useGameState(puzzle)
   const [showVictory, setShowVictory] = useState(false)
   const [showGiveUp, setShowGiveUp] = useState(false)
+  const [newPathToast, setNewPathToast] = useState(false)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
+  const prevPathCountRef = useRef(0)
+
+  // Show toast when a new path is discovered
+  useEffect(() => {
+    const currentCount = gameState.allPaths.length
+    if (currentCount > prevPathCountRef.current && prevPathCountRef.current > 0) {
+      setNewPathToast(true)
+      setTimeout(() => setNewPathToast(false), 3000)
+    }
+    prevPathCountRef.current = currentCount
+  }, [gameState.allPaths.length])
 
   // Show victory modal when game is complete (only for fresh victories, not restored games)
   const handleVictory = useCallback(() => {
     setShowVictory(true)
   }, [])
 
-  // Check for victory - only auto-show for fresh victories
-  useMemo(() => {
-    if (gameState.isComplete && !showVictory && !gameState.allowExploration && !gameState.wasRestoredComplete) {
+  // Check for victory - only auto-show for first win (allPaths goes from 0 to 1)
+  useEffect(() => {
+    if (gameState.allPaths.length === 1 && !showVictory && !gameState.wasRestoredComplete) {
       // Small delay for the animation to show
       setTimeout(handleVictory, 500)
     }
-  }, [gameState.isComplete, showVictory, handleVictory, gameState.allowExploration, gameState.wasRestoredComplete])
+  }, [gameState.allPaths.length, showVictory, handleVictory, gameState.wasRestoredComplete])
 
   // Get selected node
   const selectedNode = useMemo(() => {
@@ -88,8 +100,6 @@ export default function Game() {
     gameState.reset()
     setShowGiveUp(false)
   }, [gameState])
-
-  const pathsFound = gameState.winningPath.length > 0 ? 1 : 0
 
   // Loading state
   if (puzzleLoading) {
@@ -153,7 +163,7 @@ export default function Game() {
         wordsUsed={gameState.wordsUsed}
         layersExplored={gameState.maxLayer}
         onGiveUp={handleGiveUp}
-        pathsFound={pathsFound}
+        pathsFound={gameState.allPaths.length}
         mode={mode}
         onModeChange={setMode}
         difficulty={difficulty}
@@ -248,8 +258,7 @@ export default function Game() {
           gameState.reset()
           setShowVictory(false)
         }}
-        path={gameState.winningPath}
-        pathsFound={pathsFound}
+        allPaths={gameState.allPaths}
         isDaily={isDailyPuzzle}
         parValue={puzzle.optimalSteps}
         startWord={puzzle.startWord}
@@ -327,6 +336,26 @@ export default function Game() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* New path discovery toast */}
+      <AnimatePresence>
+        {newPathToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 
+                       bg-gradient-to-r from-hive-gold to-hive-yellow 
+                       text-hive-dark font-bold px-6 py-3 rounded-full
+                       shadow-lg shadow-hive-gold/30 flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            New path discovered!
           </motion.div>
         )}
       </AnimatePresence>

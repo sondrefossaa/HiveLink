@@ -22,13 +22,14 @@ model DailyPuzzle {
 }
 
 model Score {
-  id         Int      @id @default(autoincrement())
-  puzzleDate DateTime @map("puzzle_date") @db.Date
-  playerId   String   @map("player_id")
-  wordsUsed  Int      @map("words_used")
-  layers     Int
-  finishedAt DateTime @default(now()) @map("finished_at")
-  isDaily    Boolean  @default(true) @map("is_daily")
+  id          Int      @id @default(autoincrement())
+  puzzleDate  DateTime @map("puzzle_date") @db.Date
+  playerId    String   @map("player_id")
+  wordsUsed   Int      @map("words_used")
+  layers      Int
+  timeElapsed Int?     @map("time_elapsed")
+  finishedAt  DateTime @default(now()) @map("finished_at")
+  isDaily     Boolean  @default(true) @map("is_daily")
 
   @@unique([puzzleDate, playerId])
   @@index([puzzleDate])

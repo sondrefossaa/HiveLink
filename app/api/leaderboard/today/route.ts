@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import type { LeaderboardEntry, LeaderboardResponse } from '@/types'
+import type { LeaderboardEntry, LeaderboardResponse, AverageStats } from '@/types'
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
 
-    const [allScores, puzzle] = await Promise.all([
+    const [allScores, puzzle, aggregates] = await Promise.all([
       prisma.score.findMany({
         where: {
           puzzleDate: today,
@@ -22,6 +22,18 @@ export async function GET(request: NextRequest) {
         where: {
           date: today,
         },
+      }),
+      prisma.score.aggregate({
+        where: {
+          puzzleDate: today,
+          isDaily: true,
+        },
+        _avg: {
+          wordsUsed: true,
+          layers: true,
+          timeElapsed: true,
+        },
+        _count: true,
       }),
     ])
 
@@ -52,6 +64,12 @@ export async function GET(request: NextRequest) {
     const response: LeaderboardResponse = {
       entries,
       totalPlayers,
+      averageStats: {
+        avgWordsUsed: aggregates._avg.wordsUsed ?? 0,
+        avgLayers: aggregates._avg.layers ?? 0,
+        avgTimeElapsed: aggregates._avg.timeElapsed ?? null,
+        totalPlayers,
+      },
     }
 
     // If player ID provided, find their rank

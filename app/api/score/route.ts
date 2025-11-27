@@ -8,7 +8,7 @@ const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { playerId, wordsUsed, layers, puzzleDate, isDaily = true } = body
+    const { playerId, wordsUsed, layers, puzzleDate, isDaily = true, timeElapsed } = body
 
     // Validate input
     if (!playerId || typeof playerId !== 'string') {
@@ -78,6 +78,7 @@ export async function POST(request: NextRequest) {
           data: {
             wordsUsed,
             layers,
+            timeElapsed: typeof timeElapsed === 'number' ? timeElapsed : undefined,
             finishedAt: new Date(),
             isDaily: true,
           },
@@ -115,6 +116,7 @@ export async function POST(request: NextRequest) {
         playerId,
         wordsUsed,
         layers,
+        timeElapsed: typeof timeElapsed === 'number' ? timeElapsed : undefined,
         isDaily: true,
       },
     })

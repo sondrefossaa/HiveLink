@@ -78,6 +78,7 @@ export interface Score {
   playerId: string;
   wordsUsed: number;
   layers: number;
+  timeElapsed?: number;
   finishedAt: string;
   isDaily: boolean;
 }
@@ -90,11 +91,19 @@ export interface LeaderboardEntry {
   finishedAt: string;
 }
 
+export interface AverageStats {
+  avgWordsUsed: number;
+  avgLayers: number;
+  avgTimeElapsed: number | null;
+  totalPlayers: number;
+}
+
 export interface LeaderboardResponse {
   entries: LeaderboardEntry[];
   playerRank?: number;
   playerPercentile?: number;
   totalPlayers: number;
+  averageStats?: AverageStats;
 }
 
 // Validation Types

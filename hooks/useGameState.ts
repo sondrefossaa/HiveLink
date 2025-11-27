@@ -29,13 +29,15 @@ interface SavedState {
   completedAt?: string
   startTime?: number
   finalTimeElapsed?: number
+  allPaths?: string[][]
 }
 
 interface UseGameStateResult extends GameState {
-  addWord: (word: string) => Promise<{ success: boolean; error?: string }>
+  addWord: (word: string) => Promise<{ success: boolean; error?: string; isNewPath?: boolean }>
   selectNode: (nodeId: string | null) => void
   reset: () => void
   winningPath: string[]
+  allPaths: string[][]
   startTime: number
   finalTimeElapsed: number | null
   submitScore: () => Promise<void>
@@ -55,10 +57,22 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [winningPath, setWinningPath] = useState<string[]>([])
+  const [allPaths, setAllPaths] = useState<string[][]>([])
   const [startTime, setStartTime] = useState(() => Date.now())
   const [finalTimeElapsed, setFinalTimeElapsed] = useState<number | null>(null)
   const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
   const scoreSubmittedRef = useRef(false)
+
+  // Helper to check if a path is unique (different intermediate words)
+  const isUniquePath = useCallback((newPath: string[], existingPaths: string[][]): boolean => {
+    if (newPath.length < 2) return false
+    // Get intermediate words (exclude start and end)
+    const newMiddle = newPath.slice(1, -1).sort().join('|')
+    return !existingPaths.some(p => {
+      const existingMiddle = p.slice(1, -1).sort().join('|')
+      return existingMiddle === newMiddle
+    })
+  }, [])
 
   // Initialize game with start and goal nodes
   useEffect(() => {
@@ -126,6 +140,11 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           }
           setWinningPath(path)
         }
+        
+        // Restore all paths if saved
+        if (savedState.allPaths && savedState.allPaths.length > 0) {
+          setAllPaths(savedState.allPaths)
+        }
       }
       return
     }
@@ -161,6 +180,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setIsComplete(false)
     setAllowExploration(false)
     setWinningPath([])
+    setAllPaths([])
     setSelectedNodeId('start')
     setWasRestoredComplete(false)
     setStartTime(Date.now())
@@ -180,12 +200,13 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       isComplete,
       startTime,
       finalTimeElapsed: finalTimeElapsed ?? undefined,
+      allPaths: allPaths.length > 0 ? allPaths : undefined,
     }
 
     if (puzzle.isDaily) {
       saveGameState(puzzle.date, state)
     }
-  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed])
+  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
 
   const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
     if (!puzzle) {
@@ -319,17 +340,6 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       setSelectedNodeId(newNode.id)
 
       if (isWinningWord) {
-        // Lock in the final time before setting complete
-        const elapsed = Date.now() - startTime
-        setFinalTimeElapsed(elapsed)
-        
-        setIsComplete(true)
-        setAllowExploration(false)
-        if (puzzle.isDaily) {
-          markPuzzleCompleted(puzzle.date)
-          updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
-        }
-
         // Calculate winning path from start to the winning word
         const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, ...newEdges])
         // Add the goal word at the end if the winning word isn't the goal itself
@@ -337,7 +347,31 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         if (goalNode && path.length > 0 && path[path.length - 1].toLowerCase() !== goalNode.word.toLowerCase()) {
           path.push(goalNode.word)
         }
-        setWinningPath(path)
+        
+        // Check if this is a new unique path
+        const isFirstWin = !isComplete
+        const isNewPath = isFirstWin || isUniquePath(path, allPaths)
+        
+        if (isFirstWin) {
+          // First win - lock in time, mark complete, but allow continued exploration
+          const elapsed = Date.now() - startTime
+          setFinalTimeElapsed(elapsed)
+          setIsComplete(true)
+          setAllowExploration(true) // Auto-enable exploration after first win
+          
+          if (puzzle.isDaily) {
+            markPuzzleCompleted(puzzle.date)
+            updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
+          }
+          
+          setWinningPath(path)
+          setAllPaths([path])
+        } else if (isNewPath) {
+          // New unique path found during exploration
+          setAllPaths(prev => [...prev, path])
+        }
+        
+        return { success: true, isNewPath }
       }
 
       return { success: true }
@@ -420,6 +454,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           layers: maxLayer,
           puzzleDate: puzzle.date,
           isDaily: puzzle.isDaily,
+          timeElapsed: finalTimeElapsed,
         }),
       })
 
@@ -427,7 +462,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     } catch (error) {
       console.error('Error submitting score:', error)
     }
-  }, [puzzle, isComplete, wordsUsed, maxLayer])
+  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed])
 
   // Auto-submit score when game is complete
   useEffect(() => {
@@ -449,6 +484,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     selectNode,
     reset,
     winningPath,
+    allPaths,
     startTime,
     finalTimeElapsed,
     submitScore,

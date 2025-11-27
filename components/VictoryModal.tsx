@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import ShareButton from './ShareButton'
-import type { GameStats, PuzzleDifficulty } from '@/types'
+import type { GameStats, PuzzleDifficulty, AverageStats } from '@/types'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
+import { getPlayerId } from '@/lib/player-id'
 
 interface VictoryModalProps {
   isOpen: boolean
@@ -14,8 +15,7 @@ interface VictoryModalProps {
   onClose: () => void
   onContinue: () => void
   onTryAgain: () => void
-  path: string[]
-  pathsFound: number
+  allPaths: string[][]
   isDaily: boolean
   parValue?: number
   // Sharing props
@@ -69,8 +69,7 @@ export default function VictoryModal({
   onClose,
   onContinue,
   onTryAgain,
-  path,
-  pathsFound,
+  allPaths,
   isDaily,
   parValue,
   startWord,
@@ -80,6 +79,15 @@ export default function VictoryModal({
   const [showDetails, setShowDetails] = useState(false)
   const [imageStatus, setImageStatus] = useState<'idle' | 'loading' | 'copied' | 'downloaded' | 'error'>('idle')
   const { effectivePreference } = useMotionPreference()
+  
+  // Cached average stats - only fetch once per puzzle
+  const [averageStats, setAverageStats] = useState<AverageStats | null>(null)
+  const [loadingAverages, setLoadingAverages] = useState(false)
+  const fetchedPuzzleRef = useRef<number | null>(null)
+
+  // Get the first/best path for sharing
+  const path = allPaths[0] || []
+  const pathsFound = allPaths.length
 
   // Get the OG image URL
   const ogImageUrl = generateOgImageUrl(
@@ -196,6 +204,33 @@ export default function VictoryModal({
 
     return () => window.clearInterval(interval)
   }, [effectivePreference, isOpen])
+
+  // Fetch community averages when modal opens (cached per puzzle)
+  useEffect(() => {
+    if (!isOpen || !isDaily) return
+    if (fetchedPuzzleRef.current === puzzleNumber) return // Already fetched for this puzzle
+    
+    const fetchAverages = async () => {
+      setLoadingAverages(true)
+      try {
+        const playerId = getPlayerId()
+        const response = await fetch(`/api/leaderboard/today?playerId=${playerId}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.data.averageStats) {
+            setAverageStats(data.data.averageStats)
+            fetchedPuzzleRef.current = puzzleNumber ?? null
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch averages:', error)
+      } finally {
+        setLoadingAverages(false)
+      }
+    }
+    
+    fetchAverages()
+  }, [isOpen, isDaily, puzzleNumber])
 
   // Format time
   const formatTime = useCallback((ms: number) => {
@@ -343,7 +378,7 @@ export default function VictoryModal({
                   </div>
                 </div>
                 <div className="text-center p-3 rounded-xl bg-hive-dark/50">
-                  <div className="text-2xl font-bold text-hive-yellow">
+                  <div className="text-xl font-bold text-hive-yellow">
                     {formatTime(stats.timeElapsed)}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
@@ -351,6 +386,84 @@ export default function VictoryModal({
                   </div>
                 </div>
               </motion.div>
+
+              {/* Community comparison */}
+              {isDaily && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.55 }}
+                  className="mb-6 p-4 rounded-xl bg-hive-dark/30 border border-hive-graphite/50"
+                >
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-3 text-center">
+                    Community Average
+                  </div>
+                  {loadingAverages ? (
+                    <div className="flex justify-center">
+                      <div className="w-5 h-5 border-2 border-hive-yellow/30 border-t-hive-yellow rounded-full animate-spin" />
+                    </div>
+                  ) : averageStats ? (
+                    <div className="grid grid-cols-3 gap-3 text-center">
+                      <div>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-lg font-semibold text-gray-300">
+                            {averageStats.avgWordsUsed.toFixed(1)}
+                          </span>
+                          {stats.wordsUsed < averageStats.avgWordsUsed ? (
+                            <span className="text-green-400 text-sm">↓</span>
+                          ) : stats.wordsUsed > averageStats.avgWordsUsed ? (
+                            <span className="text-red-400 text-sm">↑</span>
+                          ) : (
+                            <span className="text-gray-400 text-sm"></span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500">Words</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-lg font-semibold text-gray-300">
+                            {averageStats.avgLayers.toFixed(1)}
+                          </span>
+                          {stats.layersExplored < averageStats.avgLayers ? (
+                            <span className="text-green-400 text-sm">↓</span>
+                          ) : stats.layersExplored > averageStats.avgLayers ? (
+                            <span className="text-red-400 text-sm">↑</span>
+                          ) : (
+                            <span className="text-gray-400 text-sm">=</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-gray-500">Layers</div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-center gap-1">
+                          <span className="text-lg font-semibold text-gray-300">
+                            {averageStats.avgTimeElapsed 
+                              ? formatTime(averageStats.avgTimeElapsed) 
+                              : '—'}
+                          </span>
+                          {averageStats.avgTimeElapsed && stats.timeElapsed < averageStats.avgTimeElapsed ? (
+                            <span className="text-green-400 text-sm">↓</span>
+                          ) : averageStats.avgTimeElapsed && stats.timeElapsed > averageStats.avgTimeElapsed ? (
+                            <span className="text-red-400 text-sm">↑</span>
+                          ) : averageStats.avgTimeElapsed ? (
+                            <span className="text-gray-400 text-sm">=</span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-gray-500">Time</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center text-sm text-gray-500">
+                      Be the first to complete today&apos;s puzzle!
+                    </div>
+                  )}
+                  {averageStats && averageStats.totalPlayers > 0 && (
+                    <div className="text-xs text-gray-500 text-center mt-2">
+                      {averageStats.totalPlayers} player{averageStats.totalPlayers !== 1 ? 's' : ''} today
+                    </div>
+                  )}
+                </motion.div>
+              )}
 
               {/* Optimal comparison */}
               {stats.optimalSteps && stats.wordsUsed > stats.optimalSteps && (
@@ -399,22 +512,40 @@ export default function VictoryModal({
                     exit={{ height: 0, opacity: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="py-4 flex flex-wrap items-center justify-center gap-2">
-                      {path.map((word, index) => (
-                        <span key={index} className="flex items-center gap-2">
-                          <span
-                            className={`px-2 py-1 rounded text-sm
-                                       ${index === 0 ? 'bg-hive-yellow text-hive-dark font-medium' : ''}
-                                       ${index === path.length - 1 ? 'bg-green-500 text-white font-medium' : ''}
-                                       ${index > 0 && index < path.length - 1 ? 'bg-hive-graphite text-gray-300' : ''}`}
-                          >
-                            {word}
-                          </span>
-                          {index < path.length - 1 && (
-                            <span className="text-hive-yellow">→</span>
+                    <div className="py-4 space-y-4">
+                      {allPaths.map((singlePath, pathIndex) => (
+                        <div key={pathIndex} className="space-y-2">
+                          {allPaths.length > 1 && (
+                            <div className="text-xs text-gray-500 uppercase tracking-wide text-center">
+                              Path {pathIndex + 1} ({singlePath.length - 1} steps)
+                            </div>
                           )}
-                        </span>
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            {singlePath.map((word, index) => (
+                              <span key={index} className="flex items-center gap-2">
+                                <span
+                                  className={`px-2 py-1 rounded text-sm
+                                             ${index === 0 ? 'bg-hive-yellow text-hive-dark font-medium' : ''}
+                                             ${index === singlePath.length - 1 ? 'bg-green-500 text-white font-medium' : ''}
+                                             ${index > 0 && index < singlePath.length - 1 ? 'bg-hive-graphite text-gray-300' : ''}`}
+                                >
+                                  {word}
+                                </span>
+                                {index < singlePath.length - 1 && (
+                                  <span className="text-hive-yellow">→</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
+                      {allPaths.length > 0 && (
+                        <div className="text-center text-sm text-gray-400 pt-2">
+                          {allPaths.length === 1 
+                            ? 'Keep exploring to find more paths!' 
+                            : `${allPaths.length} unique paths discovered!`}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 )}
