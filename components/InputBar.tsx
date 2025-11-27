@@ -179,7 +179,7 @@ export default function InputBar({
               disabled={isDisabled || isLoading || !input.trim()}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className={`px-6 py-2.5 rounded-xl font-medium transition-all duration-200
+              className={`px-3 sm:px-6 py-2.5 rounded-xl font-medium transition-all duration-200
                          flex items-center gap-2
                          ${
                            isDisabled || !input.trim()
@@ -196,7 +196,7 @@ export default function InputBar({
                 />
               ) : (
                 <>
-                  <span>Link</span>
+                  <span className="hidden sm:inline">Link</span>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
                       strokeLinecap="round"

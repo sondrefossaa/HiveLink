@@ -975,7 +975,7 @@ export default function Graph({
         />
       )}
 
-      <div className="hidden md:block absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
+      <div className="hidden lg:block absolute top-4 left-4 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg p-3 text-xs space-y-2 border border-hive-slate/40">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-hive-yellow rounded-sm" />
           <span className="text-gray-300">Start / Main highway</span>

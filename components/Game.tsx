@@ -209,7 +209,7 @@ export default function Game() {
       <main className="flex-1 pt-16 pb-32 relative">
         {/* Mobile Start/Goal Display */}
         <div 
-          className="md:hidden absolute left-0 right-0 z-20 flex justify-between px-4 pointer-events-none transition-[top] duration-300 ease-in-out"
+          className="lg:hidden absolute left-0 right-0 z-20 flex justify-between px-4 pointer-events-none transition-[top] duration-300 ease-in-out"
           style={{ top: '140px' }}
         >
           <motion.div
@@ -235,7 +235,7 @@ export default function Game() {
         </div>
 
         {/* Graph container */}
-        <div className="absolute inset-0 pb-32 pt-44 md:pt-16 transition-[padding] duration-300 ease-in-out">
+        <div className="absolute inset-0 pb-32 pt-44 lg:pt-16 transition-[padding] duration-300 ease-in-out">
           {gameState.nodes.length > 0 ? (
             <Graph
               nodes={gameState.nodes}
@@ -277,7 +277,7 @@ export default function Game() {
         )}
 
         {/* Start/Goal labels */}
-        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 left-4 z-10">
+        <div className="hidden lg:block absolute top-1/2 -translate-y-1/2 left-4 z-10">
           <motion.div
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -288,7 +288,7 @@ export default function Game() {
           </motion.div>
         </div>
 
-        <div className="hidden md:block absolute top-1/2 -translate-y-1/2 right-4 z-10">
+        <div className="hidden lg:block absolute top-1/2 -translate-y-1/2 right-4 z-10">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
@@ -346,7 +346,7 @@ export default function Game() {
       {gameState.isComplete && (
         <button
           onClick={() => setShowVictory(true)}
-          className="fixed bottom-32 left-4 z-30 w-10 h-10 rounded-full
+          className="fixed bottom-48 lg:bottom-32 left-4 z-30 w-10 h-10 rounded-full
                      bg-hive-yellow/90 hover:bg-hive-gold backdrop-blur-sm
                      text-hive-dark flex items-center justify-center transition-colors
                      border border-hive-gold/50 shadow-hive-glow"
@@ -361,7 +361,7 @@ export default function Game() {
       {/* Help button */}
       <button
         onClick={() => setShowTutorial(true)}
-        className="fixed bottom-20 left-4 z-30 w-10 h-10 rounded-full
+        className="fixed bottom-36 lg:bottom-20 left-4 z-30 w-10 h-10 rounded-full
                    bg-hive-graphite/80 hover:bg-hive-slate/80 backdrop-blur-sm
                    text-hive-yellow flex items-center justify-center transition-colors
                    border border-hive-slate/50"
