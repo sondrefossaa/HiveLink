@@ -53,6 +53,7 @@ export default function Game() {
   const [newPathToast, setNewPathToast] = useState(false)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
   const prevPathCountRef = useRef(0)
+  const hasShownVictoryRef = useRef(false)
 
   // Show toast when a new path is discovered
   useEffect(() => {
@@ -71,11 +72,14 @@ export default function Game() {
 
   // Check for victory - only auto-show for first win (allPaths goes from 0 to 1)
   useEffect(() => {
-    if (gameState.allPaths.length === 1 && !showVictory && !gameState.wasRestoredComplete) {
+    if (gameState.allPaths.length === 0) {
+      hasShownVictoryRef.current = false
+    } else if (gameState.allPaths.length === 1 && !hasShownVictoryRef.current && !gameState.wasRestoredComplete) {
+      hasShownVictoryRef.current = true
       // Small delay for the animation to show
       setTimeout(handleVictory, 500)
     }
-  }, [gameState.allPaths.length, showVictory, handleVictory, gameState.wasRestoredComplete])
+  }, [gameState.allPaths.length, handleVictory, gameState.wasRestoredComplete])
 
   // Get selected node
   const selectedNode = useMemo(() => {
