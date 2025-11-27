@@ -187,6 +187,37 @@ export default function Graph({
     return chain
   }, [edges, nodes, winningPath, isComplete])
 
+  // Identify nodes that connect to the goal (but aren't the goal itself)
+  const nodesConnectedToGoal = useMemo(() => {
+    const connectedNodeIds = new Set<string>()
+    
+    // Find the original goal node (id='goal')
+    const goalNodeId = nodes.find(n => n.id === 'goal')?.id
+    
+    edges.forEach((edge) => {
+      const sourceId = resolveId(edge.source)
+      const targetId = resolveId(edge.target)
+      // If target is goal, source connects to goal
+      if (targetId === 'goal' && sourceId && sourceId !== 'goal') {
+        connectedNodeIds.add(sourceId)
+      }
+      // If source is goal, target connects to goal (bidirectional check)
+      if (sourceId === 'goal' && targetId && targetId !== 'goal') {
+        connectedNodeIds.add(targetId)
+      }
+    })
+    
+    // Also include nodes that are marked as goal but aren't the original goal node
+    // These are winning word nodes that connect to the goal
+    nodes.forEach((node) => {
+      if (node.isGoal && node.id !== 'goal') {
+        connectedNodeIds.add(node.id)
+      }
+    })
+    
+    return connectedNodeIds
+  }, [edges, nodes])
+
   // Prepare graph data with layout positions
   const graphData = useMemo(() => {
     const graphNodes: ForceLayoutNode[] = layout.nodes.map((node) => {
@@ -548,18 +579,34 @@ export default function Graph({
       const y = node.y ?? node.targetY
       const isSelected = node.id === selectedNodeId
       const isGoalCompleted = node.isGoal && node.isCompleted
+      const connectsToGoal = nodesConnectedToGoal.has(node.id) && node.id !== 'goal'
       const size = getRenderedNodeSize(node, globalScale)
 
-      // Draw glow/halo
+      // Draw glow/halo - enhanced for nodes connected to goal
       ctx.save()
       ctx.beginPath()
-      ctx.fillStyle = isSelected
-        ? 'rgba(244, 180, 0, 0.4)'
-        : node.isGoal
-        ? 'rgba(244, 180, 0, 0.25)'
-        : 'rgba(244, 180, 0, 0.15)'
-      ctx.arc(x, y, size * 1.6, 0, Math.PI * 2)
-      ctx.fill()
+      if (connectsToGoal) {
+        // Double glow effect for nodes connected to goal - outer ring
+        const gradient = ctx.createRadialGradient(x, y, size * 0.55, x, y, size * 0.9)
+        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.4)')
+        gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.25)')
+        gradient.addColorStop(1, 'rgba(34, 197, 94, 0)')
+        ctx.fillStyle = gradient
+        ctx.arc(x, y, size * 0.9, 0, Math.PI * 2)
+        ctx.fill()
+        // Inner brighter glow
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'
+        ctx.arc(x, y, size * 0.7, 0, Math.PI * 2)
+        ctx.fill()
+      } else {
+        ctx.fillStyle = isSelected
+          ? 'rgba(244, 180, 0, 0.4)'
+          : node.isGoal
+          ? 'rgba(244, 180, 0, 0.25)'
+          : 'rgba(244, 180, 0, 0.15)'
+        ctx.arc(x, y, size * 1.6, 0, Math.PI * 2)
+        ctx.fill()
+      }
       ctx.restore()
 
       // Draw hexagon
@@ -582,20 +629,38 @@ export default function Graph({
         ? '#F4B400'
         : isGoalCompleted
         ? '#22c55e'
+        : connectsToGoal
+        ? '#0A1F0A' // Very dark green background for nodes connected to goal
         : '#0F0D09'
-      ctx.shadowColor = isSelected ? 'rgba(255, 196, 0, 0.9)' : 'rgba(244, 180, 0, 0.45)'
-      ctx.shadowBlur = isSelected ? 25 : 12
+      ctx.shadowColor = connectsToGoal 
+        ? 'rgba(34, 197, 94, 0.8)' // Green shadow for nodes connected to goal
+        : isSelected 
+        ? 'rgba(255, 196, 0, 0.9)' 
+        : 'rgba(244, 180, 0, 0.45)'
+      ctx.shadowBlur = connectsToGoal ? 20 : isSelected ? 25 : 12
       ctx.fill()
 
-      ctx.lineWidth = 2.5 / globalScale
-      ctx.strokeStyle = node.isGoal
-        ? '#F4B400'
-        : node.isStart
-        ? '#1A1406'
-        : isSelected
-        ? '#FFD369'
-        : '#3C3223'
-      ctx.stroke()
+      // Draw border - thicker and double for nodes connected to goal
+      if (connectsToGoal) {
+        // Outer border - bright green
+        ctx.lineWidth = 4 / globalScale
+        ctx.strokeStyle = '#22c55e'
+        ctx.stroke()
+        // Inner border - lighter green
+        ctx.lineWidth = 2 / globalScale
+        ctx.strokeStyle = '#4ade80'
+        ctx.stroke()
+      } else {
+        ctx.lineWidth = 2.5 / globalScale
+        ctx.strokeStyle = node.isGoal
+          ? '#F4B400'
+          : node.isStart
+          ? '#1A1406'
+          : isSelected
+          ? '#FFD369'
+          : '#3C3223'
+        ctx.stroke()
+      }
       ctx.restore()
 
       // Draw text with perfect readability
@@ -632,7 +697,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [selectedNodeId]
+    [selectedNodeId, nodesConnectedToGoal]
   )
 
   // Custom link rendering with curved bezier edges

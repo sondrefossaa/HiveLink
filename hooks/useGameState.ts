@@ -208,7 +208,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
   }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
 
-  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
+  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string; isNewPath?: boolean }> => {
     if (!puzzle) {
       return { success: false, error: 'Puzzle not loaded' }
     }
@@ -443,6 +443,25 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     if (!puzzle || !puzzle.isDaily || !isComplete || scoreSubmittedRef.current) return
 
     try {
+      // Calculate layers from winning path (only layers used to reach goal)
+      let layersToSubmit = maxLayer
+      if (winningPath.length > 0) {
+        const winningPathWords = new Set(winningPath.map(w => w.toLowerCase()))
+        const winningPathNodes = nodes.filter(n => 
+          winningPathWords.has(n.word.toLowerCase())
+        )
+        if (winningPathNodes.length > 0) {
+          // Get max layer from winning path nodes (exclude goal node which has layer -1)
+          const pathLayers = winningPathNodes
+            .filter(n => !n.isGoal && n.layer >= 0)
+            .map(n => n.layer)
+          if (pathLayers.length > 0) {
+            // Add 1 because layers are 0-indexed (layer 0, 1, 2 = 3 layers total)
+            layersToSubmit = Math.max(...pathLayers) + 1
+          }
+        }
+      }
+
       const playerId = getPlayerId()
       
       await fetch('/api/score', {
@@ -451,7 +470,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         body: JSON.stringify({
           playerId,
           wordsUsed,
-          layers: maxLayer,
+          layers: layersToSubmit,
           puzzleDate: puzzle.date,
           isDaily: puzzle.isDaily,
           timeElapsed: finalTimeElapsed,
@@ -462,7 +481,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     } catch (error) {
       console.error('Error submitting score:', error)
     }
-  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed])
+  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
 
   // Auto-submit score when game is complete
   useEffect(() => {

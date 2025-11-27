@@ -83,13 +83,36 @@ export default function Game() {
   }, [gameState.nodes, gameState.selectedNodeId])
 
   // Calculate game stats
-  const gameStats: GameStats = useMemo(() => ({
-    wordsUsed: gameState.wordsUsed,
-    layersExplored: gameState.maxLayer,
-    // Use finalTimeElapsed if game is complete (prevents cheating by refresh)
-    timeElapsed: gameState.finalTimeElapsed ?? (Date.now() - gameState.startTime),
-    optimalSteps: puzzle?.optimalSteps || undefined,
-  }), [gameState.wordsUsed, gameState.maxLayer, gameState.startTime, gameState.finalTimeElapsed, puzzle?.optimalSteps])
+  const gameStats: GameStats = useMemo(() => {
+    // Calculate layers from winning path (only layers used to reach goal)
+    // If there's a winning path, find the max layer from nodes in that path
+    // Otherwise fall back to maxLayer (for incomplete games)
+    let layersExplored = gameState.maxLayer
+    if (gameState.winningPath.length > 0) {
+      const winningPathWords = new Set(gameState.winningPath.map(w => w.toLowerCase()))
+      const winningPathNodes = gameState.nodes.filter(n => 
+        winningPathWords.has(n.word.toLowerCase())
+      )
+      if (winningPathNodes.length > 0) {
+        // Get max layer from winning path nodes (exclude goal node which has layer -1)
+        const pathLayers = winningPathNodes
+          .filter(n => !n.isGoal && n.layer >= 0)
+          .map(n => n.layer)
+        if (pathLayers.length > 0) {
+          // Add 1 because layers are 0-indexed (layer 0, 1, 2 = 3 layers total)
+          layersExplored = Math.max(...pathLayers) + 1
+        }
+      }
+    }
+    
+    return {
+      wordsUsed: gameState.wordsUsed,
+      layersExplored,
+      // Use finalTimeElapsed if game is complete (prevents cheating by refresh)
+      timeElapsed: gameState.finalTimeElapsed ?? (Date.now() - gameState.startTime),
+      optimalSteps: puzzle?.optimalSteps || undefined,
+    }
+  }, [gameState.wordsUsed, gameState.maxLayer, gameState.winningPath, gameState.nodes, gameState.startTime, gameState.finalTimeElapsed, puzzle?.optimalSteps])
 
   // Handle give up
   const handleGiveUp = useCallback(() => {
