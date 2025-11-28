@@ -18,6 +18,7 @@ import {
   isPuzzleCompleted,
   updatePlayerStats,
   getPlayerId,
+  clearGameState,
 } from '@/lib/player-id'
 
 interface SavedState {
@@ -87,68 +88,80 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       : null
     
     if (savedState && savedState.nodes && savedState.nodes.length > 0) {
-      setNodes(savedState.nodes)
-      setEdges(savedState.edges || [])
-      setWordsUsed(savedState.wordsUsed || 0)
-      setMaxLayer(savedState.maxLayer || 0)
-      setIsComplete(savedState.isComplete || false)
-      
-      // Restore timing data
-      if (savedState.startTime) {
-        setStartTime(savedState.startTime)
-      }
-      if (savedState.finalTimeElapsed) {
-        setFinalTimeElapsed(savedState.finalTimeElapsed)
-      }
-      
-      // Mark as restored complete so we don't auto-show victory modal
-      if (savedState.isComplete) {
-        setWasRestoredComplete(true)
-        setAllowExploration(true) // Allow exploration on restored complete games
+      const savedStart = savedState.nodes.find(n => n.isStart)
+      const savedGoal = savedState.nodes.find(n => n.id === 'goal')
+
+      const startMatches = savedStart?.word?.toLowerCase() === puzzle.startWord.toLowerCase()
+      const goalMatches = savedGoal?.word?.toLowerCase() === puzzle.goalWord.toLowerCase()
+
+      if (!startMatches || !goalMatches) {
+        if (puzzle.isDaily) {
+          clearGameState(puzzle.date)
+        }
+      } else {
+        setNodes(savedState.nodes)
+        setEdges(savedState.edges || [])
+        setWordsUsed(savedState.wordsUsed || 0)
+        setMaxLayer(savedState.maxLayer || 0)
+        setIsComplete(savedState.isComplete || false)
         
-        // Find the winning word node (the one that connected to the goal)
-        // It's the node with isGoal=true that isn't the original goal node, 
-        // OR find the node that has an edge to the goal
-        const goalNode = savedState.nodes.find(n => n.id === 'goal')
-        const edges = savedState.edges || []
+        // Restore timing data
+        if (savedState.startTime) {
+          setStartTime(savedState.startTime)
+        }
+        if (savedState.finalTimeElapsed) {
+          setFinalTimeElapsed(savedState.finalTimeElapsed)
+        }
         
-        // Find the node that connects to the goal (has an edge with goal as source or target)
-        let winningNodeId: string | undefined
-        for (const edge of edges) {
-          const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
-          const targetId = typeof edge.target === 'string' ? edge.target : edge.target
-          if (sourceId === 'goal' || targetId === 'goal') {
-            winningNodeId = sourceId === 'goal' ? targetId : sourceId
-            break
+        // Mark as restored complete so we don't auto-show victory modal
+        if (savedState.isComplete) {
+          setWasRestoredComplete(true)
+          setAllowExploration(true) // Allow exploration on restored complete games
+          
+          // Find the winning word node (the one that connected to the goal)
+          // It's the node with isGoal=true that isn't the original goal node, 
+          // OR find the node that has an edge to the goal
+          const goalNode = savedState.nodes.find(n => n.id === 'goal')
+          const edges = savedState.edges || []
+          
+          // Find the node that connects to the goal (has an edge with goal as source or target)
+          let winningNodeId: string | undefined
+          for (const edge of edges) {
+            const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
+            const targetId = typeof edge.target === 'string' ? edge.target : edge.target
+            if (sourceId === 'goal' || targetId === 'goal') {
+              winningNodeId = sourceId === 'goal' ? targetId : sourceId
+              break
+            }
+          }
+          
+          // If no edge to goal found, find the highest layer completed node
+          if (!winningNodeId) {
+            const completedNodes = savedState.nodes
+              .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
+              .sort((a, b) => b.layer - a.layer)
+            if (completedNodes.length > 0) {
+              winningNodeId = completedNodes[0].id
+            }
+          }
+          
+          if (winningNodeId) {
+            const path = findPathToNode(winningNodeId, savedState.nodes, edges)
+            // Add the goal word at the end if not already there
+            if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
+              path.push(goalNode.word)
+            }
+            setWinningPath(path)
+          }
+          
+          // Restore all paths if saved
+          if (savedState.allPaths && savedState.allPaths.length > 0) {
+            setAllPaths(savedState.allPaths)
           }
         }
-        
-        // If no edge to goal found, find the highest layer completed node
-        if (!winningNodeId) {
-          const completedNodes = savedState.nodes
-            .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
-            .sort((a, b) => b.layer - a.layer)
-          if (completedNodes.length > 0) {
-            winningNodeId = completedNodes[0].id
-          }
-        }
-        
-        if (winningNodeId) {
-          const path = findPathToNode(winningNodeId, savedState.nodes, edges)
-          // Add the goal word at the end if not already there
-          if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
-            path.push(goalNode.word)
-          }
-          setWinningPath(path)
-        }
-        
-        // Restore all paths if saved
-        if (savedState.allPaths && savedState.allPaths.length > 0) {
-          setAllPaths(savedState.allPaths)
-        }
+        setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
+        return
       }
-      setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
-      return
     }
 
     // Initialize with start and goal nodes
