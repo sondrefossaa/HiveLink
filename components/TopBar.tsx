@@ -295,6 +295,29 @@ export default function TopBar({
 
           {/* Mobile Controls */}
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
+            <div className="flex items-center justify-between gap-3">
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex-1 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-hive-yellow/30 shadow-sm"
+              >
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Start</div>
+                <div className="text-sm font-bold text-hive-yellow leading-none truncate">{startWord}</div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`flex-1 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border shadow-sm text-right
+                           ${isComplete ? 'border-green-500/50' : 'border-hive-graphite/60'}`}
+              >
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Goal</div>
+                <div className={`text-sm font-bold leading-none truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>
+                  {goalWord}
+                </div>
+              </motion.div>
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-gray-400 uppercase tracking-wide text-[10px]">Mode</span>

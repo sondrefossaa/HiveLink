@@ -227,33 +227,6 @@ export default function Game() {
 
       {/* Main game area */}
       <main className="flex-1 pt-16 pb-32 relative">
-        {/* Mobile Start/Goal Display */}
-        <div 
-          className="lg:hidden absolute left-0 right-0 z-20 flex justify-between px-4 pointer-events-none transition-[top] duration-300 ease-in-out"
-          style={{ top: '140px' }}
-        >
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-hive-yellow/30 shadow-lg"
-          >
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Start</div>
-            <div className="text-sm font-bold text-hive-yellow leading-none">{puzzle.startWord}</div>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border shadow-lg
-                       ${gameState.isComplete ? 'border-green-500/50' : 'border-hive-graphite'}`}
-          >
-            <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5 text-right">Goal</div>
-            <div className={`text-sm font-bold leading-none ${gameState.isComplete ? 'text-green-400' : 'text-white'}`}>
-              {puzzle.goalWord}
-            </div>
-          </motion.div>
-        </div>
-
         {/* Graph container */}
         <div className="absolute inset-0 pb-32 pt-44 lg:pt-16 transition-[padding] duration-300 ease-in-out">
           {gameState.nodes.length > 0 ? (
