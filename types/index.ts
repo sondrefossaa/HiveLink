@@ -67,6 +67,9 @@ export interface PracticePuzzle {
   solutionPath?: string[];
   puzzleNumber?: number;
   date?: string;
+  startParts?: string[];
+  goalParts?: string[];
+  wordParts?: Record<string, string[]>;
 }
 
 export type PuzzleInstance = DailyPuzzle | PracticePuzzle;

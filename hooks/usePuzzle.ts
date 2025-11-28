@@ -113,7 +113,6 @@ export function usePuzzle(): UsePuzzleResult {
   const [error, setError] = useState<string | null>(null)
   const [mode, setModeState] = useState<PuzzleMode>(initialMode)
   const [difficulty, setDifficultyState] = useState<PuzzleDifficulty>(initialDifficulty)
-  const previousDifficultyRef = useRef<PuzzleDifficulty>(initialDifficulty)
 
   const fetchPuzzle = useCallback(async () => {
     setDailyLoading(true)
@@ -235,12 +234,13 @@ export function usePuzzle(): UsePuzzleResult {
     return () => clearInterval(interval)
   }, [dailyPuzzle, fetchPuzzle, getLocalDate])
 
-  const generatePracticePuzzle = useCallback(async () => {
+  // Internal generate function that takes difficulty as a parameter
+  const generatePracticePuzzleWithDifficulty = useCallback(async (diff: PuzzleDifficulty) => {
     setPracticeLoading(true)
     setError(null)
 
     try {
-      const response = await fetch(`/api/puzzle/generate?difficulty=${difficulty}`)
+      const response = await fetch(`/api/puzzle/generate?difficulty=${diff}`)
       const data = await response.json()
 
       if (!data.success || !data.data) {
@@ -254,12 +254,19 @@ export function usePuzzle(): UsePuzzleResult {
     } finally {
       setPracticeLoading(false)
     }
-  }, [difficulty])
+  }, [])
+
+  // Public generate function that uses current difficulty
+  const generatePracticePuzzle = useCallback(async () => {
+    return generatePracticePuzzleWithDifficulty(difficulty)
+  }, [difficulty, generatePracticePuzzleWithDifficulty])
 
   const handleDifficultyChange = useCallback((value: PuzzleDifficulty) => {
     setDifficultyState(value)
     setPracticePuzzle(null)
-  }, [])
+    // Generate new puzzle immediately with the new difficulty
+    void generatePracticePuzzleWithDifficulty(value)
+  }, [generatePracticePuzzleWithDifficulty])
 
   const setMode = useCallback((nextMode: PuzzleMode) => {
     setModeState(nextMode)
@@ -275,27 +282,18 @@ export function usePuzzle(): UsePuzzleResult {
     void generatePracticePuzzle()
   }, [mode, practicePuzzle, practiceLoading, generatePracticePuzzle, sharedParams])
 
+  // Keep track of difficulty for shared puzzle handling
   useEffect(() => {
-    if (mode !== 'practice') {
-      previousDifficultyRef.current = difficulty
-      return
-    }
-
-    // Don't regenerate if we just loaded a shared puzzle
     if (sharedPuzzleLoadedRef.current) {
       sharedPuzzleLoadedRef.current = false
-      previousDifficultyRef.current = difficulty
-      return
     }
-
-    if (previousDifficultyRef.current !== difficulty && !practiceLoading) {
-      previousDifficultyRef.current = difficulty
-      void generatePracticePuzzle()
-    }
-  }, [difficulty, mode, practiceLoading, generatePracticePuzzle])
+  }, [difficulty])
 
   const activePuzzle: PuzzleInstance | null = mode === 'daily' ? dailyPuzzle : practicePuzzle
-  const isLoading = mode === 'daily' ? dailyLoading : practiceLoading
+  // In practice mode, also show loading if we don't have a puzzle yet (before the effect triggers)
+  const isLoading = mode === 'daily' 
+    ? dailyLoading 
+    : (practiceLoading || practicePuzzle === null)
 
   return {
     puzzle: activePuzzle,

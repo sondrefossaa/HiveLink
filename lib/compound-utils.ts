@@ -1,4 +1,5 @@
-import type { GraphNode, ConnectionResult, MultiConnectionResult, NodeConnection } from '@/types'
+import type { GraphNode, ConnectionResult, MultiConnectionResult, NodeConnection, CompoundWord } from '@/types'
+import compoundWords from '@/data/compound-words.json'
 
 /**
  * Common compound word part patterns
@@ -15,7 +16,7 @@ const COMMON_PARTS = new Set([
   'out', 'over', 'pan', 'paper', 'pass', 'place', 'play', 'port', 'pot',
   'print', 'proof', 'rail', 'rain', 'ring', 'road', 'rock', 'room', 'sand',
   'sea', 'shine', 'ship', 'shoe', 'shop', 'side', 'silver', 'sky', 'snow',
-  'some', 'son', 'star', 'step', 'stone', 'stop', 'storm', 'straw', 'sun',
+  'some', 'son', 'star', 'step', 'stone', 'stop', 'storm', 'straw', 'sub', 'sun',
   'table', 'tail', 'thing', 'time', 'top', 'town', 'trap', 'tree', 'under',
   'up', 'walk', 'wall', 'ward', 'water', 'way', 'week', 'white', 'wind',
   'wood', 'work', 'worm', 'yard', 'berry', 'boat', 'bow', 'bush', 'chain',
@@ -32,6 +33,201 @@ const COMMON_PARTS = new Set([
   'suit', 'tea', 'tower', 'trade', 'train', 'vine', 'wave', 'well', 'wife',
   'wing', 'winter', 'woman', 'works', 'wrist', 'writer', 'year'
 ])
+
+function normalizeWord(word: string): string {
+  return word.toLowerCase().replace(/[^a-z]/g, '')
+}
+
+function normalizeParts(parts: string[]): string[] {
+  return parts
+    .map((part) => normalizeWord(part))
+    .filter((part) => part.length > 0)
+}
+
+const KNOWN_COMPOUND_PARTS = new Set<string>(COMMON_PARTS)
+
+function markKnownParts(parts: string[]): void {
+  for (const part of parts) {
+    if (!part) continue
+    const normalizedPart = normalizeWord(part)
+    if (!normalizedPart) continue
+    KNOWN_COMPOUND_PARTS.add(normalizedPart)
+  }
+}
+
+const CANONICAL_PARTS = new Map<string, string[]>()
+
+for (const entry of compoundWords as CompoundWord[]) {
+  const normalizedWord = normalizeWord(entry.word)
+  if (!normalizedWord) {
+    continue
+  }
+
+  const normalizedParts = normalizeParts(entry.parts)
+  if (normalizedParts.length >= 2) {
+    CANONICAL_PARTS.set(normalizedWord, normalizedParts)
+    markKnownParts(normalizedParts)
+  }
+}
+
+const RUNTIME_PART_OVERRIDES = new Map<string, string[]>()
+
+function getStoredPartsForWord(normalizedWord: string): string[] | null {
+  const override = RUNTIME_PART_OVERRIDES.get(normalizedWord)
+  if (override) {
+    return [...override]
+  }
+
+  const canonical = CANONICAL_PARTS.get(normalizedWord)
+  if (canonical) {
+    return [...canonical]
+  }
+
+  return null
+}
+
+export function getKnownCompoundParts(word: string): string[] | null {
+  const normalizedWord = normalizeWord(word)
+  if (!normalizedWord) {
+    return null
+  }
+
+  const stored = getStoredPartsForWord(normalizedWord)
+  return stored ? [...stored] : null
+}
+
+export function registerCompoundParts(word: string, parts: string[]): void {
+  const normalizedWord = normalizeWord(word)
+  if (!normalizedWord) {
+    return
+  }
+
+  const normalizedParts = normalizeParts(parts)
+  if (normalizedParts.length < 2) {
+    return
+  }
+
+  RUNTIME_PART_OVERRIDES.set(normalizedWord, normalizedParts)
+  markKnownParts(normalizedParts)
+}
+
+export function isLikelyCompoundWord(word: string, parts: string[]): boolean {
+  const normalizedWord = normalizeWord(word)
+  if (!normalizedWord) {
+    return false
+  }
+
+  if (CANONICAL_PARTS.has(normalizedWord) || RUNTIME_PART_OVERRIDES.has(normalizedWord)) {
+    return true
+  }
+
+  const normalizedParts = normalizeParts(parts)
+  if (normalizedParts.length < 2) {
+    return false
+  }
+
+  const hasInvalidShortPart = normalizedParts.some(
+    (part) => part.length < 3 && !COMMON_PARTS.has(part)
+  )
+
+  if (hasInvalidShortPart) {
+    return false
+  }
+
+  if (normalizedParts.join('') !== normalizedWord) {
+    return false
+  }
+
+  const knownPartCount = normalizedParts.reduce(
+    (count, part) => (KNOWN_COMPOUND_PARTS.has(part) ? count + 1 : count),
+    0
+  )
+
+  if (knownPartCount === 0) {
+    return false
+  }
+
+  return new Set(normalizedParts).size >= 2
+}
+
+export function isKnownCompoundPart(part: string): boolean {
+  const normalizedPart = normalizeWord(part)
+  if (!normalizedPart) {
+    return false
+  }
+  return KNOWN_COMPOUND_PARTS.has(normalizedPart)
+}
+
+export function markCompoundPartsAsKnown(parts: string[]): void {
+  markKnownParts(parts)
+}
+
+export function isCanonicalCompound(word: string): boolean {
+  return CANONICAL_PARTS.has(normalizeWord(word))
+}
+
+const MAX_HEURISTIC_PART_LENGTH = 10
+
+function splitHeuristically(normalized: string): string[] {
+  if (normalized.length < 4) {
+    return [normalized]
+  }
+
+  const parts: string[] = []
+  let remaining = normalized
+
+  while (remaining.length > 0) {
+    let found = false
+
+    for (let len = Math.min(remaining.length, MAX_HEURISTIC_PART_LENGTH); len >= 3; len--) {
+      const candidate = remaining.substring(0, len)
+      const rest = remaining.substring(len)
+
+      if (COMMON_PARTS.has(candidate) && (rest.length === 0 || rest.length >= 3)) {
+        parts.push(candidate)
+        remaining = rest
+        found = true
+        break
+      }
+    }
+
+    if (!found) {
+      if (parts.length > 0) {
+        parts.push(remaining)
+        break
+      }
+
+      let bestSplit = -1
+      let bestScore = 0
+
+      for (let i = 3; i <= remaining.length - 3; i++) {
+        const left = remaining.substring(0, i)
+        const right = remaining.substring(i)
+        let score = 0
+
+        if (COMMON_PARTS.has(left)) score += 2
+        if (COMMON_PARTS.has(right)) score += 2
+        if (left.length >= 4 && left.length <= 7) score += 1
+        if (right.length >= 4 && right.length <= 7) score += 1
+
+        if (score > bestScore) {
+          bestScore = score
+          bestSplit = i
+        }
+      }
+
+      if (bestSplit > 0 && bestScore > 0) {
+        parts.push(remaining.substring(0, bestSplit))
+        remaining = remaining.substring(bestSplit)
+      } else {
+        parts.push(remaining)
+        break
+      }
+    }
+  }
+
+  return parts.filter((part) => part.length > 0)
+}
 
 /**
  * Count how many parts are recognized compound components.
@@ -51,73 +247,26 @@ export function countCommonCompoundParts(parts: string[]): number {
  * Uses a greedy approach with known compound word patterns
  */
 export function parseCompoundWord(word: string): string[] {
-  const normalized = word.toLowerCase().replace(/[^a-z]/g, '')
-  
-  if (normalized.length < 4) {
+  const normalized = normalizeWord(word)
+  if (!normalized) {
+    return []
+  }
+
+  const stored = getStoredPartsForWord(normalized)
+  if (stored && stored.length >= 2) {
+    return stored
+  }
+
+  const heuristicParts = splitHeuristically(normalized)
+  if (heuristicParts.length === 0) {
+    return normalized ? [normalized] : []
+  }
+
+  if (heuristicParts.join('') !== normalized) {
     return [normalized]
   }
 
-  const parts: string[] = []
-  let remaining = normalized
-  
-  // Try to find known parts from the beginning
-  while (remaining.length > 0) {
-    let found = false
-    
-    // Try longer parts first (greedy)
-    for (let len = Math.min(remaining.length, 10); len >= 3; len--) {
-      const candidate = remaining.substring(0, len)
-      const rest = remaining.substring(len)
-      
-      // Check if this is a known part AND the rest can form valid parts
-      if (COMMON_PARTS.has(candidate) && (rest.length === 0 || rest.length >= 3)) {
-        parts.push(candidate)
-        remaining = rest
-        found = true
-        break
-      }
-    }
-    
-    // If no known part found, try splitting heuristically
-    if (!found) {
-      // If we have parts already, the rest is the final part
-      if (parts.length > 0) {
-        parts.push(remaining)
-        break
-      }
-      
-      // Try to find a split point using common patterns
-      let bestSplit = -1
-      let bestScore = 0
-      
-      for (let i = 3; i <= remaining.length - 3; i++) {
-        const left = remaining.substring(0, i)
-        const right = remaining.substring(i)
-        let score = 0
-        
-        if (COMMON_PARTS.has(left)) score += 2
-        if (COMMON_PARTS.has(right)) score += 2
-        if (left.length >= 4 && left.length <= 7) score += 1
-        if (right.length >= 4 && right.length <= 7) score += 1
-        
-        if (score > bestScore) {
-          bestScore = score
-          bestSplit = i
-        }
-      }
-      
-      if (bestSplit > 0 && bestScore > 0) {
-        parts.push(remaining.substring(0, bestSplit))
-        remaining = remaining.substring(bestSplit)
-      } else {
-        // Can't split, treat as single part
-        parts.push(remaining)
-        break
-      }
-    }
-  }
-  
-  return parts.filter(p => p.length > 0)
+  return heuristicParts
 }
 
 /**

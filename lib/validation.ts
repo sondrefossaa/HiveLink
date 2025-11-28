@@ -1,10 +1,18 @@
-import { parseCompoundWord, countCommonCompoundParts } from './compound-utils'
+import {
+  parseCompoundWord,
+  isLikelyCompoundWord,
+  registerCompoundParts,
+  isKnownCompoundPart,
+  markCompoundPartsAsKnown,
+  getKnownCompoundParts,
+} from './compound-utils'
 import type { ValidationResult } from '@/types'
 import { datamuseRateLimiter } from './rate-limit'
 import { getPrismaClient } from './prisma-client'
 
 // In-memory cache for Datamuse API results
 const validationCache = new Map<string, ValidationResult>()
+const partValidationCache = new Map<string, boolean>()
 
 type DatamuseEntry = {
   word: string
@@ -96,37 +104,42 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
     }
     
     // Parse into compound parts
-    const parts = parseCompoundWord(normalized)
-    
-    // A compound word should have at least 2 parts
-    if (parts.length < 2) {
-      // Try an alternative parsing approach for known compound words
+    let parts = parseCompoundWord(normalized)
+
+    if (!isLikelyCompoundWord(normalized, parts)) {
       const alternativeParts = tryAlternativeParsing(normalized)
-      if (alternativeParts.length >= 2) {
+      if (alternativeParts.length >= 2 && isLikelyCompoundWord(normalized, alternativeParts)) {
+        parts = alternativeParts
+      } else {
         const result: ValidationResult = {
-          valid: true,
-          parts: alternativeParts,
+          valid: false,
+          parts,
+          error: 'Not recognized as a compound word',
           word: normalized,
         }
         validationCache.set(normalized, result)
         return result
       }
-      
+    }
+
+    const partsVerified = await ensureCompoundPartsVerified(parts)
+    if (!partsVerified) {
       const result: ValidationResult = {
         valid: false,
-        parts: parts,
-        error: 'Not recognized as a compound word',
+        parts,
+        error: 'Compound parts could not be verified',
         word: normalized,
       }
       validationCache.set(normalized, result)
       return result
     }
-    
+
     const result: ValidationResult = {
       valid: true,
       parts,
       word: normalized,
     }
+    registerCompoundParts(normalized, parts)
     void persistCompoundWord(normalized, parts)
     validationCache.set(normalized, result)
     return result
@@ -134,30 +147,46 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
   } catch (error) {
     console.error('Validation error:', error)
 
+    const storedParts = getKnownCompoundParts(normalized)
+    if (storedParts && storedParts.length >= 2) {
+      const fallbackResult: ValidationResult = {
+        valid: true,
+        parts: storedParts,
+        word: normalized,
+      }
+      registerCompoundParts(normalized, storedParts)
+      validationCache.set(normalized, fallbackResult)
+      return fallbackResult
+    }
+
     // Try a deterministic local fallback so common compounds still work offline
     const alternativeParts = tryAlternativeParsing(normalized)
-    if (alternativeParts.length >= 2) {
+    if (
+      alternativeParts.length >= 2 &&
+      isLikelyCompoundWord(normalized, alternativeParts) &&
+      alternativeParts.every((part) => isKnownCompoundPart(part))
+    ) {
       const fallbackResult: ValidationResult = {
         valid: true,
         parts: alternativeParts,
         word: normalized,
       }
-      void persistCompoundWord(normalized, alternativeParts)
+      registerCompoundParts(normalized, alternativeParts)
       validationCache.set(normalized, fallbackResult)
       return fallbackResult
     }
 
     const parts = parseCompoundWord(normalized)
-    const knownParts = countCommonCompoundParts(parts)
-    const looksLikeCompound = parts.length >= 2 && knownParts >= 2
-
-    if (looksLikeCompound) {
+    if (
+      isLikelyCompoundWord(normalized, parts) &&
+      parts.every((part) => isKnownCompoundPart(part))
+    ) {
       const fallbackResult: ValidationResult = {
         valid: true,
         parts,
         word: normalized,
       }
-      void persistCompoundWord(normalized, parts)
+      registerCompoundParts(normalized, parts)
       validationCache.set(normalized, fallbackResult)
       return fallbackResult
     }
@@ -168,6 +197,81 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
       error: 'Validation service is unavailable. Please try again.',
       word: normalized,
     }
+  }
+}
+
+async function ensureCompoundPartsVerified(parts: string[]): Promise<boolean> {
+  const normalizedParts = parts
+    .map((part) => part.toLowerCase().replace(/[^a-z]/g, ''))
+    .filter((part) => part.length > 0)
+
+  if (normalizedParts.length < 2) {
+    return false
+  }
+
+  for (const part of normalizedParts) {
+    if (isKnownCompoundPart(part)) {
+      continue
+    }
+
+    if (part.length < 3) {
+      return false
+    }
+
+    const verified = await verifyCompoundPart(part)
+    if (!verified) {
+      return false
+    }
+  }
+
+  markCompoundPartsAsKnown(normalizedParts)
+  return true
+}
+
+async function verifyCompoundPart(part: string): Promise<boolean> {
+  const normalized = part.toLowerCase().replace(/[^a-z]/g, '')
+  if (!normalized) {
+    return false
+  }
+
+  if (isKnownCompoundPart(normalized)) {
+    return true
+  }
+
+  if (partValidationCache.has(normalized)) {
+    return partValidationCache.get(normalized) ?? false
+  }
+
+  try {
+    const data = (await datamuseRateLimiter.schedule(async () => {
+      const response = await fetch(
+        `https://api.datamuse.com/words?sp=${normalized}&md=d&max=1`,
+        {
+          cache: 'no-store',
+          headers: {
+            'User-Agent': 'HiveLink Compound Validator/1.0',
+          },
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error('Datamuse API request failed')
+      }
+
+      const payload = (await response.json()) as DatamuseEntry[]
+      return payload
+    })) as DatamuseEntry[]
+
+    const isValid = Array.isArray(data) && data.some((entry) => entry.word.toLowerCase() === normalized)
+    partValidationCache.set(normalized, isValid)
+    if (isValid) {
+      markCompoundPartsAsKnown([normalized])
+    }
+    return isValid
+  } catch (error) {
+    console.error('Part validation error:', error)
+    partValidationCache.set(normalized, false)
+    return false
   }
 }
 
@@ -337,6 +441,7 @@ function tryAlternativeParsing(word: string): string[] {
  */
 export function clearValidationCache(): void {
   validationCache.clear()
+  partValidationCache.clear()
 }
 
 async function lookupCompoundWord(word: string): Promise<ValidationResult | null> {
@@ -354,6 +459,12 @@ async function lookupCompoundWord(word: string): Promise<ValidationResult | null
       return null
     }
 
+    if (!isLikelyCompoundWord(record.word, record.parts)) {
+      return null
+    }
+
+    registerCompoundParts(record.word, record.parts)
+
     return {
       valid: true,
       parts: record.parts,
@@ -369,6 +480,12 @@ async function persistCompoundWord(word: string, parts: string[]): Promise<void>
   if (typeof window !== 'undefined') {
     return
   }
+
+  if (!isLikelyCompoundWord(word, parts)) {
+    return
+  }
+
+  registerCompoundParts(word, parts)
 
   try {
     const prisma = await getPrismaClient()

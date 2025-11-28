@@ -1,12 +1,18 @@
 import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
 import type { CompoundWord } from '@/types'
 import compoundWords from '@/data/compound-words.json'
-import { findSharedPart, parseCompoundWord } from '@/lib/compound-utils'
+import {
+  findSharedPart,
+  parseCompoundWord,
+  isLikelyCompoundWord,
+  registerCompoundParts,
+} from '@/lib/compound-utils'
 import { getPrismaClient } from '@/lib/prisma-client'
 
 interface WordEntry {
   word: string
   parts: string[]
+  source?: 'canonical' | 'runtime'
 }
 
 interface GeneratedPuzzle extends PracticePuzzle {
@@ -29,10 +35,33 @@ interface WordEnvironment {
   partIndex: Map<string, WordEntry[]>
 }
 
-const RAW_WORDS = (compoundWords as CompoundWord[]).map((entry) => ({
-  word: entry.word.toLowerCase(),
-  parts: entry.parts.map((part) => part.toLowerCase()),
-}))
+function toWordEntry(word: string, parts?: string[], source: WordEntry['source'] = 'runtime'): WordEntry | null {
+  const normalizedWord = word.toLowerCase()
+  const providedParts = parts ? parts.map((part) => part.toLowerCase()).filter(Boolean) : []
+
+  if (
+    providedParts.length >= 2 &&
+    providedParts.join('') === normalizedWord &&
+    isLikelyCompoundWord(word, providedParts)
+  ) {
+    return { word: normalizedWord, parts: providedParts, source }
+  }
+
+  const parsedParts = parseCompoundWord(word)
+  if (isLikelyCompoundWord(word, parsedParts)) {
+    return {
+      word: normalizedWord,
+      parts: parsedParts.map((part) => part.toLowerCase()),
+      source,
+    }
+  }
+
+  return null
+}
+
+const RAW_WORDS = (compoundWords as CompoundWord[])
+  .map((entry) => toWordEntry(entry.word, entry.parts, 'canonical'))
+  .filter((entry): entry is WordEntry => entry !== null)
 
 const DEFAULT_ENVIRONMENT = createEnvironment(RAW_WORDS)
 let practiceEnvironmentCache: WordEnvironment | null = null
@@ -63,6 +92,7 @@ function createEnvironment(entries: WordEntry[]): WordEnvironment {
   const normalized = entries.map((entry) => ({
     word: entry.word.toLowerCase(),
     parts: entry.parts.map((part) => part.toLowerCase()),
+    source: entry.source ?? 'runtime',
   }))
 
   const words = normalized.filter((entry) => entry.parts.length >= 2)
@@ -220,13 +250,35 @@ async function loadPracticeEnvironment(): Promise<WordEnvironment> {
         select: { word: true, parts: true },
       })
 
-      const entries: WordEntry[] = records
-        .map((record) => ({
-          word: record.word.toLowerCase(),
-          parts: record.parts.map((part) => part.toLowerCase()),
-        }))
-        .filter((entry) => entry.parts.length >= 2)
+      const merged = new Map<string, WordEntry>()
 
+      for (const entry of RAW_WORDS) {
+        registerCompoundParts(entry.word, entry.parts)
+      }
+
+      for (const record of records) {
+        const entry = toWordEntry(record.word, record.parts, 'runtime')
+        if (!entry) {
+          continue
+        }
+
+        registerCompoundParts(entry.word, entry.parts)
+        merged.set(entry.word, entry)
+      }
+
+      if (merged.size === 0) {
+        for (const entry of RAW_WORDS) {
+          merged.set(entry.word, entry)
+        }
+      } else {
+        for (const entry of RAW_WORDS) {
+          if (!merged.has(entry.word)) {
+            merged.set(entry.word, entry)
+          }
+        }
+      }
+
+      const entries = Array.from(merged.values())
       if (entries.length === 0) {
         return DEFAULT_ENVIRONMENT
       }
@@ -252,16 +304,16 @@ export async function generatePracticePuzzle(
   sharedStartWord?: string,
   sharedGoalWord?: string
 ): Promise<GeneratedPuzzle> {
-  const environment = await loadPracticeEnvironment()
+  const fullEnvironment = await loadPracticeEnvironment()
 
   // If start and goal words are provided (shared puzzle), create a fixed puzzle
   if (sharedStartWord && sharedGoalWord) {
-    const fallbackEnvironment = environment === DEFAULT_ENVIRONMENT ? null : DEFAULT_ENVIRONMENT
+    const fallbackEnvironment = fullEnvironment === DEFAULT_ENVIRONMENT ? null : DEFAULT_ENVIRONMENT
     const startEntry =
-      findWordEntry(sharedStartWord, environment) ||
+      findWordEntry(sharedStartWord, fullEnvironment) ||
       (fallbackEnvironment ? findWordEntry(sharedStartWord, fallbackEnvironment) : null)
     const goalEntry =
-      findWordEntry(sharedGoalWord, environment) ||
+      findWordEntry(sharedGoalWord, fullEnvironment) ||
       (fallbackEnvironment ? findWordEntry(sharedGoalWord, fallbackEnvironment) : null)
     
     if (!startEntry || !goalEntry) {
@@ -269,6 +321,12 @@ export async function generatePracticePuzzle(
     }
 
     const seed = `shared-${sharedStartWord}-${sharedGoalWord}-${difficulty}`
+    const startParts = startEntry.parts.length >= 2 ? [...startEntry.parts] : parseCompoundWord(startEntry.word)
+    const goalParts = goalEntry.parts.length >= 2 ? [...goalEntry.parts] : parseCompoundWord(goalEntry.word)
+    const wordParts: Record<string, string[]> = {
+      [startEntry.word.toLowerCase()]: [...startParts],
+      [goalEntry.word.toLowerCase()]: [...goalParts],
+    }
     
     return {
       id: seed,
@@ -280,6 +338,9 @@ export async function generatePracticePuzzle(
       isDaily: false,
       mode: 'practice',
       solutionPath: [startEntry.word, goalEntry.word], // Minimal path
+      startParts,
+      goalParts,
+      wordParts,
     }
   }
 
@@ -288,20 +349,30 @@ export async function generatePracticePuzzle(
   const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)
 
   let chain: WordEntry[] | null = null
+  const environmentsToTry =
+    difficulty === 'easy'
+      ? [DEFAULT_ENVIRONMENT, fullEnvironment]
+      : [fullEnvironment]
 
-  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
-    const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
-    const candidate = attemptBuildChain(lengthChoice, environment)
-    if (!candidate) {
-      continue
+  for (const environment of environmentsToTry) {
+    for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
+      const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
+      const candidate = attemptBuildChain(lengthChoice, environment)
+      if (!candidate) {
+        continue
+      }
+
+      if ((difficulty === 'hard' || difficulty === 'medium') && startAndGoalSharePart(candidate)) {
+        continue
+      }
+
+      chain = candidate
+      break
     }
 
-    if ((difficulty === 'hard' || difficulty === 'medium') && startAndGoalSharePart(candidate)) {
-      continue
+    if (chain) {
+      break
     }
-
-    chain = candidate
-    break
   }
 
   if (!chain) {
@@ -316,12 +387,19 @@ export async function generatePracticePuzzle(
 
   const normalizedChain = chain.map((entry) => ({
     word: entry.word,
-    parts: entry.parts.length ? entry.parts : parseCompoundWord(entry.word),
+    parts: entry.parts.length ? [...entry.parts] : parseCompoundWord(entry.word),
   }))
+
+  const wordParts: Record<string, string[]> = {}
+  for (const entry of normalizedChain) {
+    wordParts[entry.word.toLowerCase()] = [...entry.parts]
+  }
 
   // Ensure start and goal nodes respect casing (use original dataset casing if available)
   const startWord = normalizedChain[0].word
   const goalWord = normalizedChain[normalizedChain.length - 1].word
+  const startParts = [...normalizedChain[0].parts]
+  const goalParts = [...normalizedChain[normalizedChain.length - 1].parts]
 
   return {
     id: seed,
@@ -333,6 +411,9 @@ export async function generatePracticePuzzle(
     isDaily: false,
     mode: 'practice',
     solutionPath: wordsOnly,
+    startParts,
+    goalParts,
+    wordParts,
   }
 }
 

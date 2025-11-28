@@ -164,9 +164,29 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       }
     }
 
+    const resolveParts = (word: string): string[] => {
+      if (puzzle.mode === 'practice') {
+        const normalized = word.toLowerCase()
+        const mapParts = puzzle.wordParts?.[normalized]
+        if (mapParts && mapParts.length > 0) {
+          return [...mapParts]
+        }
+
+        if (normalized === puzzle.startWord.toLowerCase() && puzzle.startParts?.length) {
+          return [...puzzle.startParts]
+        }
+
+        if (normalized === puzzle.goalWord.toLowerCase() && puzzle.goalParts?.length) {
+          return [...puzzle.goalParts]
+        }
+      }
+
+      return parseCompoundWord(word)
+    }
+
     // Initialize with start and goal nodes
-    const startParts = parseCompoundWord(puzzle.startWord)
-    const goalParts = parseCompoundWord(puzzle.goalWord)
+    const startParts = resolveParts(puzzle.startWord)
+    const goalParts = resolveParts(puzzle.goalWord)
 
     const startNode: GraphNode = {
       id: 'start',
@@ -499,15 +519,23 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
   }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
 
+  const currentPuzzleKey = puzzle ? (puzzle.isDaily ? puzzle.date : puzzle.id) : null
+
   // Auto-submit score when game is complete
   useEffect(() => {
-    if (isComplete && puzzle?.isDaily && !scoreSubmittedRef.current) {
-      submitScore()
+    if (!puzzle || !puzzle.isDaily) {
+      return
     }
-  }, [isComplete, submitScore])
+    if (!isComplete || !currentPuzzleKey || currentPuzzleKey !== loadedPuzzleKey) {
+      return
+    }
+    if (scoreSubmittedRef.current) {
+      return
+    }
+    submitScore()
+  }, [isComplete, submitScore, puzzle, currentPuzzleKey, loadedPuzzleKey])
 
-  const currentKey = puzzle ? (puzzle.isDaily ? puzzle.date : puzzle.id) : null
-  const isStateSync = currentKey === loadedPuzzleKey
+  const isStateSync = currentPuzzleKey === loadedPuzzleKey
 
   return {
     nodes: isStateSync ? nodes : [],
