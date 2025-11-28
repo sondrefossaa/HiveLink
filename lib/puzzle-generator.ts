@@ -2,6 +2,7 @@ import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
 import type { CompoundWord } from '@/types'
 import compoundWords from '@/data/compound-words.json'
 import { findSharedPart, parseCompoundWord } from '@/lib/compound-utils'
+import { getPrismaClient } from '@/lib/prisma-client'
 
 interface WordEntry {
   word: string
@@ -34,6 +35,8 @@ const RAW_WORDS = (compoundWords as CompoundWord[]).map((entry) => ({
 }))
 
 const DEFAULT_ENVIRONMENT = createEnvironment(RAW_WORDS)
+let practiceEnvironmentCache: WordEnvironment | null = null
+let practiceEnvironmentPromise: Promise<WordEnvironment> | null = null
 
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
   easy: { min: 4, max: 5 },
@@ -195,17 +198,71 @@ function findWordEntry(word: string, environment: WordEnvironment): WordEntry | 
   return environment.words.find((entry) => entry.word === normalized) || null
 }
 
+async function loadPracticeEnvironment(): Promise<WordEnvironment> {
+  if (practiceEnvironmentCache) {
+    return practiceEnvironmentCache
+  }
+
+  if (practiceEnvironmentPromise) {
+    return practiceEnvironmentPromise
+  }
+
+  // Always fall back to the baked-in list if we're not on the server
+  if (typeof window !== 'undefined') {
+    practiceEnvironmentCache = DEFAULT_ENVIRONMENT
+    return practiceEnvironmentCache
+  }
+
+  practiceEnvironmentPromise = (async () => {
+    try {
+      const prisma = await getPrismaClient()
+      const records = await prisma.compoundWord.findMany({
+        select: { word: true, parts: true },
+      })
+
+      const entries: WordEntry[] = records
+        .map((record) => ({
+          word: record.word.toLowerCase(),
+          parts: record.parts.map((part) => part.toLowerCase()),
+        }))
+        .filter((entry) => entry.parts.length >= 2)
+
+      if (entries.length === 0) {
+        return DEFAULT_ENVIRONMENT
+      }
+
+      return createEnvironment(entries)
+    } catch (error) {
+      console.error('Failed to load dictionary compound words for practice puzzles:', error)
+      return DEFAULT_ENVIRONMENT
+    }
+  })()
+
+  try {
+    practiceEnvironmentCache = await practiceEnvironmentPromise
+  } finally {
+    practiceEnvironmentPromise = null
+  }
+
+  return practiceEnvironmentCache
+}
+
 export async function generatePracticePuzzle(
   difficulty: PuzzleDifficulty,
   sharedStartWord?: string,
   sharedGoalWord?: string
 ): Promise<GeneratedPuzzle> {
-  const environment = DEFAULT_ENVIRONMENT
+  const environment = await loadPracticeEnvironment()
 
   // If start and goal words are provided (shared puzzle), create a fixed puzzle
   if (sharedStartWord && sharedGoalWord) {
-    const startEntry = findWordEntry(sharedStartWord, environment)
-    const goalEntry = findWordEntry(sharedGoalWord, environment)
+    const fallbackEnvironment = environment === DEFAULT_ENVIRONMENT ? null : DEFAULT_ENVIRONMENT
+    const startEntry =
+      findWordEntry(sharedStartWord, environment) ||
+      (fallbackEnvironment ? findWordEntry(sharedStartWord, fallbackEnvironment) : null)
+    const goalEntry =
+      findWordEntry(sharedGoalWord, environment) ||
+      (fallbackEnvironment ? findWordEntry(sharedGoalWord, fallbackEnvironment) : null)
     
     if (!startEntry || !goalEntry) {
       throw new Error(`Invalid shared puzzle words: ${sharedStartWord} -> ${sharedGoalWord}`)
