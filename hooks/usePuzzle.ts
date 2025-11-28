@@ -129,7 +129,10 @@ export function usePuzzle(): UsePuzzleResult {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch puzzle')
+        const message = data.error || 'Failed to fetch puzzle'
+        setError(message)
+        setDailyPuzzle(null)
+        return
       }
 
       if (data.success && data.data) {
@@ -141,7 +144,7 @@ export function usePuzzle(): UsePuzzleResult {
       console.error('Error fetching puzzle:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch puzzle')
       
-      // Set a fallback puzzle
+      // Set a fallback puzzle for offline cases
       setDailyPuzzle({
         id: 0,
         puzzleNumber: 1,

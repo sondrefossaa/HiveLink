@@ -25,6 +25,7 @@ interface TopBarProps {
   goalWord: string
   startTime: number
   isComplete: boolean
+  onShowLeaderboard?: () => void
 }
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
@@ -52,6 +53,7 @@ export default function TopBar({
   goalWord,
   startTime,
   isComplete,
+  onShowLeaderboard,
 }: TopBarProps) {
   // Format date for display
   const formattedDate = date
@@ -258,6 +260,23 @@ export default function TopBar({
 
                 <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
                 
+                {isDaily && onShowLeaderboard && (
+                  <button
+                    onClick={onShowLeaderboard}
+                    className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-hive-yellow/10 text-hive-yellow hover:bg-hive-yellow/20 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={1.8}
+                        d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
+                      />
+                    </svg>
+                    <span className="text-sm font-medium">Leaderboard</span>
+                  </button>
+                )}
+
                 <ShareButton
                   puzzleNumber={puzzleNumber}
                   wordsUsed={wordsUsed}
@@ -319,6 +338,23 @@ export default function TopBar({
                     New
                   </button>
                 </div>
+              )}
+
+              {isDaily && onShowLeaderboard && (
+                <button
+                  onClick={onShowLeaderboard}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-hive-yellow/15 text-hive-yellow text-xs font-medium hover:bg-hive-yellow/25 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
+                    />
+                  </svg>
+                  Leaderboard
+                </button>
               )}
             </div>
           </div>

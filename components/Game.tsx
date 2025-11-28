@@ -10,6 +10,7 @@ import InputBar from './InputBar'
 import VictoryModal from './VictoryModal'
 import MiniMap from './MiniMap'
 import HowToPlay, { useFirstVisitTutorial } from './HowToPlay'
+import LeaderboardModal from './LeaderboardModal'
 import type { GameStats } from '@/types'
 
 // Dynamically import Graph to avoid SSR issues with canvas
@@ -51,9 +52,13 @@ export default function Game() {
   const [showVictory, setShowVictory] = useState(false)
   const [showGiveUp, setShowGiveUp] = useState(false)
   const [newPathToast, setNewPathToast] = useState(false)
+  const [showLeaderboard, setShowLeaderboard] = useState(false)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
   const prevPathCountRef = useRef(0)
   const hasShownVictoryRef = useRef(false)
+  const isDailyPuzzle = Boolean(puzzle?.isDaily)
+  const currentPuzzleDate = puzzle?.date ?? null
+  const previousPuzzleDateRef = useRef<string | null>(null)
 
   // Show toast when a new path is discovered
   useEffect(() => {
@@ -80,6 +85,22 @@ export default function Game() {
       setTimeout(handleVictory, 500)
     }
   }, [gameState.allPaths.length, handleVictory, gameState.wasRestoredComplete])
+
+  useEffect(() => {
+    if (!isDailyPuzzle && showLeaderboard) {
+      setShowLeaderboard(false)
+    }
+  }, [isDailyPuzzle, showLeaderboard])
+
+  useEffect(() => {
+    const previousDate = previousPuzzleDateRef.current
+    if (showLeaderboard && previousDate && currentPuzzleDate && previousDate !== currentPuzzleDate) {
+      setShowLeaderboard(false)
+    }
+    if (currentPuzzleDate) {
+      previousPuzzleDateRef.current = currentPuzzleDate
+    }
+  }, [showLeaderboard, currentPuzzleDate])
 
   // Get selected node
   const selectedNode = useMemo(() => {
@@ -179,8 +200,6 @@ export default function Game() {
 
   if (!puzzle) return null
 
-  const isDailyPuzzle = puzzle.isDaily
-
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top bar */}
@@ -203,6 +222,7 @@ export default function Game() {
         goalWord={puzzle.goalWord}
         startTime={gameState.startTime}
         isComplete={gameState.isComplete}
+        onShowLeaderboard={isDailyPuzzle ? () => setShowLeaderboard(true) : undefined}
       />
 
       {/* Main game area */}
@@ -338,6 +358,14 @@ export default function Game() {
         startWord={puzzle.startWord}
         goalWord={puzzle.goalWord}
         difficulty={difficulty}
+      />
+
+      {/* Leaderboard modal */}
+      <LeaderboardModal
+        isOpen={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
+        puzzleNumber={puzzle.puzzleNumber}
+        puzzleDate={puzzle.isDaily ? puzzle.date : undefined}
       />
 
       {/* How to play tutorial */}

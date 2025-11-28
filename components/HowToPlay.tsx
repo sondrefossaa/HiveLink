@@ -108,7 +108,7 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-hive-yellow">•</span>
-                    <span>A new puzzle is available every day at midnight UTC</span>
+                    <span>A new daily puzzle arrives at midnight in your timezone</span>
                   </li>
                 </ul>
               </div>
