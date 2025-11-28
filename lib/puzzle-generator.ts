@@ -19,14 +19,21 @@ interface DailyPuzzleResult {
   solutionPath: string[]
 }
 
+interface DailyPuzzleOptions {
+  wordEntries?: WordEntry[]
+}
+
+interface WordEnvironment {
+  words: WordEntry[]
+  partIndex: Map<string, WordEntry[]>
+}
+
 const RAW_WORDS = (compoundWords as CompoundWord[]).map((entry) => ({
   word: entry.word.toLowerCase(),
   parts: entry.parts.map((part) => part.toLowerCase()),
 }))
 
-const WORDS: WordEntry[] = RAW_WORDS.filter((entry) => entry.parts.length >= 2)
-
-const PART_INDEX = buildPartIndex(WORDS)
+const DEFAULT_ENVIRONMENT = createEnvironment(RAW_WORDS)
 
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
   easy: { min: 4, max: 5 },
@@ -47,6 +54,20 @@ function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
     }
   }
   return index
+}
+
+function createEnvironment(entries: WordEntry[]): WordEnvironment {
+  const normalized = entries.map((entry) => ({
+    word: entry.word.toLowerCase(),
+    parts: entry.parts.map((part) => part.toLowerCase()),
+  }))
+
+  const words = normalized.filter((entry) => entry.parts.length >= 2)
+
+  return {
+    words,
+    partIndex: buildPartIndex(words),
+  }
 }
 
 // Seeded random number generator (Mulberry32)
@@ -92,17 +113,22 @@ function seededShuffleInPlace<T>(array: T[], random: () => number): T[] {
   return array
 }
 
-function pickRandomStart(): WordEntry {
-  const layeredWords = WORDS.filter((entry) => new Set(entry.parts).size >= 2)
-  const pool = layeredWords.length > 0 ? layeredWords : WORDS
+function pickRandomStart(environment: WordEnvironment): WordEntry {
+  const layeredWords = environment.words.filter((entry) => new Set(entry.parts).size >= 2)
+  const pool = layeredWords.length > 0 ? layeredWords : environment.words
+
+  if (pool.length === 0) {
+    throw new Error('No available words to generate a puzzle')
+  }
+
   return pool[randomInt(0, pool.length - 1)]
 }
 
-function pickNextWord(current: WordEntry, used: Set<string>): WordEntry | null {
+function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEnvironment): WordEntry | null {
   const parts = shuffleInPlace(Array.from(new Set(current.parts)))
 
   for (const part of parts) {
-    const candidates = PART_INDEX.get(part)
+    const candidates = environment.partIndex.get(part)
     if (!candidates) continue
 
     const shuffled = shuffleInPlace([...candidates])
@@ -122,18 +148,22 @@ function pickNextWord(current: WordEntry, used: Set<string>): WordEntry | null {
   return null
 }
 
-function attemptBuildChain(targetLength: number): WordEntry[] | null {
+function attemptBuildChain(targetLength: number, environment: WordEnvironment): WordEntry[] | null {
+  if (environment.words.length === 0) {
+    return null
+  }
+
   for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
     const chain: WordEntry[] = []
     const used = new Set<string>()
-    const start = pickRandomStart()
+    const start = pickRandomStart(environment)
     chain.push(start)
     used.add(start.word)
 
     let success = true
 
     while (chain.length < targetLength) {
-      const next = pickNextWord(chain[chain.length - 1], used)
+      const next = pickNextWord(chain[chain.length - 1], used, environment)
       if (!next) {
         success = false
         break
@@ -160,9 +190,9 @@ function startAndGoalSharePart(chain: WordEntry[]): boolean {
 }
 
 // Find a word entry by word name
-function findWordEntry(word: string): WordEntry | null {
+function findWordEntry(word: string, environment: WordEnvironment): WordEntry | null {
   const normalized = word.toLowerCase()
-  return WORDS.find((entry) => entry.word === normalized) || null
+  return environment.words.find((entry) => entry.word === normalized) || null
 }
 
 export async function generatePracticePuzzle(
@@ -170,10 +200,12 @@ export async function generatePracticePuzzle(
   sharedStartWord?: string,
   sharedGoalWord?: string
 ): Promise<GeneratedPuzzle> {
+  const environment = DEFAULT_ENVIRONMENT
+
   // If start and goal words are provided (shared puzzle), create a fixed puzzle
   if (sharedStartWord && sharedGoalWord) {
-    const startEntry = findWordEntry(sharedStartWord)
-    const goalEntry = findWordEntry(sharedGoalWord)
+    const startEntry = findWordEntry(sharedStartWord, environment)
+    const goalEntry = findWordEntry(sharedGoalWord, environment)
     
     if (!startEntry || !goalEntry) {
       throw new Error(`Invalid shared puzzle words: ${sharedStartWord} -> ${sharedGoalWord}`)
@@ -202,7 +234,7 @@ export async function generatePracticePuzzle(
 
   for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
     const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
-    const candidate = attemptBuildChain(lengthChoice)
+    const candidate = attemptBuildChain(lengthChoice, environment)
     if (!candidate) {
       continue
     }
@@ -248,17 +280,27 @@ export async function generatePracticePuzzle(
 }
 
 // Seeded versions for daily puzzle generation
-function pickSeededRandomStart(random: () => number): WordEntry {
-  const layeredWords = WORDS.filter((entry) => new Set(entry.parts).size >= 2)
-  const pool = layeredWords.length > 0 ? layeredWords : WORDS
+function pickSeededRandomStart(random: () => number, environment: WordEnvironment): WordEntry {
+  const layeredWords = environment.words.filter((entry) => new Set(entry.parts).size >= 2)
+  const pool = layeredWords.length > 0 ? layeredWords : environment.words
+
+  if (pool.length === 0) {
+    throw new Error('No available words to generate a daily puzzle')
+  }
+
   return pool[seededRandomInt(0, pool.length - 1, random)]
 }
 
-function pickSeededNextWord(current: WordEntry, used: Set<string>, random: () => number): WordEntry | null {
+function pickSeededNextWord(
+  current: WordEntry,
+  used: Set<string>,
+  random: () => number,
+  environment: WordEnvironment
+): WordEntry | null {
   const parts = seededShuffleInPlace(Array.from(new Set(current.parts)), random)
 
   for (const part of parts) {
-    const candidates = PART_INDEX.get(part)
+    const candidates = environment.partIndex.get(part)
     if (!candidates) continue
 
     const shuffled = seededShuffleInPlace([...candidates], random)
@@ -277,18 +319,26 @@ function pickSeededNextWord(current: WordEntry, used: Set<string>, random: () =>
   return null
 }
 
-function attemptSeededBuildChain(targetLength: number, random: () => number): WordEntry[] | null {
+function attemptSeededBuildChain(
+  targetLength: number,
+  random: () => number,
+  environment: WordEnvironment
+): WordEntry[] | null {
+  if (environment.words.length === 0) {
+    return null
+  }
+
   for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
     const chain: WordEntry[] = []
     const used = new Set<string>()
-    const start = pickSeededRandomStart(random)
+    const start = pickSeededRandomStart(random, environment)
     chain.push(start)
     used.add(start.word)
 
     let success = true
 
     while (chain.length < targetLength) {
-      const next = pickSeededNextWord(chain[chain.length - 1], used, random)
+      const next = pickSeededNextWord(chain[chain.length - 1], used, random, environment)
       if (!next) {
         success = false
         break
@@ -309,7 +359,15 @@ function attemptSeededBuildChain(targetLength: number, random: () => number): Wo
  * Uses a seeded random number generator to ensure the same puzzle
  * is generated for the same date, even across different servers.
  */
-export async function generateDailyPuzzle(date: Date): Promise<DailyPuzzleResult> {
+export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
+  const environment = options.wordEntries
+    ? createEnvironment(options.wordEntries)
+    : DEFAULT_ENVIRONMENT
+
+  if (environment.words.length === 0) {
+    throw new Error('No compound words available for daily puzzle generation')
+  }
+
   const seed = dateToSeed(date)
   const random = createSeededRandom(seed)
   
@@ -322,7 +380,7 @@ export async function generateDailyPuzzle(date: Date): Promise<DailyPuzzleResult
 
   for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
     const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
-    const candidate = attemptSeededBuildChain(lengthChoice, random)
+    const candidate = attemptSeededBuildChain(lengthChoice, random, environment)
     if (!candidate) {
       continue
     }

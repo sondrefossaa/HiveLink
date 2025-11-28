@@ -20,6 +20,18 @@ export async function GET(request: NextRequest) {
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
 
+    const dbWords = await prisma.compoundWord.findMany({
+      select: { word: true, parts: true },
+    })
+    const wordEntries = dbWords.map(({ word, parts }) => ({
+      word,
+      parts,
+    }))
+
+    if (wordEntries.length === 0) {
+      throw new Error('Compound word table is empty; unable to generate daily puzzles')
+    }
+
     // Generate puzzles for today and the next 7 days
     for (let i = 0; i < 7; i++) {
       const targetDate = new Date(today)
@@ -42,7 +54,9 @@ export async function GET(request: NextRequest) {
 
       // Generate new puzzle
       try {
-        const generated = await generateDailyPuzzle(targetDate)
+        const generated = await generateDailyPuzzle(targetDate, {
+          wordEntries,
+        })
         
         const puzzle = await prisma.dailyPuzzle.create({
           data: {

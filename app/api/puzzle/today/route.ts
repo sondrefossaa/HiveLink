@@ -137,7 +137,20 @@ export async function GET(request: NextRequest) {
       
       try {
         // Generate a medium difficulty puzzle for the daily
-        const generated = await generateDailyPuzzle(targetDate)
+        const dbWords = await prisma.compoundWord.findMany({
+          select: { word: true, parts: true },
+        })
+
+        const wordEntries = dbWords.map(({ word, parts }) => ({
+          word,
+          parts,
+        }))
+
+        if (wordEntries.length === 0) {
+          throw new Error('Compound word table is empty; cannot generate daily puzzle')
+        }
+
+        const generated = await generateDailyPuzzle(targetDate, { wordEntries })
         
         // Use upsert to handle race conditions
         puzzle = await prisma.dailyPuzzle.upsert({
