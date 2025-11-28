@@ -6,26 +6,60 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const playerId = searchParams.get('playerId')
+    const dateParam = searchParams.get('date')
+
+    const resolveDate = () => {
+      if (!dateParam) {
+        const today = new Date()
+        today.setUTCHours(0, 0, 0, 0)
+        return today
+      }
+
+      const [yearStr, monthStr, dayStr] = dateParam.split('-')
+      const year = Number(yearStr)
+      const month = Number(monthStr)
+      const day = Number(dayStr)
+
+      if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+        return null
+      }
+
+      const parsed = new Date(Date.UTC(year, month - 1, day))
+      if (
+        parsed.getUTCFullYear() !== year ||
+        parsed.getUTCMonth() !== month - 1 ||
+        parsed.getUTCDate() !== day
+      ) {
+        return null
+      }
+
+      return parsed
+    }
+
+    const targetDate = resolveDate()
+    if (!targetDate) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid puzzle date.' },
+        { status: 400 }
+      )
+    }
 
     // Get today's date
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-
     const [allScores, puzzle, aggregates] = await Promise.all([
       prisma.score.findMany({
         where: {
-          puzzleDate: today,
+          puzzleDate: targetDate,
           isDaily: true,
         },
       }),
       prisma.dailyPuzzle.findUnique({
         where: {
-          date: today,
+          date: targetDate,
         },
       }),
       prisma.score.aggregate({
         where: {
-          puzzleDate: today,
+          puzzleDate: targetDate,
           isDaily: true,
         },
         _avg: {

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { generateDailyPuzzle } from '@/lib/puzzle-generator'
 
@@ -14,10 +14,12 @@ type CachedDailyPuzzle = {
   mode: 'daily'
 }
 
-let cachedPuzzle: {
-  data: CachedDailyPuzzle | null
+type CacheEntry = {
+  data: CachedDailyPuzzle
   timestamp: number
-} | null = null
+}
+
+const puzzleCache = new Map<string, CacheEntry>()
 
 const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
 
@@ -31,71 +33,142 @@ function calculatePuzzleNumber(date: Date): number {
   return Math.max(1, daysDiff + 1)
 }
 
-export async function GET() {
+function resolveTimeZone(value: string | null): string {
+  if (!value) return 'UTC'
   try {
-    // Check cache
-    const now = Date.now()
-    if (cachedPuzzle && (now - cachedPuzzle.timestamp) < CACHE_DURATION) {
-      // Verify it's still today's puzzle
-      const today = new Date().toISOString().split('T')[0]
-      if (cachedPuzzle.data?.date === today) {
-        return NextResponse.json({
-          success: true,
-          data: cachedPuzzle.data,
-        })
-      }
+    // Throws if the time zone identifier is invalid
+    new Intl.DateTimeFormat('en-US', { timeZone: value })
+    return value
+  } catch (error) {
+    console.warn(`Invalid timezone "${value}", falling back to UTC`)
+    return 'UTC'
+  }
+}
+
+function formatDateInTimeZone(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  return formatter.format(date)
+}
+
+function parseIsoDate(dateStr: string): Date | null {
+  const parts = dateStr.split('-')
+  if (parts.length !== 3) {
+    return null
+  }
+
+  const [yearStr, monthStr, dayStr] = parts
+  const year = Number(yearStr)
+  const month = Number(monthStr)
+  const day = Number(dayStr)
+
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null
+  }
+
+  const utcDate = new Date(Date.UTC(year, month - 1, day))
+  if (
+    utcDate.getUTCFullYear() !== year ||
+    utcDate.getUTCMonth() !== month - 1 ||
+    utcDate.getUTCDate() !== day
+  ) {
+    return null
+  }
+
+  return utcDate
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const requestedTimeZone = resolveTimeZone(searchParams.get('timezone'))
+    const clientDateClaim = searchParams.get('date')
+
+    const now = new Date()
+    const localDateStr = formatDateInTimeZone(now, requestedTimeZone)
+
+    if (clientDateClaim && clientDateClaim > localDateStr) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Daily puzzle is not available yet in your timezone.',
+        },
+        { status: 409 }
+      )
     }
 
-    // Get today's date in UTC
-    const today = new Date()
-    today.setUTCHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().split('T')[0]
+    const targetDate = parseIsoDate(localDateStr)
+    if (!targetDate) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Unable to determine the local date for your timezone.',
+        },
+        { status: 500 }
+      )
+    }
 
+    const targetDateKey = localDateStr
+    const cached = puzzleCache.get(targetDateKey)
+    const timestampNow = Date.now()
+
+    if (cached && (timestampNow - cached.timestamp) < CACHE_DURATION) {
+      return NextResponse.json({
+        success: true,
+        data: cached.data,
+      })
+    }
+
+    // Check cache
     // Fetch today's puzzle
     let puzzle = await prisma.dailyPuzzle.findUnique({
       where: {
-        date: today,
+        date: targetDate,
       },
     })
 
     // If no puzzle exists for today, generate one automatically
     if (!puzzle) {
-      console.log(`No puzzle found for ${todayStr}, generating one...`)
+      console.log(`No puzzle found for ${targetDateKey}, generating one...`)
       
       try {
         // Generate a medium difficulty puzzle for the daily
-        const generated = await generateDailyPuzzle(today)
+        const generated = await generateDailyPuzzle(targetDate)
         
         // Use upsert to handle race conditions
         puzzle = await prisma.dailyPuzzle.upsert({
-          where: { date: today },
+          where: { date: targetDate },
           update: {}, // Don't update if exists
           create: {
-            date: today,
+            date: targetDate,
             startWord: generated.startWord,
             goalWord: generated.goalWord,
             optimalSteps: generated.optimalSteps,
           },
         })
         
-        console.log(`Daily puzzle for ${todayStr}: ${puzzle.startWord} -> ${puzzle.goalWord}`)
+        console.log(`Daily puzzle for ${targetDateKey}: ${puzzle.startWord} -> ${puzzle.goalWord}`)
       } catch (genError) {
         console.error('Failed to generate daily puzzle:', genError)
         
         // Try to fetch again in case of race condition
         puzzle = await prisma.dailyPuzzle.findUnique({
-          where: { date: today },
+          where: { date: targetDate },
         })
         
         if (!puzzle) {
           // Return a fallback puzzle
-          const puzzleNumber = calculatePuzzleNumber(today)
+          const puzzleNumber = calculatePuzzleNumber(targetDate)
           return NextResponse.json({
             success: true,
             data: {
               id: 0,
               puzzleNumber,
-              date: todayStr,
+              date: targetDateKey,
               startWord: 'butterfly',
               goalWord: 'moonshine',
               optimalSteps: 6,
@@ -107,7 +180,7 @@ export async function GET() {
       }
     }
 
-    const puzzleNumber = calculatePuzzleNumber(today)
+    const puzzleNumber = calculatePuzzleNumber(targetDate)
 
     const responseData: CachedDailyPuzzle = {
       id: puzzle.id,
@@ -121,10 +194,10 @@ export async function GET() {
     }
 
     // Update cache
-    cachedPuzzle = {
+    puzzleCache.set(targetDateKey, {
       data: responseData,
-      timestamp: now,
-    }
+      timestamp: timestampNow,
+    })
 
     return NextResponse.json({
       success: true,

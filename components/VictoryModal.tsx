@@ -12,6 +12,7 @@ interface VictoryModalProps {
   isOpen: boolean
   stats: GameStats
   puzzleNumber?: number
+  puzzleDate?: string
   onClose: () => void
   onContinue: () => void
   onTryAgain: () => void
@@ -75,6 +76,7 @@ export default function VictoryModal({
   startWord,
   goalWord,
   difficulty,
+  puzzleDate,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [imageStatus, setImageStatus] = useState<'idle' | 'loading' | 'copied' | 'downloaded' | 'error'>('idle')
@@ -83,7 +85,7 @@ export default function VictoryModal({
   // Cached average stats - only fetch once per puzzle
   const [averageStats, setAverageStats] = useState<AverageStats | null>(null)
   const [loadingAverages, setLoadingAverages] = useState(false)
-  const fetchedPuzzleRef = useRef<number | null>(null)
+  const fetchedPuzzleRef = useRef<string | null>(null)
 
   // Get the first/best path for sharing
   const path = allPaths[0] || []
@@ -208,18 +210,22 @@ export default function VictoryModal({
   // Fetch community averages when modal opens (cached per puzzle)
   useEffect(() => {
     if (!isOpen || !isDaily) return
-    if (fetchedPuzzleRef.current === puzzleNumber) return // Already fetched for this puzzle
+    if (!puzzleDate) return
+    if (fetchedPuzzleRef.current === puzzleDate) return // Already fetched for this puzzle
     
     const fetchAverages = async () => {
       setLoadingAverages(true)
       try {
         const playerId = getPlayerId()
-        const response = await fetch(`/api/leaderboard/today?playerId=${playerId}`)
+        const params = new URLSearchParams({ playerId })
+        params.set('date', puzzleDate)
+
+        const response = await fetch(`/api/leaderboard/today?${params.toString()}`)
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.data.averageStats) {
             setAverageStats(data.data.averageStats)
-            fetchedPuzzleRef.current = puzzleNumber ?? null
+            fetchedPuzzleRef.current = puzzleDate
           }
         }
       } catch (error) {
@@ -230,7 +236,7 @@ export default function VictoryModal({
     }
     
     fetchAverages()
-  }, [isOpen, isDaily, puzzleNumber])
+  }, [isOpen, isDaily, puzzleDate])
 
   // Format time
   const formatTime = useCallback((ms: number) => {

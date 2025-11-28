@@ -66,6 +66,26 @@ interface UsePuzzleResult {
   isGeneratingPractice: boolean
 }
 
+function resolveClientTimeZone(): string {
+  if (typeof Intl === 'undefined') return 'UTC'
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return tz || 'UTC'
+  } catch (error) {
+    console.warn('Unable to resolve client timezone, defaulting to UTC', error)
+    return 'UTC'
+  }
+}
+
+function formatLocalDate(timeZone: string, date: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
+}
+
 export function usePuzzle(): UsePuzzleResult {
   // Read URL params on first render (but don't clear yet)
   // Using a ref to store the initial params so they persist across strict mode double-mounting
@@ -78,6 +98,9 @@ export function usePuzzle(): UsePuzzleResult {
   const sharedParams = initialParamsRef.current
   const sharedPuzzleLoadedRef = useRef(false)
   const urlClearedRef = useRef(false)
+
+  const [timezone] = useState<string>(() => resolveClientTimeZone())
+  const getLocalDate = useCallback(() => formatLocalDate(timezone), [timezone])
 
   // Determine initial mode based on URL params
   const initialMode: PuzzleMode = sharedParams?.startWord ? 'practice' : 'daily'
@@ -97,8 +120,17 @@ export function usePuzzle(): UsePuzzleResult {
     setError(null)
 
     try {
-      const response = await fetch('/api/puzzle/today')
+      const params = new URLSearchParams({
+        timezone,
+        date: getLocalDate(),
+      })
+
+      const response = await fetch(`/api/puzzle/today?${params.toString()}`)
       const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to fetch puzzle')
+      }
 
       if (data.success && data.data) {
         setDailyPuzzle(data.data as DailyPuzzle)
@@ -113,7 +145,7 @@ export function usePuzzle(): UsePuzzleResult {
       setDailyPuzzle({
         id: 0,
         puzzleNumber: 1,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDate(),
         startWord: 'butterfly',
         goalWord: 'moonshine',
         optimalSteps: 6,
@@ -123,7 +155,7 @@ export function usePuzzle(): UsePuzzleResult {
     } finally {
       setDailyLoading(false)
     }
-  }, [])
+  }, [getLocalDate, timezone])
 
   // Generate a practice puzzle with specific start/goal words (for shared puzzles)
   const generateSharedPracticePuzzle = useCallback(async (
@@ -188,9 +220,8 @@ export function usePuzzle(): UsePuzzleResult {
   // Check for midnight reset
   useEffect(() => {
     const checkForReset = () => {
-      const now = new Date()
-      const currentDate = now.toISOString().split('T')[0]
-      
+      const currentDate = getLocalDate()
+
       if (dailyPuzzle && dailyPuzzle.date !== currentDate) {
         fetchPuzzle()
       }
@@ -199,7 +230,7 @@ export function usePuzzle(): UsePuzzleResult {
     // Check every minute
     const interval = setInterval(checkForReset, 60000)
     return () => clearInterval(interval)
-  }, [dailyPuzzle, fetchPuzzle])
+  }, [dailyPuzzle, fetchPuzzle, getLocalDate])
 
   const generatePracticePuzzle = useCallback(async () => {
     setPracticeLoading(true)

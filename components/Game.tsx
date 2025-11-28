@@ -319,6 +319,7 @@ export default function Game() {
         isOpen={showVictory}
         stats={gameStats}
         puzzleNumber={puzzle.puzzleNumber}
+        puzzleDate={puzzle.isDaily ? puzzle.date : undefined}
         onClose={() => {
           gameState.enableExploration()
           setShowVictory(false)
