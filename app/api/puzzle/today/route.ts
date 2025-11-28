@@ -45,6 +45,17 @@ function resolveTimeZone(value: string | null): string {
   }
 }
 
+async function loadWordEntries() {
+  const dbWords = await prisma.compoundWord.findMany({
+    select: { word: true, parts: true },
+  })
+
+  return dbWords.map(({ word, parts }) => ({
+    word,
+    parts,
+  }))
+}
+
 function formatDateInTimeZone(date: Date, timeZone: string): string {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -117,10 +128,24 @@ export async function GET(request: NextRequest) {
     const timestampNow = Date.now()
 
     if (cached && (timestampNow - cached.timestamp) < CACHE_DURATION) {
-      return NextResponse.json({
-        success: true,
-        data: cached.data,
+      const cachedWords = [cached.data.startWord.toLowerCase(), cached.data.goalWord.toLowerCase()]
+      const knownWords = await prisma.compoundWord.findMany({
+        where: {
+          word: {
+            in: cachedWords,
+          },
+        },
+        select: { word: true },
       })
+
+      if (knownWords.length === 2) {
+        return NextResponse.json({
+          success: true,
+          data: cached.data,
+        })
+      }
+
+      puzzleCache.delete(targetDateKey)
     }
 
     // Check cache
@@ -137,14 +162,7 @@ export async function GET(request: NextRequest) {
       
       try {
         // Generate a medium difficulty puzzle for the daily
-        const dbWords = await prisma.compoundWord.findMany({
-          select: { word: true, parts: true },
-        })
-
-        const wordEntries = dbWords.map(({ word, parts }) => ({
-          word,
-          parts,
-        }))
+        const wordEntries = await loadWordEntries()
 
         if (wordEntries.length === 0) {
           throw new Error('Compound word table is empty; cannot generate daily puzzle')
@@ -190,6 +208,39 @@ export async function GET(request: NextRequest) {
             },
           })
         }
+      }
+    }
+
+    if (puzzle) {
+      const wordsToCheck = [puzzle.startWord.toLowerCase(), puzzle.goalWord.toLowerCase()]
+      const knownWords = await prisma.compoundWord.findMany({
+        where: {
+          word: {
+            in: wordsToCheck,
+          },
+        },
+        select: { word: true },
+      })
+
+      if (knownWords.length < 2) {
+        console.warn(`Daily puzzle ${targetDateKey} uses words missing from database, regenerating...`)
+
+        const wordEntries = await loadWordEntries()
+
+        if (wordEntries.length === 0) {
+          throw new Error('Compound word table is empty; cannot regenerate daily puzzle')
+        }
+
+        const regenerated = await generateDailyPuzzle(targetDate, { wordEntries })
+
+        puzzle = await prisma.dailyPuzzle.update({
+          where: { date: targetDate },
+          data: {
+            startWord: regenerated.startWord,
+            goalWord: regenerated.goalWord,
+            optimalSteps: regenerated.optimalSteps,
+          },
+        })
       }
     }
 
