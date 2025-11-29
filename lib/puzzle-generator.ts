@@ -374,10 +374,13 @@ export async function generatePracticePuzzle(
   const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)
 
   let chain: WordEntry[] | null = null
+  // For medium practice, use only local canonical words (no DB)
   const environmentsToTry =
     difficulty === 'easy'
       ? [DEFAULT_ENVIRONMENT, fullEnvironment]
-      : [fullEnvironment]
+      : difficulty === 'medium'
+        ? [DEFAULT_ENVIRONMENT]
+        : [fullEnvironment]
 
   for (const environment of environmentsToTry) {
     for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
@@ -392,8 +395,10 @@ export async function generatePracticePuzzle(
       }
 
       // Enforce minimum steps: optimalSteps = chain.length - 1
+      // Enforce minimum steps; for medium ensure at least 5
       const candidateOptimalSteps = Math.max(1, candidate.length - 1)
-      if (candidateOptimalSteps < Math.max(1, minSteps)) {
+      const effectiveMinSteps = difficulty === 'medium' ? Math.max(5, minSteps) : Math.max(1, minSteps)
+      if (candidateOptimalSteps < effectiveMinSteps) {
         continue
       }
 
