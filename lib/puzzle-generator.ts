@@ -246,6 +246,25 @@ function directBridgeExists(start: WordEntry, goal: WordEntry, environment: Word
   return false
 }
 
+// Detect if there exists a two-step bridge: a word that shares a part with start
+// and also shares a different part with goal, enabling start -> bridge -> goal
+function twoStepBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
+  const startParts = Array.from(new Set(start.parts))
+  const goalParts = Array.from(new Set(goal.parts))
+
+  // For each candidate in environment, check if it connects to both start and goal via different parts
+  for (const candidate of environment.words) {
+    if (candidate.word === start.word || candidate.word === goal.word) continue
+    const sharedWithStart = findSharedPart(candidate.parts, startParts)
+    const sharedWithGoal = findSharedPart(candidate.parts, goalParts)
+    if (!sharedWithStart || !sharedWithGoal) continue
+    // Ensure it's not the same shared part connecting both ends (trivial reuse)
+    if (sharedWithStart === sharedWithGoal) continue
+    return true
+  }
+  return false
+}
+
 // Find a word entry by word name
 function findWordEntry(word: string, environment: WordEnvironment): WordEntry | null {
   const normalized = word.toLowerCase()
@@ -404,6 +423,11 @@ export async function generatePracticePuzzle(
 
       // Prevent trivial one-word bridge between start and goal
       if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
+        continue
+      }
+
+      // For medium, also prevent trivial two-step bridge (start -> bridge -> goal)
+      if (difficulty === 'medium' && twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
         continue
       }
 
