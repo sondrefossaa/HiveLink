@@ -45,6 +45,13 @@ function normalizeParts(parts: string[]): string[] {
 }
 
 const KNOWN_COMPOUND_PARTS = new Set<string>(COMMON_PARTS)
+// Parts that should never be considered valid standalone words in compounds
+const DISALLOWED_PARTS = new Set<string>([
+  're','pre','un','non','de','dis','mis',
+  'trans','inter','intra','tri','bi','mono',
+  'semi','quasi','pseudo','hyper','ultra','micro','mini','maxi','auto',
+  'tele','hetero','homo','iso','neo','pan','peri','poly','proto','syn','sym'
+])
 
 function markKnownParts(parts: string[]): void {
   for (const part of parts) {
@@ -117,11 +124,17 @@ export function isLikelyCompoundWord(word: string, parts: string[]): boolean {
     return false
   }
 
+  // Even if canonical/runtime exists, reject if any disallowed parts are present
+  const normalizedPartsInitial = normalizeParts(parts)
+  if (normalizedPartsInitial.some((p) => DISALLOWED_PARTS.has(p))) {
+    return false
+  }
+
   if (CANONICAL_PARTS.has(normalizedWord) || RUNTIME_PART_OVERRIDES.has(normalizedWord)) {
     return true
   }
 
-  const normalizedParts = normalizeParts(parts)
+  const normalizedParts = normalizedPartsInitial
   if (normalizedParts.length < 2) {
     return false
   }
