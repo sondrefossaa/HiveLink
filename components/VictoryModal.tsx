@@ -91,6 +91,31 @@ export default function VictoryModal({
   const path = allPaths[0] || []
   const pathsFound = allPaths.length
 
+  // Control visibility of the "paths found" notice with delay and persistence
+  const [showPathsFoundNotice, setShowPathsFoundNotice] = useState<boolean>(() => {
+    try {
+      const persisted = localStorage.getItem('hiveLink.hidePathsFoundNotice')
+      return persisted !== 'true'
+    } catch {
+      return true
+    }
+  })
+
+  useEffect(() => {
+    if (!isOpen) return
+    if (!showPathsFoundNotice) return
+    // Only show if at least one path exists
+    if (pathsFound > 0) {
+      const timer = setTimeout(() => {
+        setShowPathsFoundNotice(false)
+        try {
+          localStorage.setItem('hiveLink.hidePathsFoundNotice', 'true')
+        } catch {}
+      }, 2500)
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen, showPathsFoundNotice, pathsFound])
+
   // Get the OG image URL
   const ogImageUrl = generateOgImageUrl(
     'won',
@@ -348,15 +373,15 @@ export default function VictoryModal({
                 </motion.p>
               )}
 
-              {/* Multiple paths indicator */}
-              {pathsFound > 1 && (
+              {/* Paths found indicator with auto-hide and persistence */}
+              {showPathsFoundNotice && pathsFound > 0 && (
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.55 }}
                   className="text-center text-sm text-gray-400 mb-6"
                 >
-                  {pathsFound} paths found! Keep exploring to find more.
+                  {pathsFound} {pathsFound === 1 ? 'path found!' : 'paths found!'} Keep exploring to find more.
                 </motion.p>
               )}
 
