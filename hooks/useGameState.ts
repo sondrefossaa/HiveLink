@@ -165,20 +165,21 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
 
     const resolveParts = (word: string): string[] => {
-      if (puzzle.mode === 'practice') {
-        const normalized = word.toLowerCase()
-        const mapParts = puzzle.wordParts?.[normalized]
-        if (mapParts && mapParts.length > 0) {
-          return [...mapParts]
-        }
+      const normalized = word.toLowerCase()
+      
+      // Check wordParts map first (works for both daily and practice)
+      const mapParts = puzzle.wordParts?.[normalized]
+      if (mapParts && mapParts.length > 0) {
+        return [...mapParts]
+      }
 
-        if (normalized === puzzle.startWord.toLowerCase() && puzzle.startParts?.length) {
-          return [...puzzle.startParts]
-        }
+      // Check explicit start/goal parts
+      if (normalized === puzzle.startWord.toLowerCase() && puzzle.startParts?.length) {
+        return [...puzzle.startParts]
+      }
 
-        if (normalized === puzzle.goalWord.toLowerCase() && puzzle.goalParts?.length) {
-          return [...puzzle.goalParts]
-        }
+      if (normalized === puzzle.goalWord.toLowerCase() && puzzle.goalParts?.length) {
+        return [...puzzle.goalParts]
       }
 
       return parseCompoundWord(word)

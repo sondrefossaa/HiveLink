@@ -53,6 +53,9 @@ export interface DailyPuzzle {
   optimalSteps: number;
   isDaily: true;
   mode: 'daily';
+  startParts?: string[];
+  goalParts?: string[];
+  wordParts?: Record<string, string[]>;
 }
 
 export interface PracticePuzzle {

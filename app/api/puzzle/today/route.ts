@@ -12,6 +12,9 @@ type CachedDailyPuzzle = {
   optimalSteps: number
   isDaily: true
   mode: 'daily'
+  startParts?: string[]
+  goalParts?: string[]
+  wordParts?: Record<string, string[]>
 }
 
 type CacheEntry = {
@@ -54,6 +57,33 @@ async function loadWordEntries() {
     word,
     parts,
   }))
+}
+
+async function loadWordParts(words: string[]): Promise<{
+  startParts?: string[]
+  goalParts?: string[]
+  wordParts: Record<string, string[]>
+}> {
+  const normalizedWords = words.map(w => w.toLowerCase())
+  
+  const dbParts = await prisma.compoundWord.findMany({
+    where: {
+      word: {
+        in: normalizedWords,
+      },
+    },
+    select: { word: true, parts: true },
+  })
+
+  const wordParts: Record<string, string[]> = {}
+  for (const entry of dbParts) {
+    wordParts[entry.word.toLowerCase()] = entry.parts
+  }
+
+  const startParts = wordParts[normalizedWords[0]]
+  const goalParts = wordParts[normalizedWords[1]]
+
+  return { startParts, goalParts, wordParts }
 }
 
 function formatDateInTimeZone(date: Date, timeZone: string): string {
@@ -205,6 +235,12 @@ export async function GET(request: NextRequest) {
               optimalSteps: 6,
               isDaily: true,
               mode: 'daily',
+              startParts: ['butter', 'fly'],
+              goalParts: ['moon', 'shine'],
+              wordParts: {
+                butterfly: ['butter', 'fly'],
+                moonshine: ['moon', 'shine'],
+              },
             },
           })
         }
@@ -246,6 +282,12 @@ export async function GET(request: NextRequest) {
 
     const puzzleNumber = calculatePuzzleNumber(targetDate)
 
+    // Load the word parts for start and goal words
+    const { startParts, goalParts, wordParts } = await loadWordParts([
+      puzzle.startWord,
+      puzzle.goalWord,
+    ])
+
     const responseData: CachedDailyPuzzle = {
       id: puzzle.id,
       puzzleNumber,
@@ -255,6 +297,9 @@ export async function GET(request: NextRequest) {
       optimalSteps: puzzle.optimalSteps ?? 6,
       isDaily: true,
       mode: 'daily',
+      startParts,
+      goalParts,
+      wordParts,
     }
 
     // Update cache
@@ -287,6 +332,12 @@ export async function GET(request: NextRequest) {
         optimalSteps: 6,
         isDaily: true,
         mode: 'daily',
+        startParts: ['butter', 'fly'],
+        goalParts: ['moon', 'shine'],
+        wordParts: {
+          butterfly: ['butter', 'fly'],
+          moonshine: ['moon', 'shine'],
+        },
       },
     })
   }
