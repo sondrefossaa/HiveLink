@@ -322,8 +322,9 @@ export function computeGraphLayout(
   })
   
   // Calculate max layer and goal layer
+  // Only exclude the actual goal node (id='goal'), not nodes that connect to it
   const nonGoalLayers = nodes
-    .filter((node) => !node.isGoal && node.id !== goalNode?.id)
+    .filter((node) => node.id !== 'goal')
     .map((node) => layerMap.get(node.id) ?? 0)
   
   const maxLayer = nonGoalLayers.length > 0 ? Math.max(...nonGoalLayers) : 0
