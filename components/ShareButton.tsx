@@ -9,7 +9,6 @@ interface ShareButtonProps {
   wordsUsed: number
   layers: number
   status: ShareStatus
-  timeElapsed: number
   startWord: string
   goalWord: string
   isDaily: boolean
@@ -28,7 +27,6 @@ export default function ShareButton({
   wordsUsed,
   layers,
   status,
-  timeElapsed,
   startWord,
   goalWord,
   isDaily,
@@ -36,14 +34,6 @@ export default function ShareButton({
   compact = false,
 }: ShareButtonProps) {
   const [copied, setCopied] = useState(false)
-
-  // Format time as MM:SS
-  const formatTime = useCallback((ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
-  }, [])
 
   // Generate share URL with puzzle info
   const generateShareUrl = useCallback(() => {
@@ -76,7 +66,6 @@ export default function ShareButton({
     params.set('goal', goalWord)
     params.set('words', wordsUsed.toString())
     params.set('layers', layers.toString())
-    params.set('time', formatTime(timeElapsed))
     
     if (isDaily && puzzleNumber) {
       params.set('puzzle', puzzleNumber.toString())
@@ -85,7 +74,7 @@ export default function ShareButton({
     }
     
     return `${baseUrl}?${params.toString()}`
-  }, [status, startWord, goalWord, wordsUsed, layers, timeElapsed, isDaily, puzzleNumber, difficulty, formatTime])
+  }, [status, startWord, goalWord, wordsUsed, layers, isDaily, puzzleNumber, difficulty])
 
   const generateShareText = useCallback(() => {
     // Status emoji and text
@@ -113,12 +102,12 @@ ${chainViz} ${statusText}
 
 ${startWord} → ${goalWord}
 
-⏱️ ${formatTime(timeElapsed)} | 📝 ${wordsUsed} words | 📊 ${layers} layers
+📝 ${wordsUsed} words | 📊 ${layers} layers
 
 Play: ${shareUrl}`
 
     return text
-  }, [puzzleNumber, wordsUsed, layers, status, timeElapsed, startWord, goalWord, isDaily, difficulty, formatTime, generateShareUrl])
+  }, [puzzleNumber, wordsUsed, layers, status, startWord, goalWord, isDaily, difficulty, generateShareUrl])
 
   const handleShare = useCallback(async () => {
     const text = generateShareText()

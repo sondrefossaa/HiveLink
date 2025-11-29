@@ -64,8 +64,7 @@ export async function GET(request: NextRequest) {
         },
         _avg: {
           wordsUsed: true,
-          layers: true,
-          timeElapsed: true,
+          pathsFound: true,
         },
         _count: true,
       }),
@@ -79,7 +78,8 @@ export async function GET(request: NextRequest) {
       const bScore = safeValue(b.wordsUsed)
 
       if (aScore !== bScore) return aScore - bScore
-      if (a.layers !== b.layers) return a.layers - b.layers
+      // More paths found is better (higher rank)
+      if (a.pathsFound !== b.pathsFound) return b.pathsFound - a.pathsFound
       return a.finishedAt.getTime() - b.finishedAt.getTime()
     })
 
@@ -90,8 +90,9 @@ export async function GET(request: NextRequest) {
     const entries: LeaderboardEntry[] = leaderboardScores.map((score, index) => ({
       rank: index + 1,
       playerId: score.playerId.substring(0, 8) + '...', // Anonymize
+      playerName: score.playerName || undefined,
       wordsUsed: score.wordsUsed,
-      layers: score.layers,
+      pathsFound: score.pathsFound,
       finishedAt: score.finishedAt.toISOString(),
     }))
 
@@ -100,8 +101,7 @@ export async function GET(request: NextRequest) {
       totalPlayers,
       averageStats: {
         avgWordsUsed: aggregates._avg.wordsUsed ?? 0,
-        avgLayers: aggregates._avg.layers ?? 0,
-        avgTimeElapsed: aggregates._avg.timeElapsed ?? null,
+        avgPathsFound: aggregates._avg.pathsFound ?? 1,
         totalPlayers,
       },
     }

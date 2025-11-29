@@ -8,7 +8,7 @@ const RATE_LIMIT_WINDOW = 60 * 1000 // 1 minute
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { playerId, wordsUsed, layers, puzzleDate, isDaily = true, timeElapsed } = body
+    const { playerId, playerName, wordsUsed, layers, puzzleDate, isDaily = true, pathsFound = 1 } = body
 
     // Validate input
     if (!playerId || typeof playerId !== 'string') {
@@ -48,15 +48,7 @@ export async function POST(request: NextRequest) {
     }
     date.setUTCHours(0, 0, 0, 0)
 
-    // Rate limiting
-    const lastSubmission = submissionTimestamps.get(playerId)
     const now = Date.now()
-    if (lastSubmission && (now - lastSubmission) < RATE_LIMIT_WINDOW) {
-      return NextResponse.json(
-        { success: false, error: 'Please wait before submitting again' },
-        { status: 429 }
-      )
-    }
 
     // Check if player already submitted for this puzzle
     const existingScore = await prisma.score.findUnique({
@@ -68,9 +60,34 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Rate limiting - only for new submissions, not updates
+    if (!existingScore) {
+      const lastSubmission = submissionTimestamps.get(playerId)
+      if (lastSubmission && (now - lastSubmission) < RATE_LIMIT_WINDOW) {
+        return NextResponse.json(
+          { success: false, error: 'Please wait before submitting again' },
+          { status: 429 }
+        )
+      }
+    }
+
     if (existingScore) {
-      // Update only if the new score is better (fewer words)
-      if (wordsUsed < existingScore.wordsUsed) {
+      // Update if the new score is better (fewer words) OR if paths found increased
+      const isBetterScore = wordsUsed < existingScore.wordsUsed
+      const hasMorePaths = pathsFound > existingScore.pathsFound
+      const isSameScoreMorePaths = wordsUsed === existingScore.wordsUsed && hasMorePaths
+      
+      console.log('Score update check:', {
+        existingWordsUsed: existingScore.wordsUsed,
+        newWordsUsed: wordsUsed,
+        existingPathsFound: existingScore.pathsFound,
+        newPathsFound: pathsFound,
+        isBetterScore,
+        hasMorePaths,
+        isSameScoreMorePaths,
+      })
+      
+      if (isBetterScore || isSameScoreMorePaths) {
         const updatedScore = await prisma.score.update({
           where: {
             id: existingScore.id,
@@ -78,13 +95,14 @@ export async function POST(request: NextRequest) {
           data: {
             wordsUsed,
             layers,
-            timeElapsed: typeof timeElapsed === 'number' ? timeElapsed : undefined,
+            pathsFound: typeof pathsFound === 'number' ? pathsFound : 1,
             finishedAt: new Date(),
             isDaily: true,
+            playerName: playerName || existingScore.playerName,
           },
         })
 
-        submissionTimestamps.set(playerId, now)
+        // Don't update timestamp on updates, only on initial submission
 
         return NextResponse.json({
           success: true,
@@ -92,7 +110,8 @@ export async function POST(request: NextRequest) {
             id: updatedScore.id,
             wordsUsed: updatedScore.wordsUsed,
             layers: updatedScore.layers,
-            isNewBest: true,
+            pathsFound: updatedScore.pathsFound,
+            isNewBest: isBetterScore,
           },
         })
       }
@@ -104,6 +123,7 @@ export async function POST(request: NextRequest) {
           id: existingScore.id,
           wordsUsed: existingScore.wordsUsed,
           layers: existingScore.layers,
+          pathsFound: existingScore.pathsFound,
           isNewBest: false,
         },
       })
@@ -114,9 +134,10 @@ export async function POST(request: NextRequest) {
       data: {
         puzzleDate: date,
         playerId,
+        playerName: playerName || null,
         wordsUsed,
         layers,
-        timeElapsed: typeof timeElapsed === 'number' ? timeElapsed : undefined,
+        pathsFound: typeof pathsFound === 'number' ? pathsFound : 1,
         isDaily: true,
       },
     })
@@ -129,6 +150,7 @@ export async function POST(request: NextRequest) {
         id: newScore.id,
         wordsUsed: newScore.wordsUsed,
         layers: newScore.layers,
+        pathsFound: newScore.pathsFound,
         isNewBest: true,
       },
     })

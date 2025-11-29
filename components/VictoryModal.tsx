@@ -32,18 +32,10 @@ function generateOgImageUrl(
   goalWord: string,
   wordsUsed: number,
   layers: number,
-  timeElapsed: number,
   isDaily: boolean,
   puzzleNumber?: number,
   difficulty?: PuzzleDifficulty
 ) {
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(totalSeconds / 60)
-    const seconds = totalSeconds % 60
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
-  }
-
   const baseUrl = '/api/og'
   const params = new URLSearchParams()
   
@@ -52,7 +44,6 @@ function generateOgImageUrl(
   params.set('goal', goalWord)
   params.set('words', wordsUsed.toString())
   params.set('layers', layers.toString())
-  params.set('time', formatTime(timeElapsed))
   
   if (isDaily && puzzleNumber) {
     params.set('puzzle', puzzleNumber.toString())
@@ -123,7 +114,6 @@ export default function VictoryModal({
     goalWord,
     stats.wordsUsed,
     stats.layersExplored,
-    stats.timeElapsed,
     isDaily,
     puzzleNumber,
     difficulty
@@ -390,30 +380,22 @@ export default function VictoryModal({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.5 }}
-                className="grid grid-cols-3 gap-4 mb-6"
+                className="grid grid-cols-2 gap-4 mb-6"
               >
                 <div className="text-center p-3 rounded-xl bg-hive-dark/50">
                   <div className="text-2xl font-bold text-hive-yellow">
                     {stats.wordsUsed}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
-                    Words
+                    Shortest Path
                   </div>
                 </div>
                 <div className="text-center p-3 rounded-xl bg-hive-dark/50">
                   <div className="text-2xl font-bold text-hive-yellow">
-                    {stats.layersExplored}
+                    {pathsFound}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
-                    Layers
-                  </div>
-                </div>
-                <div className="text-center p-3 rounded-xl bg-hive-dark/50">
-                  <div className="text-xl font-bold text-hive-yellow">
-                    {formatTime(stats.timeElapsed)}
-                  </div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide">
-                    Time
+                    Paths
                   </div>
                 </div>
               </motion.div>
@@ -434,7 +416,7 @@ export default function VictoryModal({
                       <div className="w-5 h-5 border-2 border-hive-yellow/30 border-t-hive-yellow rounded-full animate-spin" />
                     </div>
                   ) : averageStats ? (
-                    <div className="grid grid-cols-3 gap-3 text-center">
+                    <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
                         <div className="flex items-center justify-center gap-1">
                           <span className="text-lg font-semibold text-gray-300">
@@ -448,39 +430,22 @@ export default function VictoryModal({
                             <span className="text-gray-400 text-sm"></span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">Words</div>
+                        <div className="text-xs text-gray-500">Shortest Path</div>
                       </div>
                       <div>
                         <div className="flex items-center justify-center gap-1">
                           <span className="text-lg font-semibold text-gray-300">
-                            {averageStats.avgLayers.toFixed(1)}
+                            {averageStats.avgPathsFound.toFixed(1)}
                           </span>
-                          {stats.layersExplored < averageStats.avgLayers ? (
-                            <span className="text-green-400 text-sm">↓</span>
-                          ) : stats.layersExplored > averageStats.avgLayers ? (
-                            <span className="text-red-400 text-sm">↑</span>
+                          {pathsFound > averageStats.avgPathsFound ? (
+                            <span className="text-green-400 text-sm">↑</span>
+                          ) : pathsFound < averageStats.avgPathsFound ? (
+                            <span className="text-red-400 text-sm">↓</span>
                           ) : (
                             <span className="text-gray-400 text-sm">=</span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">Layers</div>
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-center gap-1">
-                          <span className="text-lg font-semibold text-gray-300">
-                            {averageStats.avgTimeElapsed 
-                              ? formatTime(averageStats.avgTimeElapsed) 
-                              : '—'}
-                          </span>
-                          {averageStats.avgTimeElapsed && stats.timeElapsed < averageStats.avgTimeElapsed ? (
-                            <span className="text-green-400 text-sm">↓</span>
-                          ) : averageStats.avgTimeElapsed && stats.timeElapsed > averageStats.avgTimeElapsed ? (
-                            <span className="text-red-400 text-sm">↑</span>
-                          ) : averageStats.avgTimeElapsed ? (
-                            <span className="text-gray-400 text-sm">=</span>
-                          ) : null}
-                        </div>
-                        <div className="text-xs text-gray-500">Time</div>
+                        <div className="text-xs text-gray-500">Paths Found</div>
                       </div>
                     </div>
                   ) : (
@@ -548,7 +513,7 @@ export default function VictoryModal({
                         <div key={pathIndex} className="space-y-2">
                           {allPaths.length > 1 && (
                             <div className="text-xs text-gray-500 uppercase tracking-wide text-center">
-                              Path {pathIndex + 1} ({singlePath.length - 1} steps)
+                              Path {pathIndex + 1} ({Math.max(0, singlePath.length - 2)} words)
                             </div>
                           )}
                           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -643,7 +608,6 @@ export default function VictoryModal({
                   wordsUsed={stats.wordsUsed}
                   layers={stats.layersExplored}
                   status="won"
-                  timeElapsed={stats.timeElapsed}
                   startWord={startWord}
                   goalWord={goalWord}
                   isDaily={isDaily}

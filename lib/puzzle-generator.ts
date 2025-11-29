@@ -597,8 +597,8 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
       continue
     }
 
-    // Enforce minimum steps for daily (default 3)
-    const minSteps = Math.max(1, options.minSteps ?? 3)
+    // Enforce minimum steps for daily (5, same as medium practice)
+    const minSteps = Math.max(5, options.minSteps ?? 5)
     const candidateOptimalSteps = Math.max(1, candidate.length - 1)
     if (candidateOptimalSteps < minSteps) {
       continue
@@ -606,6 +606,11 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
 
     // Prevent trivial one-word bridge between start and goal
     if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
+      continue
+    }
+
+    // Prevent trivial two-step bridge (same as medium practice)
+    if (twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
       continue
     }
 

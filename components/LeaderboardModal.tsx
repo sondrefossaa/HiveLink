@@ -131,15 +131,28 @@ export default function LeaderboardModal({
                   {puzzleDate ? ` · ${new Date(puzzleDate + 'T00:00:00').toLocaleDateString()}` : ''}
                 </p>
               </div>
-              <button
-                onClick={onClose}
-                className="w-9 h-9 rounded-lg bg-hive-graphite/70 hover:bg-hive-graphite text-gray-400 hover:text-white flex items-center justify-center transition-colors"
-                aria-label="Close leaderboard"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setReloadKey((key) => key + 1)}
+                  disabled={loading}
+                  className="w-9 h-9 rounded-lg bg-hive-graphite/70 hover:bg-hive-graphite text-gray-400 hover:text-white flex items-center justify-center transition-colors disabled:opacity-50"
+                  aria-label="Refresh leaderboard"
+                  title="Refresh"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="w-9 h-9 rounded-lg bg-hive-graphite/70 hover:bg-hive-graphite text-gray-400 hover:text-white flex items-center justify-center transition-colors"
+                  aria-label="Close leaderboard"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div className="p-5 space-y-4 overflow-y-auto">
@@ -184,7 +197,7 @@ export default function LeaderboardModal({
                       )}
                     </div>
                     <div className="p-4 rounded-xl bg-hive-dark/40 border border-hive-graphite/40">
-                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Average (words)</p>
+                      <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Average Path</p>
                       <p className="text-2xl font-semibold text-white">
                         {formatAverageNumber(data.averageStats?.avgWordsUsed)}
                       </p>
@@ -192,18 +205,14 @@ export default function LeaderboardModal({
                   </div>
 
                   {data.averageStats && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2 text-sm text-gray-300">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 text-sm text-gray-300">
                       <div className="flex items-center justify-between rounded-lg bg-hive-dark/30 border border-hive-graphite/30 px-3 py-2">
-                        <span>Words</span>
+                        <span>Shortest Path</span>
                         <span>{formatAverageNumber(data.averageStats.avgWordsUsed)}</span>
                       </div>
                       <div className="flex items-center justify-between rounded-lg bg-hive-dark/30 border border-hive-graphite/30 px-3 py-2">
-                        <span>Layers</span>
-                        <span>{formatAverageNumber(data.averageStats.avgLayers)}</span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-lg bg-hive-dark/30 border border-hive-graphite/30 px-3 py-2">
-                        <span>Time</span>
-                        <span>{formatDuration(data.averageStats.avgTimeElapsed)}</span>
+                        <span>Paths Found</span>
+                        <span>{formatAverageNumber(data.averageStats.avgPathsFound)}</span>
                       </div>
                     </div>
                   )}
@@ -227,9 +236,8 @@ export default function LeaderboardModal({
                             <tr>
                               <th className="text-left px-4 py-3">Rank</th>
                               <th className="text-left px-4 py-3">Player</th>
-                              <th className="text-left px-4 py-3">Words</th>
-                              <th className="text-left px-4 py-3">Layers</th>
-                              <th className="text-left px-4 py-3">Finished</th>
+                              <th className="text-left px-4 py-3">Shortest path</th>
+                              <th className="text-left px-4 py-3">Paths</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -241,10 +249,17 @@ export default function LeaderboardModal({
                                 }`}
                               >
                                 <td className="px-4 py-3 font-semibold">#{entry.rank}</td>
-                                <td className="px-4 py-3">{entry.playerId}</td>
+                                <td className="px-4 py-3">
+                                  {entry.playerName ? (
+                                    <span className="font-medium">{entry.playerName}</span>
+                                  ) : (
+                                    <span className="text-gray-500 italic text-sm">
+                                      Player {entry.playerId.slice(0, 6)}
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="px-4 py-3">{entry.wordsUsed}</td>
-                                <td className="px-4 py-3">{entry.layers}</td>
-                                <td className="px-4 py-3 text-gray-400">{formatTimeOfDay(entry.finishedAt)}</td>
+                                <td className="px-4 py-3">{entry.pathsFound}</td>
                               </tr>
                             ))}
                           </tbody>

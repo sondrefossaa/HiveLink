@@ -84,7 +84,7 @@ export interface Score {
   playerId: string;
   wordsUsed: number;
   layers: number;
-  timeElapsed?: number;
+  pathsFound: number;
   finishedAt: string;
   isDaily: boolean;
 }
@@ -92,15 +92,15 @@ export interface Score {
 export interface LeaderboardEntry {
   rank: number;
   playerId: string;
+  playerName?: string;
   wordsUsed: number;
-  layers: number;
+  pathsFound: number;
   finishedAt: string;
 }
 
 export interface AverageStats {
   avgWordsUsed: number;
-  avgLayers: number;
-  avgTimeElapsed: number | null;
+  avgPathsFound: number;
   totalPlayers: number;
 }
 
@@ -135,13 +135,13 @@ export interface GameState {
 export interface GameStats {
   wordsUsed: number;
   layersExplored: number;
-  timeElapsed: number;
   optimalSteps?: number;
 }
 
 // Player Types
 export interface Player {
   id: string;
+  name?: string;
   createdAt: string;
 }
 

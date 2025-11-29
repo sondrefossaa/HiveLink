@@ -18,6 +18,7 @@ import {
   isPuzzleCompleted,
   updatePlayerStats,
   getPlayerId,
+  getPlayerName,
   clearGameState,
 } from '@/lib/player-id'
 
@@ -65,14 +66,14 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [loadedPuzzleKey, setLoadedPuzzleKey] = useState<string | number | null>(null)
   const scoreSubmittedRef = useRef(false)
 
-  // Helper to check if a path is unique (different intermediate words)
+  // Helper to check if a path is unique (different set of words from start to end)
   const isUniquePath = useCallback((newPath: string[], existingPaths: string[][]): boolean => {
     if (newPath.length < 2) return false
-    // Get intermediate words (exclude start and end)
-    const newMiddle = newPath.slice(1, -1).sort().join('|')
+    // Get all words in path (including start and end) as a sorted set
+    const newWords = [...new Set(newPath.map(w => w.toLowerCase()))].sort().join('|')
     return !existingPaths.some(p => {
-      const existingMiddle = p.slice(1, -1).sort().join('|')
-      return existingMiddle === newMiddle
+      const existingWords = [...new Set(p.map(w => w.toLowerCase()))].sort().join('|')
+      return existingWords === newWords
     })
   }, [])
 
@@ -414,8 +415,12 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           setWinningPath(path)
           setAllPaths([path])
         } else if (isNewPath) {
-          // New unique path found during exploration
-          setAllPaths(prev => [...prev, path])
+          // New unique path found during exploration - keep sorted by length (shortest first)
+          setAllPaths(prev => {
+            const updated = [...prev, path]
+            console.log('New path found! All paths now:', updated.map(p => p.join(' → ')))
+            return updated.sort((a, b) => a.length - b.length)
+          })
         }
         
         return { success: true, isNewPath }
@@ -493,9 +498,14 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   }, [isComplete])
 
   const submitScore = useCallback(async () => {
-    if (!puzzle || !puzzle.isDaily || !isComplete || scoreSubmittedRef.current) return
+    if (!puzzle || !puzzle.isDaily || !isComplete) return
 
     try {
+      // Calculate score from shortest path length
+      const shortestPath = allPaths.length > 0 ? allPaths[0] : winningPath
+      // Path length minus 2 (exclude both start and end - only intermediate words count)
+      const shortestPathLength = Math.max(0, shortestPath.length - 2)
+      
       // Calculate layers from winning path (only layers used to reach goal)
       let layersToSubmit = maxLayer
       if (winningPath.length > 0) {
@@ -516,17 +526,19 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       }
 
       const playerId = getPlayerId()
+      const playerName = getPlayerName()
       
       await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playerId,
-          wordsUsed,
+          playerName,
+          wordsUsed: shortestPathLength,
           layers: layersToSubmit,
           puzzleDate: puzzle.date,
           isDaily: puzzle.isDaily,
-          timeElapsed: finalTimeElapsed,
+          pathsFound: allPaths.length,
         }),
       })
 
@@ -534,7 +546,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     } catch (error) {
       console.error('Error submitting score:', error)
     }
-  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
+  }, [puzzle, isComplete, maxLayer, winningPath, nodes, allPaths])
 
   const currentPuzzleKey = puzzle
     ? (puzzle.isDaily
@@ -542,7 +554,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         : `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`)
     : null
 
-  // Auto-submit score when game is complete
+  // Auto-submit score when game is complete or when paths are found
   useEffect(() => {
     if (!puzzle || !puzzle.isDaily) {
       return
@@ -550,11 +562,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     if (!isComplete || !currentPuzzleKey || currentPuzzleKey !== loadedPuzzleKey) {
       return
     }
-    if (scoreSubmittedRef.current) {
-      return
-    }
+    // Allow resubmission when paths change
     submitScore()
-  }, [isComplete, submitScore, puzzle, currentPuzzleKey, loadedPuzzleKey])
+  }, [isComplete, submitScore, puzzle, currentPuzzleKey, loadedPuzzleKey, allPaths.length])
 
   const isStateSync = currentPuzzleKey === loadedPuzzleKey
 

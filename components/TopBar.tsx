@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { MotionToggle } from './MotionToggle'
 import ShareButton from './ShareButton'
+import PlayerNameInput from './PlayerNameInput'
+import { getPlayerStats } from '@/lib/player-id'
 import type { PuzzleDifficulty, PuzzleMode } from '@/types'
 
 interface TopBarProps {
@@ -10,7 +13,6 @@ interface TopBarProps {
   date?: string
   wordsUsed: number
   layersExplored: number
-  onGiveUp: () => void
   pathsFound: number
   mode: PuzzleMode
   onModeChange: (mode: PuzzleMode) => void
@@ -39,7 +41,6 @@ export default function TopBar({
   date,
   wordsUsed,
   layersExplored,
-  onGiveUp,
   pathsFound,
   mode,
   onModeChange,
@@ -55,6 +56,14 @@ export default function TopBar({
   isComplete,
   onShowLeaderboard,
 }: TopBarProps) {
+  const [currentStreak, setCurrentStreak] = useState(0)
+  
+  // Update streak when component mounts or when puzzle is completed
+  useEffect(() => {
+    const stats = getPlayerStats()
+    setCurrentStreak(stats.currentStreak)
+  }, [isComplete])
+  
   // Format date for display
   const formattedDate = date
     ? new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
@@ -74,7 +83,7 @@ export default function TopBar({
         <div className="w-full px-4 sm:px-6 py-3">
           <div className="relative flex items-center justify-between gap-4">
             {/* Left: Logo and puzzle info */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-1">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 relative">
                   <svg viewBox="0 0 32 32" className="w-full h-full">
@@ -95,74 +104,34 @@ export default function TopBar({
 
               <div className="flex items-center gap-2 text-sm">
                 {isDaily ? (
-                  <>
-                    <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
-                      #{puzzleNumber}
-                    </span>
-                    {formattedDate && (
-                      <span className="text-gray-400 hidden sm:inline">{formattedDate}</span>
-                    )}
-                  </>
+                  <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
+                    🐝 {currentStreak} day streak
+                  </span>
                 ) : (
                   <span className="bg-hive-yellow/10 text-hive-yellow px-3 py-1 rounded-full font-medium">
                     Practice
                   </span>
                 )}
               </div>
-            </div>
 
-            {/* Center: Mode selector (Desktop) */}
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 hidden lg:block">
-              <div className="flex items-center gap-2">
-                <span className="text-gray-400 uppercase tracking-wide text-[10px]">Mode</span>
-                <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
-                  {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => onModeChange(option)}
-                      className={`px-3 py-1 rounded-full transition-colors ${
-                        mode === option
-                          ? 'bg-hive-yellow text-hive-dark'
-                          : 'text-gray-300 hover:text-white'
-                      }`}
-                    >
-                      {option === 'daily' ? 'Daily' : 'Practice'}
-                    </button>
-                  ))}
+              {/* Player Name and Date */}
+              <div className="hidden md:flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400">Hello,</span>
+                  <PlayerNameInput className="text-sm" />
                 </div>
+                
+                {formattedDate && isDaily && (
+                  <>
+                    <span className="text-gray-500">·</span>
+                    <span className="text-gray-400">{formattedDate}</span>
+                  </>
+                )}
               </div>
             </div>
 
-            {/* Right: Stats & Controls */}
-            <div className="flex items-center gap-4 justify-end">
-              {/* Practice Controls (Desktop) */}
-              {mode === 'practice' && (
-                <div className="hidden lg:flex items-center gap-2 text-sm mr-2">
-                  <select
-                    value={difficulty}
-                    onChange={(event) => onDifficultyChange(event.target.value as PuzzleDifficulty)}
-                    className="bg-hive-graphite/70 border border-hive-graphite rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-hive-yellow/50"
-                  >
-                    {(['easy', 'medium', 'hard'] as PuzzleDifficulty[]).map((level) => (
-                      <option key={level} value={level}>
-                        {difficultyLabels[level]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => {
-                      void onGeneratePractice()
-                    }}
-                    disabled={isGeneratingPractice}
-                    className="px-2 py-1 rounded-lg bg-hive-yellow text-hive-dark text-xs font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors whitespace-nowrap"
-                  >
-                    {isGeneratingPractice ? '...' : 'New'}
-                  </button>
-                  <div className="w-px h-6 bg-hive-graphite mx-1" />
-                </div>
-              )}
-
-              {/* Stats */}
+            {/* Center: Stats */}
+            <div className="hidden sm:flex absolute left-1/2 -translate-x-1/2">
               <div className="flex items-center gap-3 sm:gap-6">
                 <div className="text-center">
                   <motion.div
@@ -212,77 +181,82 @@ export default function TopBar({
                     </div>
                   </>
                 )}
+              </div>
+            </div>
 
-                {pathsFound === 0 && (
-                  <>
-                    <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
-                    <button
-                      onClick={onGiveUp}
-                      className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-lg
-                                 bg-hive-graphite/50 hover:bg-hive-graphite/80 
-                                 text-gray-400 hover:text-gray-200
-                                 text-sm transition-colors"
-                      title="Give Up"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"
-                        />
-                      </svg>
-                      <span className="hidden sm:inline">Give Up</span>
-                    </button>
-                  </>
-                )}
-
-                {pathsFound > 0 && (
-                  <motion.div
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                               bg-green-500/20 border border-green-500/30 text-green-400"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M5 13l4 4L19 7"
-                      />
-                    </svg>
-                    <span className="text-sm font-medium">
-                      {pathsFound} {pathsFound === 1 ? 'path' : 'paths'} found
-                    </span>
-                  </motion.div>
-                )}
-
-                <div className="w-px h-8 bg-hive-graphite hidden sm:block" />
+            {/* Right: Controls */}
+            <div className="flex items-center gap-4 justify-end">
+              {/* Action buttons and other controls */}
+              <div className="flex items-center gap-3 sm:gap-6">
+                {/* Mode selector */}
+                <div className="hidden md:flex items-center gap-2">
+                  <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
+                    {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => onModeChange(option)}
+                        className={`px-3 py-1 rounded-full transition-colors ${
+                          mode === option
+                            ? 'bg-hive-yellow text-hive-dark'
+                            : 'text-gray-300 hover:text-white'
+                        }`}
+                      >
+                        {option === 'daily' ? 'Daily' : 'Practice'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 
-                {isDaily && onShowLeaderboard && (
-                  <button
-                    onClick={onShowLeaderboard}
-                    className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-hive-yellow/10 text-hive-yellow hover:bg-hive-yellow/20 transition-colors"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.8}
-                        d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
-                      />
-                    </svg>
-                    <span className="text-sm font-medium">Leaderboard</span>
-                  </button>
-                )}
+                {/* Conditional content based on mode - keeps position stable */}
+                <div className="hidden sm:flex items-center gap-2 min-w-[200px] justify-end">
+                  {isDaily ? (
+                    onShowLeaderboard && (
+                      <button
+                        onClick={onShowLeaderboard}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-hive-yellow/10 text-hive-yellow hover:bg-hive-yellow/20 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.8}
+                            d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
+                          />
+                        </svg>
+                        <span className="text-sm font-medium">Leaderboard</span>
+                      </button>
+                    )
+                  ) : (
+                    <>
+                      <select
+                        value={difficulty}
+                        onChange={(event) => onDifficultyChange(event.target.value as PuzzleDifficulty)}
+                        className="bg-hive-graphite/70 border border-hive-graphite rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-hive-yellow/50"
+                      >
+                        {(['easy', 'medium', 'hard'] as PuzzleDifficulty[]).map((level) => (
+                          <option key={level} value={level}>
+                            {difficultyLabels[level]}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => {
+                          void onGeneratePractice()
+                        }}
+                        disabled={isGeneratingPractice}
+                        className="px-3 py-1.5 rounded-lg bg-hive-yellow text-hive-dark text-sm font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors whitespace-nowrap"
+                      >
+                        {isGeneratingPractice ? '...' : 'New Puzzle'}
+                      </button>
+                    </>
+                  )}
+                </div>
 
                 <ShareButton
                   puzzleNumber={puzzleNumber}
                   wordsUsed={wordsUsed}
                   layers={layersExplored}
                   status={isComplete ? 'won' : 'playing'}
-                  timeElapsed={Date.now() - startTime}
                   startWord={startWord}
                   goalWord={goalWord}
                   isDaily={isDaily}
@@ -295,6 +269,12 @@ export default function TopBar({
 
           {/* Mobile Controls */}
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
+            {/* Player Name - Mobile */}
+            <div className="flex items-center gap-1.5 mb-1">
+              <span className="text-gray-400 text-xs">Hello,</span>
+              <PlayerNameInput className="text-xs" />
+            </div>
+
             <div className="flex items-center justify-between gap-3">
               <motion.div
                 initial={{ opacity: 0, y: -6 }}

@@ -166,14 +166,16 @@ export default function Game() {
       }
     }
     
+    // Calculate shortest path length (excluding start and end words - only intermediate words count)
+    const shortestPath = gameState.allPaths.length > 0 ? gameState.allPaths[0] : gameState.winningPath
+    const shortestPathLength = shortestPath.length > 0 ? Math.max(0, shortestPath.length - 2) : gameState.wordsUsed
+    
     return {
-      wordsUsed: gameState.wordsUsed,
+      wordsUsed: shortestPathLength,
       layersExplored,
-      // Use finalTimeElapsed if game is complete (prevents cheating by refresh)
-      timeElapsed: gameState.finalTimeElapsed ?? (Date.now() - gameState.startTime),
       optimalSteps: puzzle?.optimalSteps || undefined,
     }
-  }, [gameState.wordsUsed, gameState.maxLayer, gameState.winningPath, gameState.nodes, gameState.startTime, gameState.finalTimeElapsed, puzzle?.optimalSteps])
+  }, [gameState.wordsUsed, gameState.maxLayer, gameState.winningPath, gameState.allPaths, gameState.nodes, puzzle?.optimalSteps])
 
   // Handle give up
   const handleGiveUp = useCallback(() => {
@@ -244,7 +246,6 @@ export default function Game() {
         date={puzzle.date}
         wordsUsed={gameState.wordsUsed}
         layersExplored={gameState.maxLayer}
-        onGiveUp={handleGiveUp}
         pathsFound={justSwitchedRef.current ? 0 : gameState.allPaths.length}
         mode={mode}
         onModeChange={setMode}

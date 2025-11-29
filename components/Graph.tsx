@@ -465,15 +465,18 @@ export default function Graph({
 
   // Track if initial centering has happened
   const hasInitializedRef = useRef(false)
+  const hasInitialZoomRef = useRef(false)
 
   // Handle initial graph render - zoom to fit after first frame
   const handleRenderFrame = useCallback(() => {
     if (hasInitializedRef.current) return
     if (!graphRef.current) return
     
-    // Mark as initialized and zoom to fit
+    // Mark as initialized and set initial zoom to maximum zoom out
     hasInitializedRef.current = true
-    graphRef.current.zoomToFit(400, 80)
+    hasInitialZoomRef.current = true
+    // Set zoom level to 0 (maximum zoom out)
+    graphRef.current.zoom(0, 0)
   }, [])
 
   // Auto-zoom to fit graph (skip on initial load - handled by onRenderFramePost)
@@ -483,10 +486,15 @@ export default function Graph({
     graphRef.current.zoomToFit(500, 60)
   }, [dimensions.width, dimensions.height, layout.maxLayer, nodes.length])
 
-  // Center on selected node or frontier (skip on initial load)
+  // Center on selected node or frontier (skip on initial load and initial zoom)
   useEffect(() => {
     if (!graphRef.current) return
     if (!hasInitializedRef.current) return // Skip initial load
+    if (hasInitialZoomRef.current) {
+      // After initial zoom to fit, allow subsequent centering
+      hasInitialZoomRef.current = false
+      return
+    }
     const anchorId = selectedNodeId ?? layout.farthestNodeId ?? layout.startNodeId
     if (!anchorId) return
     const anchorNode = layout.nodeMeta.get(anchorId)

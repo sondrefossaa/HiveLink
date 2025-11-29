@@ -25,9 +25,10 @@ model Score {
   id          Int      @id @default(autoincrement())
   puzzleDate  DateTime @map("puzzle_date") @db.Date
   playerId    String   @map("player_id")
+  playerName  String?  @map("player_name")
   wordsUsed   Int      @map("words_used")
   layers      Int
-  timeElapsed Int?     @map("time_elapsed")
+  pathsFound  Int      @default(1) @map("paths_found")
   finishedAt  DateTime @default(now()) @map("finished_at")
   isDaily     Boolean  @default(true) @map("is_daily")
 

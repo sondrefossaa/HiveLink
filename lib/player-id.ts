@@ -68,6 +68,34 @@ export function getPlayerData(): Player | null {
 }
 
 /**
+ * Get player name
+ */
+export function getPlayerName(): string | null {
+  const data = getPlayerData()
+  return data?.name ?? null
+}
+
+/**
+ * Set player name
+ */
+export function setPlayerName(name: string): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+  
+  try {
+    const data = getPlayerData() || {
+      id: getPlayerId(),
+      createdAt: new Date().toISOString(),
+    }
+    data.name = name.trim() || undefined
+    localStorage.setItem(PLAYER_DATA_KEY, JSON.stringify(data))
+  } catch (error) {
+    console.warn('Error setting player name:', error)
+  }
+}
+
+/**
  * Check if this is the player's first visit
  */
 export function isFirstVisit(): boolean {
@@ -175,7 +203,80 @@ export function isPuzzleCompleted(puzzleDate: string): boolean {
 }
 
 /**
- * Get player statistics
+ * Calculate current streak from completed puzzles
+ */
+export function calculateStreak(): { currentStreak: number; maxStreak: number } {
+  const completed = getCompletedPuzzles()
+  if (completed.length === 0) {
+    return { currentStreak: 0, maxStreak: 0 }
+  }
+
+  // Sort dates in descending order
+  const sortedDates = completed.sort((a, b) => b.localeCompare(a))
+  
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const todayStr = today.toISOString().split('T')[0]
+  
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().split('T')[0]
+  
+  // Check if streak is still active (completed today or yesterday)
+  const latestDate = sortedDates[0]
+  const isActiveStreak = latestDate === todayStr || latestDate === yesterdayStr
+  
+  if (!isActiveStreak) {
+    // Streak is broken, but calculate max streak from history
+    return { currentStreak: 0, maxStreak: calculateMaxStreak(sortedDates) }
+  }
+  
+  // Calculate current streak
+  let currentStreak = 0
+  let checkDate = latestDate === todayStr ? new Date(today) : new Date(yesterday)
+  
+  for (let i = 0; i < sortedDates.length; i++) {
+    const dateStr = checkDate.toISOString().split('T')[0]
+    if (sortedDates[i] === dateStr) {
+      currentStreak++
+      checkDate.setDate(checkDate.getDate() - 1)
+    } else {
+      break
+    }
+  }
+  
+  const maxStreak = Math.max(currentStreak, calculateMaxStreak(sortedDates))
+  
+  return { currentStreak, maxStreak }
+}
+
+/**
+ * Calculate maximum streak from date list
+ */
+function calculateMaxStreak(sortedDates: string[]): number {
+  if (sortedDates.length === 0) return 0
+  
+  let maxStreak = 1
+  let currentStreak = 1
+  
+  for (let i = 0; i < sortedDates.length - 1; i++) {
+    const current = new Date(sortedDates[i] + 'T00:00:00')
+    const next = new Date(sortedDates[i + 1] + 'T00:00:00')
+    
+    const diffDays = Math.round((current.getTime() - next.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 1) {
+      currentStreak++
+      maxStreak = Math.max(maxStreak, currentStreak)
+    } else {
+      currentStreak = 1
+    }
+  }
+  
+  return maxStreak
+}
+/**
+ * Get player statistics with live streak calculation
  */
 export function getPlayerStats(): {
   gamesPlayed: number
@@ -196,8 +297,21 @@ export function getPlayerStats(): {
   
   try {
     const data = localStorage.getItem('hivelink_stats')
-    if (data) {
-      return JSON.parse(data)
+    const stats = data ? JSON.parse(data) : {
+      gamesPlayed: 0,
+      gamesWon: 0,
+      averageWords: 0,
+    }
+    
+    // Calculate streak from completed puzzles (not stored stats)
+    const { currentStreak, maxStreak } = calculateStreak()
+    
+    return {
+      gamesPlayed: stats.gamesPlayed || 0,
+      gamesWon: stats.gamesWon || 0,
+      currentStreak,
+      maxStreak,
+      averageWords: stats.averageWords || 0,
     }
   } catch {
     // Ignore
@@ -235,17 +349,18 @@ export function updatePlayerStats(
     
     if (won) {
       stats.gamesWon++
-      stats.currentStreak++
-      stats.maxStreak = Math.max(stats.maxStreak, stats.currentStreak)
       
       // Update average
       const totalWords = stats.averageWords * (stats.gamesWon - 1) + wordsUsed
       stats.averageWords = Math.round(totalWords / stats.gamesWon)
-    } else {
-      stats.currentStreak = 0
     }
     
-    localStorage.setItem('hivelink_stats', JSON.stringify(stats))
+    // Don't store streak in stats anymore - it's calculated from completed puzzles
+    localStorage.setItem('hivelink_stats', JSON.stringify({
+      gamesPlayed: stats.gamesPlayed,
+      gamesWon: stats.gamesWon,
+      averageWords: stats.averageWords,
+    }))
   } catch (error) {
     console.warn('Error updating player stats:', error)
   }
