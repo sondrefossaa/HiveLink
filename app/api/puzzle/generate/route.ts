@@ -15,8 +15,10 @@ export async function GET(request: NextRequest) {
     // Check for shared puzzle params (start/goal words)
     const startWord = searchParams.get('start')?.toLowerCase()
     const goalWord = searchParams.get('goal')?.toLowerCase()
+    const minStepsParam = searchParams.get('minSteps')
+    const minSteps = minStepsParam ? Math.max(1, parseInt(minStepsParam, 10) || 1) : 1
 
-    const puzzle = await generatePracticePuzzle(difficulty, startWord || undefined, goalWord || undefined)
+    const puzzle = await generatePracticePuzzle(difficulty, startWord || undefined, goalWord || undefined, minSteps)
 
     if (puzzle.wordParts) {
       const entries = Object.entries(puzzle.wordParts).filter(([, parts]) => parts.length >= 2)

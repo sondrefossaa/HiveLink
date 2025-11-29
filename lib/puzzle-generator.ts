@@ -28,6 +28,7 @@ interface DailyPuzzleResult {
 
 interface DailyPuzzleOptions {
   wordEntries?: WordEntry[]
+  minSteps?: number
 }
 
 interface WordEnvironment {
@@ -222,6 +223,29 @@ function startAndGoalSharePart(chain: WordEntry[]): boolean {
   return Boolean(findSharedPart(start.parts, goal.parts))
 }
 
+// Detect if there exists a direct one-word bridge that combines a part from start and a part from goal
+function directBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
+  const startParts = Array.from(new Set(start.parts))
+  const goalParts = Array.from(new Set(goal.parts))
+  // Build a fast lookup of words by normalized parts sequence
+  const wordsSet = new Set(environment.words.map(w => w.word))
+
+  // Helper to check if concatenation of a and b exists as a known compound word
+  const existsConcat = (a: string, b: string): boolean => {
+    const candidate = (a + b).toLowerCase()
+    return wordsSet.has(candidate)
+  }
+
+  for (const sp of startParts) {
+    for (const gp of goalParts) {
+      if (existsConcat(sp, gp) || existsConcat(gp, sp)) {
+        return true
+      }
+    }
+  }
+  return false
+}
+
 // Find a word entry by word name
 function findWordEntry(word: string, environment: WordEnvironment): WordEntry | null {
   const normalized = word.toLowerCase()
@@ -302,7 +326,8 @@ async function loadPracticeEnvironment(): Promise<WordEnvironment> {
 export async function generatePracticePuzzle(
   difficulty: PuzzleDifficulty,
   sharedStartWord?: string,
-  sharedGoalWord?: string
+  sharedGoalWord?: string,
+  minSteps: number = 1
 ): Promise<GeneratedPuzzle> {
   const fullEnvironment = await loadPracticeEnvironment()
 
@@ -363,6 +388,17 @@ export async function generatePracticePuzzle(
       }
 
       if ((difficulty === 'hard' || difficulty === 'medium') && startAndGoalSharePart(candidate)) {
+        continue
+      }
+
+      // Enforce minimum steps: optimalSteps = chain.length - 1
+      const candidateOptimalSteps = Math.max(1, candidate.length - 1)
+      if (candidateOptimalSteps < Math.max(1, minSteps)) {
+        continue
+      }
+
+      // Prevent trivial one-word bridge between start and goal
+      if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
         continue
       }
 
@@ -503,7 +539,7 @@ function attemptSeededBuildChain(
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
   // Use only the canonical compound words (easy word pool) for daily puzzles
-  // This ensures familiar words like "butterfly", "moonshine", etc.
+  // This ensures familiar, recognizable words and consistency across environments.
   const environment = DEFAULT_ENVIRONMENT
 
   if (environment.words.length === 0) {
@@ -529,6 +565,18 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
 
     // For medium difficulty, avoid puzzles where start and goal share a part
     if (startAndGoalSharePart(candidate)) {
+      continue
+    }
+
+    // Enforce minimum steps for daily (default 3)
+    const minSteps = Math.max(1, options.minSteps ?? 3)
+    const candidateOptimalSteps = Math.max(1, candidate.length - 1)
+    if (candidateOptimalSteps < minSteps) {
+      continue
+    }
+
+    // Prevent trivial one-word bridge between start and goal
+    if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
       continue
     }
 

@@ -128,6 +128,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const requestedTimeZone = resolveTimeZone(searchParams.get('timezone'))
     const clientDateClaim = searchParams.get('date')
+    const force = searchParams.get('force') === '1'
 
     const now = new Date()
     const localDateStr = formatDateInTimeZone(now, requestedTimeZone)
@@ -186,8 +187,8 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // If no puzzle exists for today, generate one automatically
-    if (!puzzle) {
+    // If no puzzle exists for today, or force is set, generate (or regenerate) one automatically
+    if (!puzzle || force) {
       console.log(`No puzzle found for ${targetDateKey}, generating one...`)
       
       try {
@@ -198,19 +199,27 @@ export async function GET(request: NextRequest) {
           throw new Error('Compound word table is empty; cannot generate daily puzzle')
         }
 
-        const generated = await generateDailyPuzzle(targetDate, { wordEntries })
+        const generated = await generateDailyPuzzle(targetDate, { wordEntries, minSteps: 3 })
         
-        // Use upsert to handle race conditions
-        puzzle = await prisma.dailyPuzzle.upsert({
-          where: { date: targetDate },
-          update: {}, // Don't update if exists
-          create: {
-            date: targetDate,
-            startWord: generated.startWord,
-            goalWord: generated.goalWord,
-            optimalSteps: generated.optimalSteps,
-          },
-        })
+        if (!puzzle) {
+          puzzle = await prisma.dailyPuzzle.create({
+            data: {
+              date: targetDate,
+              startWord: generated.startWord,
+              goalWord: generated.goalWord,
+              optimalSteps: generated.optimalSteps,
+            },
+          })
+        } else if (force) {
+          puzzle = await prisma.dailyPuzzle.update({
+            where: { date: targetDate },
+            data: {
+              startWord: generated.startWord,
+              goalWord: generated.goalWord,
+              optimalSteps: generated.optimalSteps,
+            },
+          })
+        }
         
         console.log(`Daily puzzle for ${targetDateKey}: ${puzzle.startWord} -> ${puzzle.goalWord}`)
       } catch (genError) {
@@ -247,7 +256,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    if (puzzle) {
+    // If not forcing, validate words exist; otherwise we just regenerated
+    if (puzzle && !force) {
       const wordsToCheck = [puzzle.startWord.toLowerCase(), puzzle.goalWord.toLowerCase()]
       const knownWords = await prisma.compoundWord.findMany({
         where: {
@@ -267,7 +277,7 @@ export async function GET(request: NextRequest) {
           throw new Error('Compound word table is empty; cannot regenerate daily puzzle')
         }
 
-        const regenerated = await generateDailyPuzzle(targetDate, { wordEntries })
+        const regenerated = await generateDailyPuzzle(targetDate, { wordEntries, minSteps: 3 })
 
         puzzle = await prisma.dailyPuzzle.update({
           where: { date: targetDate },

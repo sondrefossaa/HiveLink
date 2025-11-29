@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
       try {
         const generated = await generateDailyPuzzle(targetDate, {
           wordEntries,
+          minSteps: 3,
         })
         
         const puzzle = await prisma.dailyPuzzle.create({
