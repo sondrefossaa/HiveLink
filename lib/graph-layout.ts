@@ -327,7 +327,8 @@ export function computeGraphLayout(
     .map((node) => layerMap.get(node.id) ?? 0)
   
   const maxLayer = nonGoalLayers.length > 0 ? Math.max(...nonGoalLayers) : 0
-  const goalLayer = clampGoalLayer(Math.max(maxLayer + 1, MIN_GOAL_LAYER))
+  // Goal is always exactly 1 layer after the furthest node
+  const goalLayer = maxLayer + 1
   
   // Calculate dynamic layer spacing based on total layers and user-controlled spacing
   // Scale with power of 0.7 to give larger graphs significantly more spacing

@@ -789,7 +789,8 @@ export default function Graph({
 
       // Draw text with perfect readability
       const label = node.word.length > 14 ? `${node.word.slice(0, 12)}…` : node.word
-      const fontSize = Math.max(16 / globalScale, 12)
+      // Scale font proportionally to node size (size is already zoom-compensated)
+      const fontSize = Math.max(size * 0.45, 8)
 
       ctx.save()
       ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
@@ -797,7 +798,7 @@ export default function Graph({
       ctx.textBaseline = 'middle'
       
       // Text shadow/outline for readability
-      ctx.lineWidth = 4 / globalScale
+      ctx.lineWidth = Math.max(fontSize * 0.2, 2)
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
       ctx.strokeText(label, x, y)
       
@@ -809,13 +810,13 @@ export default function Graph({
       if (isSelected && node.parts.length > 1) {
         ctx.save()
         const partsText = node.parts.join(' + ')
-        const partFontSize = Math.max(fontSize * 0.65, 10)
+        const partFontSize = Math.max(fontSize * 0.65, 6)
         ctx.font = `500 ${partFontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'top'
         ctx.fillStyle = '#F4B400'
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'
-        ctx.lineWidth = 3 / globalScale
+        ctx.lineWidth = Math.max(partFontSize * 0.2, 1.5)
         ctx.strokeText(partsText, x, y + size + partFontSize * 0.4)
         ctx.fillText(partsText, x, y + size + partFontSize * 0.4)
         ctx.restore()
@@ -991,7 +992,10 @@ export default function Graph({
       // Draw shared part label on edge
       if (link.sharedPart && globalScale > 0.5) {
         ctx.save()
-        const fontSize = Math.max(10 / globalScale, 8)
+        // Scale font similar to node size scaling for consistency
+        const inverseScale = 1 / Math.max(globalScale, 0.001)
+        const zoomComp = getZoomCompensation({ isStart: false, isGoal: false } as ForceLayoutNode, globalScale)
+        const fontSize = Math.max(10 * inverseScale * zoomComp * 0.4, 6)
         ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
