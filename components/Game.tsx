@@ -76,9 +76,6 @@ export default function Game() {
       hasShownVictoryRef.current = false
       prevPathCountRef.current = 0
       justSwitchedRef.current = true
-      if (puzzle) {
-        gameState.reset()
-      }
     }
 
     // Update trackers
@@ -248,7 +245,7 @@ export default function Game() {
         wordsUsed={gameState.wordsUsed}
         layersExplored={gameState.maxLayer}
         onGiveUp={handleGiveUp}
-        pathsFound={gameState.allPaths.length}
+        pathsFound={justSwitchedRef.current ? 0 : gameState.allPaths.length}
         mode={mode}
         onModeChange={setMode}
         difficulty={difficulty}

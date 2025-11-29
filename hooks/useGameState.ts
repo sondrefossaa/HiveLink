@@ -80,7 +80,11 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   useEffect(() => {
     if (!puzzle) return
 
-    const persistenceKey = puzzle.isDaily ? puzzle.date : undefined
+    // Use a persistence key for both daily and practice
+    const practiceKey = !puzzle.isDaily
+      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
+      : undefined
+    const persistenceKey = puzzle.isDaily ? puzzle.date : practiceKey
 
     // Check for saved state (daily puzzles only)
     const savedState = persistenceKey
@@ -95,8 +99,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       const goalMatches = savedGoal?.word?.toLowerCase() === puzzle.goalWord.toLowerCase()
 
       if (!startMatches || !goalMatches) {
-        if (puzzle.isDaily) {
-          clearGameState(puzzle.date)
+        // Clear mismatched saved state for this key
+        if (persistenceKey) {
+          clearGameState(persistenceKey)
         }
       } else {
         setNodes(savedState.nodes)
@@ -159,7 +164,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
             setAllPaths(savedState.allPaths)
           }
         }
-        setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
+        setLoadedPuzzleKey(persistenceKey || puzzle.id)
         return
       }
     }
@@ -222,7 +227,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setStartTime(Date.now())
     setFinalTimeElapsed(null)
     scoreSubmittedRef.current = false
-    setLoadedPuzzleKey(puzzle.isDaily ? puzzle.date : puzzle.id)
+    setLoadedPuzzleKey(persistenceKey || puzzle.id)
   }, [puzzle])
 
   // Save state when it changes
@@ -240,8 +245,13 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       allPaths: allPaths.length > 0 ? allPaths : undefined,
     }
 
-    if (puzzle.isDaily) {
-      saveGameState(puzzle.date, state)
+    // Persist for both daily and practice using the same storage helper
+    const practiceKey = !puzzle.isDaily
+      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
+      : undefined
+    const persistenceKey = puzzle.isDaily ? puzzle.date : practiceKey
+    if (persistenceKey) {
+      saveGameState(persistenceKey, state)
     }
   }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
 
@@ -466,8 +476,13 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     scoreSubmittedRef.current = false
 
     // Clear saved state
-    if (puzzle.isDaily) {
-      saveGameState(puzzle.date, null)
+    // Clear saved state for current puzzle key (daily or practice)
+    const practiceKey = puzzle && !puzzle.isDaily
+      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
+      : undefined
+    const persistenceKey = puzzle?.isDaily ? puzzle.date : practiceKey
+    if (persistenceKey) {
+      saveGameState(persistenceKey, null)
     }
   }, [puzzle])
 
@@ -521,7 +536,11 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
   }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
 
-  const currentPuzzleKey = puzzle ? (puzzle.isDaily ? puzzle.date : puzzle.id) : null
+  const currentPuzzleKey = puzzle
+    ? (puzzle.isDaily
+        ? puzzle.date
+        : `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`)
+    : null
 
   // Auto-submit score when game is complete
   useEffect(() => {
