@@ -59,6 +59,31 @@ export default function Game() {
   const isDailyPuzzle = Boolean(puzzle?.isDaily)
   const currentPuzzleDate = puzzle?.date ?? null
   const previousPuzzleDateRef = useRef<string | null>(null)
+  const justSwitchedRef = useRef(false)
+  const prevModeRef = useRef(mode)
+
+  // Reset transient UI state when switching mode or puzzle/date changes
+  useEffect(() => {
+    const modeChanged = prevModeRef.current !== mode
+    const switchedToDaily = modeChanged && mode === 'daily'
+    const dateChanged = previousPuzzleDateRef.current && currentPuzzleDate && previousPuzzleDateRef.current !== currentPuzzleDate
+
+    // Only perform hard reset when entering daily or the daily date changes
+    if (switchedToDaily || dateChanged) {
+      setShowVictory(false)
+      setShowLeaderboard(false)
+      setNewPathToast(false)
+      hasShownVictoryRef.current = false
+      prevPathCountRef.current = 0
+      justSwitchedRef.current = true
+      if (puzzle) {
+        gameState.reset()
+      }
+    }
+
+    // Update trackers
+    prevModeRef.current = mode
+  }, [mode, currentPuzzleDate, puzzle, gameState])
 
   // Show toast when a new path is discovered
   useEffect(() => {
@@ -79,12 +104,26 @@ export default function Game() {
   useEffect(() => {
     if (gameState.allPaths.length === 0) {
       hasShownVictoryRef.current = false
-    } else if (gameState.allPaths.length === 1 && !hasShownVictoryRef.current && !gameState.wasRestoredComplete) {
+    } else if (
+      gameState.allPaths.length === 1 &&
+      !hasShownVictoryRef.current &&
+      !gameState.wasRestoredComplete &&
+      !justSwitchedRef.current &&
+      // Guard: ensure current session has produced at least one edge (fresh play)
+      gameState.edges.length > 0
+    ) {
       hasShownVictoryRef.current = true
       // Small delay for the animation to show
       setTimeout(handleVictory, 500)
     }
-  }, [gameState.allPaths.length, handleVictory, gameState.wasRestoredComplete])
+  }, [gameState.allPaths.length, gameState.edges.length, handleVictory, gameState.wasRestoredComplete])
+
+  // Clear the switch guard once the player interacts (edges/words change)
+  useEffect(() => {
+    if (justSwitchedRef.current && (gameState.edges.length > 0 || gameState.wordsUsed > 0)) {
+      justSwitchedRef.current = false
+    }
+  }, [gameState.edges.length, gameState.wordsUsed])
 
   useEffect(() => {
     if (!isDailyPuzzle && showLeaderboard) {

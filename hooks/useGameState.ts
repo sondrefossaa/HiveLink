@@ -460,6 +460,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setIsComplete(false)
     setAllowExploration(false)
     setWinningPath([])
+    setAllPaths([])
     setSelectedNodeId('start')
     setError(null)
     scoreSubmittedRef.current = false

@@ -253,11 +253,11 @@ export default function VictoryModal({
     const optimal = stats.optimalSteps || stats.wordsUsed
     const ratio = stats.wordsUsed / optimal
 
-    if (ratio <= 1) return { emoji: '🏆', text: 'Perfect!', color: 'text-yellow-400' }
-    if (ratio <= 1.2) return { emoji: '⭐', text: 'Excellent!', color: 'text-green-400' }
-    if (ratio <= 1.5) return { emoji: '👍', text: 'Great!', color: 'text-blue-400' }
-    if (ratio <= 2) return { emoji: '✓', text: 'Good', color: 'text-gray-400' }
-    return { emoji: '📚', text: 'Completed', color: 'text-gray-500' }
+  if (ratio <= 1) return { emoji: '👑', text: 'Hive Queen!', color: 'text-yellow-400' }
+  if (ratio <= 1.2) return { emoji: '🐝', text: 'Forager Bee', color: 'text-green-400' }
+  if (ratio <= 1.5) return { emoji: '🍯', text: 'Courting Drone', color: 'text-blue-400' }
+  if (ratio <= 2) return { emoji: '🌸', text: 'Nectar Scout', color: 'text-purple-400' }
+  return { emoji: '🐛', text: 'Hive Helper', color: 'text-gray-500' }
   }, [stats])
 
   const rating = getPerformanceRating()
