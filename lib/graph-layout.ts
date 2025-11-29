@@ -1,12 +1,14 @@
 import type { GraphEdge, GraphNode } from '@/types'
 
-export const FIXED_LAYER_SPACING = 300
-export const FIXED_HORIZONTAL_SPACING = FIXED_LAYER_SPACING
+const BASE_LAYER_SPACING = 120
+const MIN_LAYER_SPACING_BETWEEN = 70
+const MAX_LAYER_SPACING_BETWEEN = 90
+export const FIXED_HORIZONTAL_SPACING = 100 // For backward compatibility with Graph.tsx
 const BASE_FORWARD_CONFLICT_SPACING = 150
 const BASE_CANVAS_SIZE = 640
 const MIN_VERTICAL_SCALE = 1
 const MAX_VERTICAL_SCALE = 1.8
-const MIN_GOAL_LAYER = 8
+const MIN_GOAL_LAYER = 3
 const MAX_GOAL_LAYER = 12
 const MAX_OFFSET_STEPS = 10
 const MIN_LAYER_SPACING = 48
@@ -138,13 +140,140 @@ const clampValue = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value))
 
 /**
+ * Rebalance layer positions for clean, centered layout
+ * Uses iterative relaxation to minimize edge crossings and spread nodes evenly
+ */
+function rebalanceLayerPositions(
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+  branchAssignments: Map<string, BranchAssignment>,
+  centerCrossAxis: number,
+  layerMap: Map<string, number>
+): void {
+  // Group nodes by layer
+  const nodesByLayer = new Map<number, string[]>()
+  for (const [nodeId, assignment] of branchAssignments.entries()) {
+    const layer = assignment.layer
+    if (!nodesByLayer.has(layer)) {
+      nodesByLayer.set(layer, [])
+    }
+    nodesByLayer.get(layer)!.push(nodeId)
+  }
+  
+  // Build adjacency for neighbor calculations (only forward edges between different layers)
+  const childrenMap = new Map<string, string[]>()
+  const parentsMap = new Map<string, string[]>()
+  for (const edge of edges) {
+    const sourceId = typeof edge.source === 'string' ? edge.source : (edge.source as GraphNode)?.id
+    const targetId = typeof edge.target === 'string' ? edge.target : (edge.target as GraphNode)?.id
+    if (!sourceId || !targetId) continue
+    
+    const sourceLayer = layerMap.get(sourceId)
+    const targetLayer = layerMap.get(targetId)
+    
+    // Skip same-layer edges - they shouldn't affect horizontal positioning
+    if (sourceLayer === targetLayer) continue
+    
+    if (!childrenMap.has(sourceId)) childrenMap.set(sourceId, [])
+    childrenMap.get(sourceId)!.push(targetId)
+    
+    if (!parentsMap.has(targetId)) parentsMap.set(targetId, [])
+    parentsMap.get(targetId)!.push(sourceId)
+  }
+  
+  // Iterative relaxation: adjust positions to minimize crossings and balance spacing
+  const iterations = 3
+  for (let iter = 0; iter < iterations; iter++) {
+    const layers = Array.from(nodesByLayer.keys()).sort((a, b) => a - b)
+    
+    // Forward pass: adjust based on parent positions
+    for (const layer of layers) {
+      const nodeIds = nodesByLayer.get(layer)!
+      if (nodeIds.length <= 1) continue
+      
+      // Calculate barycenter (weighted average of parent/child positions)
+      const barycenters = nodeIds.map((nodeId) => {
+        const parents = parentsMap.get(nodeId) || []
+        const children = childrenMap.get(nodeId) || []
+        
+        let sum = 0
+        let count = 0
+        
+        for (const parentId of parents) {
+          const parentAssignment = branchAssignments.get(parentId)
+          if (parentAssignment) {
+            sum += parentAssignment.crossAxisPos
+            count++
+          }
+        }
+        
+        for (const childId of children) {
+          const childAssignment = branchAssignments.get(childId)
+          if (childAssignment) {
+            sum += childAssignment.crossAxisPos
+            count++
+          }
+        }
+        
+        const barycenter = count > 0 ? sum / count : branchAssignments.get(nodeId)!.crossAxisPos
+        return { nodeId, barycenter }
+      })
+      
+      // Sort by barycenter to reduce crossings
+      barycenters.sort((a, b) => a.barycenter - b.barycenter)
+      
+      // Redistribute with even spacing
+      const totalNodes = barycenters.length
+      const currentPositions = barycenters.map(b => branchAssignments.get(b.nodeId)!.crossAxisPos)
+      const minPos = Math.min(...currentPositions)
+      const maxPos = Math.max(...currentPositions)
+      const range = maxPos - minPos
+      
+      // Use larger of: current spread or minimum spacing requirements
+      const minSpacing = 60
+      const minRequiredSpread = minSpacing * (totalNodes - 1)
+      const actualSpread = Math.max(range, minRequiredSpread)
+      
+      // Calculate starting position to center the group
+      const startPos = centerCrossAxis - actualSpread / 2
+      
+      // Assign new positions with even spacing
+      barycenters.forEach((item, index) => {
+        const assignment = branchAssignments.get(item.nodeId)!
+        const idealPos = startPos + (index * actualSpread / Math.max(totalNodes - 1, 1))
+        
+        // Blend current position with ideal position for smooth transition
+        const blendFactor = iter === iterations - 1 ? 0.8 : 0.5
+        assignment.crossAxisPos = assignment.crossAxisPos * (1 - blendFactor) + idealPos * blendFactor
+      })
+    }
+  }
+  
+  // Final centering pass - ensure each layer is centered
+  for (const [layer, nodeIds] of nodesByLayer.entries()) {
+    if (nodeIds.length <= 1) continue
+    
+    const positions = nodeIds.map((nodeId) => branchAssignments.get(nodeId)!.crossAxisPos)
+    const meanCenter = positions.reduce((a, b) => a + b, 0) / positions.length
+    const offset = centerCrossAxis - meanCenter
+    
+    for (const nodeId of nodeIds) {
+      const assignment = branchAssignments.get(nodeId)!
+      assignment.crossAxisPos += offset
+    }
+  }
+}
+
+/**
  * MAIN LAYOUT FUNCTION - Enforces strict layout rules
  */
 export function computeGraphLayout(
   nodes: GraphNode[],
   edges: GraphEdge[],
   canvasCrossAxisSize: number,
-  orientation: 'horizontal' | 'vertical' = 'horizontal'
+  orientation: 'horizontal' | 'vertical' = 'horizontal',
+  spacingMultiplier: number = 100,
+  autoBalance: boolean = true
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
   const goalNode = nodes.find((node) => node.id === 'goal') || nodes.find((node) => node.isGoal)
@@ -199,6 +328,16 @@ export function computeGraphLayout(
   
   const maxLayer = nonGoalLayers.length > 0 ? Math.max(...nonGoalLayers) : 0
   const goalLayer = clampGoalLayer(Math.max(maxLayer + 1, MIN_GOAL_LAYER))
+  
+  // Calculate dynamic layer spacing based on total layers and user-controlled spacing
+  // Scale with power of 0.7 to give larger graphs significantly more spacing
+  const totalLayers = goalLayer + 1
+  const scaleFactor = Math.pow(totalLayers / 4, 0.7)
+  // Reduced base spacing from 85 to 60 to make graphs more compact by default
+  const baseSpacing = 60 * scaleFactor
+  
+  // Apply user spacing multiplier (50-300 range maps to 0.5-3x)
+  const dynamicLayerSpacing = Math.round(baseSpacing * (spacingMultiplier / 100))
   
   // Goal node is pinned at max layer, centered in cross axis
   const centerCrossAxis = safeCanvasSize / 2
@@ -265,7 +404,7 @@ export function computeGraphLayout(
       const closenessScore = parentPos === undefined
         ? 1
         : Math.max(0, 1 - Math.abs(candidate - parentPos) / (forwardConflictUnit * 4))
-      const score = closenessScore * 0.6 + edgeSpacingScore * 0.2 + globalSpacingScore * 0.2
+      const score = closenessScore * 0.3 + edgeSpacingScore * 0.4 + globalSpacingScore * 0.3
 
       if (score > bestScore) {
         bestScore = score
@@ -329,6 +468,11 @@ export function computeGraphLayout(
     })
   }
   
+  // Rebalance vertical positions to center deeper branches (if enabled)
+  if (autoBalance) {
+    rebalanceLayerPositions(nodes, edges, branchAssignments, centerCrossAxis, layerMap)
+  }
+  
   // Build layout nodes
   let farthestNodeId: string | undefined
   let farthestLayer = -Infinity
@@ -356,7 +500,7 @@ export function computeGraphLayout(
         layer: computedLayer,
       } as BranchAssignment)
     
-    const layerPos = computedLayer * FIXED_LAYER_SPACING
+    const layerPos = computedLayer * dynamicLayerSpacing
     const crossAxisPos = assignment.crossAxisPos
     const relativeCrossAxisPos = crossAxisPos - centerCrossAxis
 
@@ -364,7 +508,10 @@ export function computeGraphLayout(
     let targetY: number
 
     if (orientation === 'horizontal') {
-      targetX = layerPos
+      // Shift all nodes to the left by adding negative offset
+      // This makes the graph naturally appear more to the left when centered
+      // Use smaller offset (0.25 instead of 0.4) to position graph closer to center on mobile
+      targetX = layerPos - (goalLayer * dynamicLayerSpacing * 0.25)
       targetY = relativeCrossAxisPos
     } else {
       targetX = relativeCrossAxisPos

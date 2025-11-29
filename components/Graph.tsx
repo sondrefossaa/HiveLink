@@ -105,6 +105,8 @@ export default function Graph({
   goalWord,
   isComplete,
   winningPath,
+  graphSpacing,
+  layoutVersion = 0,
 }: GraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<any>(null)
@@ -156,9 +158,10 @@ export default function Graph({
       nodes, 
       edges, 
       orientation === 'horizontal' ? Math.max(dimensions.height, 480) : Math.max(dimensions.width, 350),
-      orientation
+      orientation,
+      graphSpacing
     ),
-    [nodes, edges, dimensions.height, dimensions.width, orientation]
+    [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion]
   )
 
   const startAnchor = useMemo(() => {
@@ -225,6 +228,81 @@ export default function Graph({
     
     return connectedNodeIds
   }, [edges, nodes])
+
+  // Compute edges on the path from start to goal-connected nodes
+  // Uses BFS (same as findPathToNode) to find the shortest path to each green node
+  const edgesOnGoalPath = useMemo(() => {
+    const pathEdges = new Set<string>()
+    
+    // If no nodes connect to goal, no edges should be green
+    if (nodesConnectedToGoal.size === 0) {
+      return pathEdges
+    }
+    
+    // Build adjacency list (forward direction for BFS) - same as findPathToNode
+    const adjacency = new Map<string, { targetId: string, edgeId: string }[]>()
+    edges.forEach((edge) => {
+      const sourceId = resolveId(edge.source)
+      const targetId = resolveId(edge.target)
+      if (sourceId && targetId && targetId !== 'goal') {
+        if (!adjacency.has(sourceId)) adjacency.set(sourceId, [])
+        adjacency.get(sourceId)!.push({ targetId, edgeId: edge.id })
+      }
+    })
+    
+    // For each goal-connected node, find the shortest path from start using BFS
+    nodesConnectedToGoal.forEach((goalNodeId) => {
+      // BFS to find shortest path from start to this goal-connected node
+      const visited = new Set<string>()
+      const parentEdge = new Map<string, string>() // nodeId -> edgeId that led to it
+      const parentNode = new Map<string, string>() // nodeId -> parentNodeId
+      const queue: string[] = ['start']
+      visited.add('start')
+      
+      while (queue.length > 0) {
+        const current = queue.shift()!
+        
+        if (current === goalNodeId) {
+          // Found the target - reconstruct path by following parent edges
+          let curr: string | undefined = goalNodeId
+          while (curr && curr !== 'start') {
+            const edgeId = parentEdge.get(curr)
+            if (edgeId) {
+              pathEdges.add(edgeId)
+            }
+            curr = parentNode.get(curr)
+          }
+          break
+        }
+        
+        const neighbors = adjacency.get(current) || []
+        for (const { targetId, edgeId } of neighbors) {
+          if (!visited.has(targetId)) {
+            visited.add(targetId)
+            parentEdge.set(targetId, edgeId)
+            parentNode.set(targetId, current)
+            queue.push(targetId)
+          }
+        }
+      }
+    })
+    
+    // Add edges that directly connect to goal node (from goal-connected nodes only)
+    edges.forEach((edge) => {
+      const sourceId = resolveId(edge.source)
+      const targetId = resolveId(edge.target)
+      // Edge TO goal from a goal-connected node
+      if (targetId === 'goal' && sourceId && nodesConnectedToGoal.has(sourceId)) {
+        pathEdges.add(edge.id)
+      }
+      // Edge FROM goal to a goal-connected node (reverse direction)
+      if (sourceId === 'goal' && targetId && nodesConnectedToGoal.has(targetId)) {
+        pathEdges.add(edge.id)
+      }
+    })
+    
+    return pathEdges
+  }, [edges, nodesConnectedToGoal])
 
   // Prepare graph data with layout positions
   const graphData = useMemo(() => {
@@ -467,26 +545,52 @@ export default function Graph({
   const hasInitializedRef = useRef(false)
   const hasInitialZoomRef = useRef(false)
 
-  // Handle initial graph render - zoom to fit after first frame
-  const handleRenderFrame = useCallback(() => {
+  // Handle initial camera positioning - position to show start node on left
+  useEffect(() => {
     if (hasInitializedRef.current) return
     if (!graphRef.current) return
+    if (nodes.length === 0) return
     
-    // Mark as initialized and set initial zoom to maximum zoom out
+    // Mark as initialized
     hasInitializedRef.current = true
     hasInitialZoomRef.current = true
-    // Set zoom level to 0 (maximum zoom out)
-    graphRef.current.zoom(0, 0)
+    
+    // Small delay to ensure graph is rendered
+    setTimeout(() => {
+      if (!graphRef.current) return
+      
+      // Get the graph's bounding box to understand the layout
+      const startNode = layout.nodeMeta.get(layout.startNodeId ?? '')
+      const goalNode = layout.nodeMeta.get(layout.goalNodeId ?? '')
+      
+      if (!startNode) return
+      
+      // Calculate the center point of the graph
+      const graphWidth = (goalNode?.targetX ?? layout.maxLayer * 150) - (startNode.targetX)
+      
+      // We want to position the camera so the start is on the left
+      // Center the camera at a point that puts the start node at ~20% from left edge
+      const targetCenterX = startNode.targetX + graphWidth * 0.3
+      
+      graphRef.current.centerAt(targetCenterX, 0, 1000)
+      
+      // Zoom out to show more of the graph (lower zoom = more visible area)
+      graphRef.current.zoom(0.6, 1000)
+    }, 100)
+  }, [nodes.length, dimensions.width, layout])
+
+  // Handle initial graph render
+  const handleRenderFrame = useCallback(() => {
+    // Just track pointer scale, don't manipulate camera here
+    if (!graphRef.current) return
+    const ctx = (graphRef.current as any).canvas?.().getContext('2d')
+    if (ctx) {
+      const transform = ctx.getTransform()
+      pointerScaleRef.current = transform.a
+    }
   }, [])
 
-  // Auto-zoom to fit graph (skip on initial load - handled by onRenderFramePost)
-  useEffect(() => {
-    if (!graphRef.current || nodes.length < 2) return
-    if (!hasInitializedRef.current) return // Skip initial load
-    graphRef.current.zoomToFit(500, 60)
-  }, [dimensions.width, dimensions.height, layout.maxLayer, nodes.length])
-
-  // Center on selected node or frontier (skip on initial load and initial zoom)
+  // Center on selected node only (not on frontier changes)
   useEffect(() => {
     if (!graphRef.current) return
     if (!hasInitializedRef.current) return // Skip initial load
@@ -495,12 +599,11 @@ export default function Graph({
       hasInitialZoomRef.current = false
       return
     }
-    const anchorId = selectedNodeId ?? layout.farthestNodeId ?? layout.startNodeId
-    if (!anchorId) return
-    const anchorNode = layout.nodeMeta.get(anchorId)
+    if (!selectedNodeId) return // Only center when user clicks a node
+    const anchorNode = layout.nodeMeta.get(selectedNodeId)
     if (!anchorNode) return
     graphRef.current.centerAt(anchorNode.targetX, anchorNode.targetY, 600)
-  }, [selectedNodeId, layout.farthestNodeId, layout.startNodeId, layout.goalLayer, layout.nodeMeta])
+  }, [selectedNodeId, layout.nodeMeta])
 
   const handleNodeClick = useCallback(
     (nodeObj: object) => {
@@ -825,62 +928,26 @@ export default function Graph({
         const dirX = dx / distance
         const dirY = dy / distance
 
-        // Offset start/end points using node radii so the curve leaves from the hexagon edge
+        // Offset start/end points using node radii so the line leaves from the hexagon edge
         startX = source.x + dirX * sourceRadius
         startY = source.y + dirY * sourceRadius
         endX = target.x - dirX * targetRadius
         endY = target.y - dirY * targetRadius
 
         ctx.moveTo(startX, startY)
+        ctx.lineTo(endX, endY)
 
-        // Curved bezier path for nodes on different layers
-        const paddedDx = endX - startX
-        const paddedDy = endY - startY
-        const paddedDistance = Math.sqrt(paddedDx * paddedDx + paddedDy * paddedDy) || 1
-        const paddedDirX = paddedDx / paddedDistance
-        const paddedDirY = paddedDy / paddedDistance
-
-        if (isFlatToStart) {
-          controlX = (startX + endX) / 2
-          controlY = (startY + endY) / 2
-          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
-        } else {
-          const curveStrength = computeCurveStrength(0.4)
-          const perpX = -paddedDirY * curveDirection
-          const perpY = paddedDirX * curveDirection
-          const horizontalOffset = perpX * paddedDistance * curveStrength
-          const verticalOffset = perpY * paddedDistance * curveStrength
-          controlX = (startX + endX) / 2 + horizontalOffset
-          controlY = (startY + endY) / 2 + verticalOffset
-          ctx.quadraticCurveTo(controlX, controlY, endX, endY)
-        }
+        controlX = (startX + endX) / 2
+        controlY = (startY + endY) / 2
       } else {
         ctx.moveTo(startX, startY)
-
-        if (sameLayer) {
-          ctx.lineTo(endX, endY)
-          controlX = (startX + endX) / 2
-          controlY = (startY + endY) / 2
-        } else {
-          if (isFlatToStart) {
-            controlX = (source.x + target.x) / 2
-            controlY = (source.y + target.y) / 2
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY)
-          } else {
-            const curveStrength = computeCurveStrength(0.15)
-            const perpX = (-dy / distance) * curveDirection
-            const perpY = (dx / distance) * curveDirection
-            const horizontalOffset = perpX * distance * curveStrength
-            const verticalOffset = perpY * distance * curveStrength
-            controlX = (source.x + target.x) / 2 + horizontalOffset
-            controlY = (source.y + target.y) / 2 + verticalOffset
-            ctx.quadraticCurveTo(controlX, controlY, endX, endY)
-          }
-        }
+        ctx.lineTo(endX, endY)
+        controlX = (startX + endX) / 2
+        controlY = (startY + endY) / 2
       }
 
       // Dash stapled edges (non-winning) so all vertical connections look consistent
-      if ((isSideLineageEdge || isStapleEdge) && !link.isWinning) {
+      if (isStapleEdge && !link.isWinning) {
         ctx.setLineDash([12 / globalScale, 10 / globalScale])
       } else {
         ctx.setLineDash([])
@@ -889,11 +956,18 @@ export default function Graph({
       // Create gradient for edge color (use padded points for side branches)
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
       
+      // Check if this edge is on the path from start to goal
+      const edgeOnGoalPath = edgesOnGoalPath.has(link.id)
+      
       if (link.isWinning && isComplete) {
-        // Winning path: animated golden glow
+        // Winning path after completion: animated golden glow
         const pulse = 0.7 + 0.3 * Math.sin(winningPulseRef.current * Math.PI * 2)
         gradient.addColorStop(0, `rgba(255, 215, 130, ${pulse})`)
         gradient.addColorStop(1, `rgba(244, 201, 89, ${pulse})`)
+      } else if (edgeOnGoalPath || link.isWinning) {
+        // Edges on the path from start to goal (or winning edges before completion): green
+        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.8)')
+        gradient.addColorStop(1, 'rgba(74, 222, 128, 0.8)')
       } else if (isSideLineageEdge || isStapleEdge) {
         // Side or stapled branch: dimmer
         gradient.addColorStop(0, 'rgba(244, 180, 0, 0.45)')
@@ -941,7 +1015,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [isComplete, startAnchorPosition, orientation]
+    [isComplete, startAnchorPosition, orientation, edgesOnGoalPath]
   )
 
   return (

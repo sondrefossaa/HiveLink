@@ -104,9 +104,15 @@ export default function TopBar({
 
               <div className="flex items-center gap-2 text-sm">
                 {isDaily ? (
-                  <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
-                    🐝 {currentStreak} day streak
-                  </span>
+                  <>
+                    <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
+                      🐝 {currentStreak} day streak
+                    </span>
+                    <div className="flex md:hidden items-center gap-1.5">
+                      <span className="text-gray-400">Hello,</span>
+                      <PlayerNameInput className="text-sm" />
+                    </div>
+                  </>
                 ) : (
                   <span className="bg-hive-yellow/10 text-hive-yellow px-3 py-1 rounded-full font-medium">
                     Practice
@@ -269,12 +275,6 @@ export default function TopBar({
 
           {/* Mobile Controls */}
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
-            {/* Player Name - Mobile */}
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-gray-400 text-xs">Hello,</span>
-              <PlayerNameInput className="text-xs" />
-            </div>
-
             <div className="flex items-center justify-between gap-3">
               <motion.div
                 initial={{ opacity: 0, y: -6 }}

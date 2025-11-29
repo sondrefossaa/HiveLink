@@ -34,6 +34,8 @@ export interface GraphProps {
   goalWord: string;
   isComplete: boolean;
   winningPath: string[];
+  graphSpacing: number;
+  layoutVersion?: number;
 }
 
 // Share Types

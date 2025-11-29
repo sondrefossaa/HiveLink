@@ -53,6 +53,8 @@ export default function Game() {
   const [showGiveUp, setShowGiveUp] = useState(false)
   const [newPathToast, setNewPathToast] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
+  const [graphSpacing, setGraphSpacing] = useState(100)
+  const [layoutVersion, setLayoutVersion] = useState(0)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
   const prevPathCountRef = useRef(0)
   const hasShownVictoryRef = useRef(false)
@@ -187,6 +189,22 @@ export default function Game() {
     setShowGiveUp(false)
   }, [gameState])
 
+  // Handle layout refresh
+  const handleRefreshLayout = useCallback(() => {
+    setLayoutVersion((v) => v + 1)
+  }, [])
+
+  // Auto-trigger layout rebalance when nodes are added (after initial load)
+  const prevNodeCountRef = useRef(gameState.nodes.length)
+  useEffect(() => {
+    const currentNodeCount = gameState.nodes.length
+    if (currentNodeCount > prevNodeCountRef.current && prevNodeCountRef.current > 0) {
+      // New node was added - trigger rebalance
+      setLayoutVersion((v) => v + 1)
+    }
+    prevNodeCountRef.current = currentNodeCount
+  }, [gameState.nodes.length])
+
   // Loading state
   if (puzzleLoading) {
     return (
@@ -265,7 +283,7 @@ export default function Game() {
       {/* Main game area */}
       <main className="flex-1 pt-16 pb-32 relative">
         {/* Graph container */}
-        <div className="absolute inset-0 pb-32 pt-44 lg:pt-16 transition-[padding] duration-300 ease-in-out">
+        <div className="absolute inset-0 pb-32 pt-24 lg:pt-16 transition-[padding] duration-300 ease-in-out">
           {gameState.nodes.length > 0 ? (
             <Graph
               nodes={gameState.nodes}
@@ -275,6 +293,8 @@ export default function Game() {
               goalWord={puzzle.goalWord}
               isComplete={gameState.isComplete}
               winningPath={gameState.winningPath}
+              graphSpacing={graphSpacing}
+              layoutVersion={layoutVersion}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -298,12 +318,14 @@ export default function Game() {
 
         {/* Mini map for large graphs */}
         {gameState.nodes.length > 5 && (
-          <MiniMap
-            nodes={gameState.nodes}
-            edges={gameState.edges}
-            selectedNodeId={gameState.selectedNodeId}
-            onNodeClick={gameState.selectNode}
-          />
+          <div className="hidden sm:block">
+            <MiniMap
+              nodes={gameState.nodes}
+              edges={gameState.edges}
+              selectedNodeId={gameState.selectedNodeId}
+              onNodeClick={gameState.selectNode}
+            />
+          </div>
         )}
 
         {/* Start/Goal labels */}
@@ -341,6 +363,9 @@ export default function Game() {
           isDisabled={gameState.isComplete && !gameState.allowExploration}
           error={gameState.error}
           selectedNode={selectedNode}
+          graphSpacing={graphSpacing}
+          onGraphSpacingChange={setGraphSpacing}
+          onRefreshLayout={handleRefreshLayout}
         />
       </div>
 
