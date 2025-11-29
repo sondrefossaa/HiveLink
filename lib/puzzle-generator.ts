@@ -497,35 +497,14 @@ function attemptSeededBuildChain(
  * Uses a seeded random number generator to ensure the same puzzle
  * is generated for the same date, even across different servers.
  * 
- * Uses the same merged environment as medium practice puzzles:
- * database words + baked-in canonical words.
+ * Uses only the canonical/common compound words (from compound-words.json)
+ * to ensure daily puzzles use familiar, recognizable words.
+ * Step length is medium (6-7 steps) for a good challenge.
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
-  // Merge provided word entries with the baked-in canonical words,
-  // matching the behavior of medium practice puzzles
-  let environment: WordEnvironment
-
-  if (options.wordEntries && options.wordEntries.length > 0) {
-    const merged = new Map<string, WordEntry>()
-
-    // First add all baked-in canonical words
-    for (const entry of RAW_WORDS) {
-      merged.set(entry.word, entry)
-    }
-
-    // Then add/override with database entries
-    for (const entry of options.wordEntries) {
-      const normalized = toWordEntry(entry.word, entry.parts, 'runtime')
-      if (normalized) {
-        merged.set(normalized.word, normalized)
-      }
-    }
-
-    const entries = Array.from(merged.values())
-    environment = entries.length > 0 ? createEnvironment(entries) : DEFAULT_ENVIRONMENT
-  } else {
-    environment = DEFAULT_ENVIRONMENT
-  }
+  // Use only the canonical compound words (easy word pool) for daily puzzles
+  // This ensures familiar words like "butterfly", "moonshine", etc.
+  const environment = DEFAULT_ENVIRONMENT
 
   if (environment.words.length === 0) {
     throw new Error('No compound words available for daily puzzle generation')
