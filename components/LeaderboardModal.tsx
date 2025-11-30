@@ -107,6 +107,7 @@ export default function LeaderboardModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
           onClick={onClose}
+          style={{ touchAction: 'pan-x pan-y' }}
         >
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 

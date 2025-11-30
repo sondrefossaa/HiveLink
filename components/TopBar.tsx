@@ -78,6 +78,7 @@ export default function TopBar({
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       className="fixed top-0 left-0 right-0 z-40"
+      style={{ touchAction: 'pan-x pan-y' }}
     >
       <div className="bg-hive-dark/95 backdrop-blur-sm">
         <div className="w-full px-4 sm:px-6 py-3">

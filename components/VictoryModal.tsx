@@ -290,6 +290,7 @@ export default function VictoryModal({
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           onClick={onClose}
+          style={{ touchAction: 'pan-x pan-y' }}
         >
           {/* Backdrop */}
           <motion.div

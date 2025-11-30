@@ -293,7 +293,7 @@ export default function Game() {
       />
 
       {/* Main game area */}
-      <main className="flex-1 pt-16 pb-32 relative">
+      <main className="flex-1 pt-16 pb-32 relative" style={{ touchAction: 'pan-x pan-y' }}>
         {/* Graph container */}
         <div className="absolute inset-0 pb-32 pt-24 lg:pt-16 transition-[padding] duration-300 ease-in-out">
           {gameState.nodes.length > 0 ? (

@@ -164,6 +164,17 @@ export default function Graph({
     [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion]
   )
 
+  // Calculate dynamic max zoom based on graph size
+  // Smaller graphs can zoom in more for better detail viewing
+  const maxZoom = useMemo(() => {
+    const nodeCount = nodes.length
+    if (nodeCount <= 5) return 8      // Very small graphs: 8x zoom
+    if (nodeCount <= 10) return 6      // Small graphs: 6x zoom
+    if (nodeCount <= 20) return 5      // Medium-small graphs: 5x zoom
+    if (nodeCount <= 30) return 4      // Medium graphs: 4x zoom
+    return 3                           // Large graphs: 3x zoom (default)
+  }, [nodes.length])
+
   const startAnchor = useMemo(() => {
     if (!layout.startNodeId) return null
     return layout.nodeMeta.get(layout.startNodeId) ?? null
@@ -254,8 +265,14 @@ export default function Graph({
       }
 
       // CRITICAL: Pin both axis positions so forces only smooth transitions
-      base.fx = node.targetX
-      base.fy = node.targetY
+      // For start/goal nodes, always pin them - they should never move
+      if (node.isStart || (node.isGoal && !node.isCompleted)) {
+        base.fx = node.targetX
+        base.fy = node.targetY
+      } else {
+        base.fx = node.targetX
+        base.fy = node.targetY
+      }
 
       if (base.fx === null) base.fx = node.targetX
       if (base.fy === null) base.fy = node.targetY
@@ -414,8 +431,14 @@ export default function Graph({
         const data = fg.graphData?.()
         if (data?.nodes) {
           data.nodes.forEach((node) => {
-            node.fx = node.targetX
-            node.fy = node.targetY
+            // Always pin start/goal nodes to their target positions
+            if (node.isStart || (node.isGoal && !node.isCompleted)) {
+              node.fx = node.targetX
+              node.fy = node.targetY
+            } else {
+              node.fx = node.targetX
+              node.fy = node.targetY
+            }
           })
         }
       }, SIMULATION_DURATION_MS)
@@ -427,6 +450,37 @@ export default function Graph({
     const timer = setTimeout(configureForces, 100)
     return () => clearTimeout(timer)
   }, [configureForces, graphData.nodes.length, graphData.links.length])
+
+  // Continuously pin start/goal nodes to their target positions
+  useEffect(() => {
+    if (!graphRef.current) return
+    
+    const pinStartGoalNodes = () => {
+      const fg = graphRef.current as (ForceGraphMethods & {
+        graphData?: () => { nodes: ForceLayoutNode[] }
+      }) | null
+      if (!fg) return
+      
+      const data = fg.graphData?.()
+      if (data?.nodes) {
+        data.nodes.forEach((node) => {
+          // Always pin start/goal nodes - they should never move
+          if (node.isStart || (node.isGoal && !node.isCompleted)) {
+            node.fx = node.targetX
+            node.fy = node.targetY
+            // Also directly set position to prevent any drift
+            if (typeof node.x === 'number') node.x = node.targetX
+            if (typeof node.y === 'number') node.y = node.targetY
+          }
+        })
+      }
+    }
+    
+    // Pin nodes on every frame to ensure they stay locked
+    const interval = setInterval(pinStartGoalNodes, 16) // ~60fps
+    
+    return () => clearInterval(interval)
+  }, [graphData.nodes])
 
   // Cleanup timers
   useEffect(() => {
@@ -522,6 +576,85 @@ export default function Graph({
       pointerScaleRef.current = transform.a
     }
   }, [])
+
+  // Prevent browser zoom when graph is at zoom limits
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const MIN_ZOOM = 0.25
+    const MAX_ZOOM = maxZoom
+    const ZOOM_TOLERANCE = 0.01 // Small tolerance to account for floating point precision
+
+    const handleWheel = (e: WheelEvent) => {
+      const currentZoom = pointerScaleRef.current
+      const isZoomingIn = e.deltaY < 0
+      const isZoomingOut = e.deltaY > 0
+
+      // Prevent browser zoom if graph is at limits
+      if (
+        (isZoomingIn && currentZoom >= MAX_ZOOM - ZOOM_TOLERANCE) ||
+        (isZoomingOut && currentZoom <= MIN_ZOOM + ZOOM_TOLERANCE)
+      ) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+
+    const handleTouchStart = (e: TouchEvent) => {
+      // Only prevent if we have two touches (pinch gesture)
+      if (e.touches.length === 2) {
+        const currentZoom = pointerScaleRef.current
+        // Store initial touches to determine zoom direction
+        const touch1 = e.touches[0]
+        const touch2 = e.touches[1]
+        const initialDistance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY
+        )
+        
+        // Store for use in touchmove
+        ;(container as any).__initialPinchDistance = initialDistance
+        ;(container as any).__initialZoom = currentZoom
+      }
+    }
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const currentZoom = (container as any).__initialZoom ?? pointerScaleRef.current
+        const touch1 = e.touches[0]
+        const touch2 = e.touches[1]
+        const currentDistance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY
+        )
+        const initialDistance = (container as any).__initialPinchDistance ?? currentDistance
+        
+        // Determine if zooming in or out
+        const isZoomingIn = currentDistance > initialDistance
+        const isZoomingOut = currentDistance < initialDistance
+
+        // Prevent browser zoom if graph is at limits
+        if (
+          (isZoomingIn && currentZoom >= MAX_ZOOM - ZOOM_TOLERANCE) ||
+          (isZoomingOut && currentZoom <= MIN_ZOOM + ZOOM_TOLERANCE)
+        ) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }
+    }
+
+    container.addEventListener('wheel', handleWheel, { passive: false })
+    container.addEventListener('touchstart', handleTouchStart, { passive: true })
+    container.addEventListener('touchmove', handleTouchMove, { passive: false })
+
+    return () => {
+      container.removeEventListener('wheel', handleWheel)
+      container.removeEventListener('touchstart', handleTouchStart)
+      container.removeEventListener('touchmove', handleTouchMove)
+    }
+  }, [maxZoom])
 
   // Center on selected node only (not on frontier changes)
   useEffect(() => {
@@ -722,16 +855,17 @@ export default function Graph({
 
       // Draw text with perfect readability
       const label = node.word.length > 14 ? `${node.word.slice(0, 12)}…` : node.word
-      // Scale font proportionally to node size (size is already zoom-compensated)
-      const fontSize = Math.max(size * 0.45, 8)
+      // Scale text proportionally to the rendered node size (which already accounts for zoom)
+      // This makes text scale the same way as the nodes
+      const fontSize = size * 0.4
 
       ctx.save()
       ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       
-      // Text shadow/outline for readability
-      ctx.lineWidth = Math.max(fontSize * 0.2, 2)
+      // Text shadow/outline for readability - scale lineWidth proportionally with fontSize
+      ctx.lineWidth = fontSize * 0.2
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
       ctx.strokeText(label, x, y)
       
@@ -743,13 +877,13 @@ export default function Graph({
       if (isSelected && node.parts.length > 1) {
         ctx.save()
         const partsText = node.parts.join(' + ')
-        const partFontSize = Math.max(fontSize * 0.65, 6)
+        const partFontSize = fontSize * 0.65
         ctx.font = `500 ${partFontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'top'
         ctx.fillStyle = '#F4B400'
         ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)'
-        ctx.lineWidth = Math.max(partFontSize * 0.2, 1.5)
+        ctx.lineWidth = partFontSize * 0.2
         ctx.strokeText(partsText, x, y + size + partFontSize * 0.4)
         ctx.fillText(partsText, x, y + size + partFontSize * 0.4)
         ctx.restore()
@@ -950,8 +1084,9 @@ export default function Graph({
   return (
     <div
       ref={containerRef}
+      data-graph-container
       className="w-full h-full relative overflow-hidden bg-transparent touch-none"
-      style={{ minHeight: '400px' }}
+      style={{ minHeight: '400px', touchAction: 'pan-x pan-y pinch-zoom' }}
     >
       {typeof window !== 'undefined' && (
         <ForceGraph2D
@@ -968,6 +1103,10 @@ export default function Graph({
           onRenderFramePost={handleRenderFrame}
           nodePointerAreaPaint={(nodeObj, color, ctx) => {
             const node = nodeObj as ForceLayoutNode
+            // Prevent dragging start/goal nodes by setting pointer area to 0
+            if (node.isStart || (node.isGoal && !node.isCompleted)) {
+              return // Don't draw pointer area, preventing drag interaction
+            }
             const globalScale = pointerScaleRef.current || 1
             const radius = getPointerHitRadius(node, globalScale)
             ctx.fillStyle = color
@@ -978,7 +1117,7 @@ export default function Graph({
           enablePanInteraction
           enableZoomInteraction
           minZoom={0.25}
-          maxZoom={3}
+          maxZoom={maxZoom}
           d3VelocityDecay={0.5}
           d3AlphaDecay={0.02}
           cooldownTicks={0}

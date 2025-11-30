@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import { MotionPreferenceProvider } from '@/hooks/useMotionPreference'
+import ZoomPrevention from '@/components/ZoomPrevention'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -63,10 +64,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <head>
+        {/* Google Adsense */}
         <meta name="google-adsense-account" content="ca-pub-6391311831202615"></meta>
         <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6391311831202615"crossOrigin="anonymous"></script>
       </head>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
+        <ZoomPrevention />
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
       </body>
     </html>
