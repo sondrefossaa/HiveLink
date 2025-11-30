@@ -3,7 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
-import { forceCollide, forceManyBody, forceX, forceY } from 'd3-force'
+// D3 force imports removed - no forces needed since positions come from layout
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
 import { computeGraphLayout, FIXED_HORIZONTAL_SPACING } from '@/lib/graph-layout'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
@@ -41,15 +41,7 @@ interface ForceLayoutLink extends GraphEdge {
   isPrimary: boolean
 }
 
-const SIMULATION_DURATION_MS = 1100
-const CHARGE_STRENGTH = -520
-const LINK_DISTANCE_FORWARD = FIXED_HORIZONTAL_SPACING - 20
-const LINK_DISTANCE_SIDE = Math.round(FIXED_HORIZONTAL_SPACING * 0.65)
-const LINK_STRENGTH_FORWARD = 0.95
-const LINK_STRENGTH_SIDE = 0.35
-const COLLIDE_RADIUS_DEFAULT = 80
-const COLLIDE_RADIUS_ANCHORED = 95
-const COLLIDE_STRENGTH = 0.8
+// Force simulation constants removed - positions come from layout, no forces needed
 // Reduced pointer radius to prevent overlap (40px radius = 80px diameter on screen)
 const POINTER_RADIUS_DEFAULT = 40
 const POINTER_RADIUS_ANCHORED = 60
@@ -62,8 +54,7 @@ const resolveId = (value: string | GraphNode | undefined): string | undefined =>
   return typeof value === 'string' ? value : value.id
 }
 
-const getDynamicCollideRadius = (node: ForceLayoutNode): number =>
-  node.isGoal || node.isStart ? COLLIDE_RADIUS_ANCHORED : COLLIDE_RADIUS_DEFAULT
+// getDynamicCollideRadius removed - no collision forces needed
 
 const getPointerHitRadius = (node: ForceLayoutNode, globalScale: number): number => {
   const base = node.isGoal || node.isStart ? POINTER_RADIUS_ANCHORED : POINTER_RADIUS_DEFAULT
@@ -110,7 +101,6 @@ function Graph({
 }: GraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<any>(null)
-  const settleTimerRef = useRef<number | null>(null)
   const winningPulseRef = useRef(0)
   const animationFrameRef = useRef<number | null>(null)
   const draggedNodeRef = useRef<string | null>(null)
@@ -302,18 +292,13 @@ function Graph({
         parentId: node.parentId,
       }
 
-      // CRITICAL: Pin both axis positions so forces only smooth transitions
-      // For start/goal nodes, always pin them - they should never move
-      if (node.isStart || (node.isGoal && !node.isCompleted)) {
-        base.fx = node.targetX
-        base.fy = node.targetY
-      } else {
-        base.fx = node.targetX
-        base.fy = node.targetY
-      }
-
-      if (base.fx === null) base.fx = node.targetX
-      if (base.fy === null) base.fy = node.targetY
+      // Set exact positions - no forces, positions are from layout
+      base.x = node.targetX
+      base.y = node.targetY
+      base.fx = node.targetX
+      base.fy = node.targetY
+      base.vx = 0
+      base.vy = 0
 
       return base
     })
@@ -436,99 +421,67 @@ function Graph({
     }
   }, [layout, edges, winningEdgeIds])
 
-  // Configure strict simulation so forces only smooth jitter, never pick layout
+  // Disable all forces - positions are determined by layout, no simulation needed
   const configureForces = useCallback(() => {
     const fg = graphRef.current as (ForceGraphMethods & {
       d3AlphaTarget?: (alpha: number) => ForceGraphMethods
-      d3ReheatSimulation?: () => void
       graphData?: () => { nodes: ForceLayoutNode[] }
       d3Force?: (forceName: string, force?: unknown) => any
     }) | null
 
     if (!fg) return
 
-    const linkForce = fg.d3Force?.('link')
-    if (linkForce) {
-      linkForce
-        .distance((link: ForceLayoutLink) =>
-          link.branchType === 'side' ? LINK_DISTANCE_SIDE : LINK_DISTANCE_FORWARD
-        )
-        .strength((link: ForceLayoutLink) =>
-          link.branchType === 'side' ? LINK_STRENGTH_SIDE : LINK_STRENGTH_FORWARD
-        )
-    }
-
-    fg.d3Force?.(
-      'charge',
-      forceManyBody<ForceLayoutNode>()
-        .strength(CHARGE_STRENGTH)
-        .distanceMin(80)
-        .distanceMax(1400)
-    )
-
-    fg.d3Force?.(
-      'x',
-      forceX<ForceLayoutNode>((node) => node.targetX).strength(orientation === 'horizontal' ? 1.2 : 0.9)
-    )
-
-    fg.d3Force?.(
-      'y',
-      forceY<ForceLayoutNode>((node) => node.targetY).strength(orientation === 'horizontal' ? 0.9 : 1.2)
-    )
-
-    fg.d3Force?.(
-      'collide',
-      forceCollide<ForceLayoutNode>((node) => getDynamicCollideRadius(node)).strength(
-        COLLIDE_STRENGTH
-      )
-    )
-
+    // Remove all forces completely
+    fg.d3Force?.('link', null)
+    fg.d3Force?.('charge', null)
+    fg.d3Force?.('x', null)
+    fg.d3Force?.('y', null)
+    fg.d3Force?.('collide', null)
     fg.d3Force?.('center', null)
 
+    // Set alpha to 0 immediately to stop simulation completely
     if ('d3AlphaTarget' in fg) {
-      // Clear any existing settle timer
-      if (settleTimerRef.current) {
-        clearTimeout(settleTimerRef.current)
-        settleTimerRef.current = null
-      }
+      ;(fg as any).d3AlphaTarget(0)
+    }
 
-      // Pin all nodes to target positions immediately
-      const data = fg.graphData?.()
-      if (data?.nodes) {
-        data.nodes.forEach((node) => {
-          node.fx = node.targetX
-          node.fy = node.targetY
-        })
-      }
+    // Pin all nodes to exact target positions immediately
+    const data = fg.graphData?.()
+    if (data?.nodes) {
+      data.nodes.forEach((node) => {
+        // Set exact position (not just fixed position)
+        node.x = node.targetX
+        node.y = node.targetY
+        node.fx = node.targetX
+        node.fy = node.targetY
+        // Clear velocity to prevent any movement
+        node.vx = 0
+        node.vy = 0
+      })
+    }
+  }, [])
 
-      // Allow brief settling for smooth transitions, then stop simulation completely
-      // Reduced duration since nodes are already at target positions
-      ;(fg as any).d3AlphaTarget(0.3) // Lower initial alpha
-      ;(fg as any).d3ReheatSimulation?.()
-
-      // Stop simulation quickly after brief settling period
-      settleTimerRef.current = window.setTimeout(() => {
-        if ('d3AlphaTarget' in fg) {
-          ;(fg as any).d3AlphaTarget(0) // Stop simulation completely
-        }
-        
-        // Ensure all nodes remain pinned
-        const finalData = fg.graphData?.()
-        if (finalData?.nodes) {
-          finalData.nodes.forEach((node) => {
+  // Ensure nodes stay at exact positions when graph data changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      configureForces()
+      // Continuously ensure nodes are at exact positions (no simulation running)
+      const fg = graphRef.current as (ForceGraphMethods & {
+        graphData?: () => { nodes: ForceLayoutNode[] }
+      }) | null
+      if (fg) {
+        const data = fg.graphData?.()
+        if (data?.nodes) {
+          data.nodes.forEach((node) => {
+            node.x = node.targetX
+            node.y = node.targetY
             node.fx = node.targetX
             node.fy = node.targetY
+            node.vx = 0
+            node.vy = 0
           })
         }
-        
-        settleTimerRef.current = null
-      }, Math.min(SIMULATION_DURATION_MS, 300)) // Faster settling: 300ms max
-    }
-  }, [orientation])
-
-  // Reconfigure forces when graph data changes
-  useEffect(() => {
-    const timer = setTimeout(configureForces, 100)
+      }
+    }, 50)
     return () => clearTimeout(timer)
   }, [configureForces, graphData.nodes.length, graphData.links.length])
 
@@ -538,10 +491,6 @@ function Graph({
   // Cleanup timers
   useEffect(() => {
     return () => {
-      if (settleTimerRef.current) {
-        clearTimeout(settleTimerRef.current)
-        settleTimerRef.current = null
-      }
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
         animationFrameRef.current = null
@@ -762,24 +711,21 @@ function Graph({
       draggedNodeRef.current = node.id
     }
     
-    if (orientation === 'horizontal') {
-      // CRITICAL: Lock X position - node cannot move horizontally
+    if (orientationRef.current === 'horizontal') {
+      // Lock X position - node cannot move horizontally
       node.fx = node.targetX
-      if (typeof node.x === 'number') node.x = node.targetX
-      // Allow Y to move freely during drag
+      node.x = node.targetX
+      // Allow Y to move during drag
       node.fy = null
     } else {
-      // CRITICAL: Lock Y position - node cannot move vertically
+      // Lock Y position - node cannot move vertically
       node.fy = node.targetY
-      if (typeof node.y === 'number') node.y = node.targetY
-      // Allow X to move freely during drag
+      node.y = node.targetY
+      // Allow X to move during drag
       node.fx = null
     }
     
-    // Reheat simulation for smooth dragging
-    if (graphRef.current && 'd3ReheatSimulation' in graphRef.current) {
-      ;(graphRef.current as any).d3ReheatSimulation()
-    }
+    // No simulation to reheat - positions set directly
   }, [])
 
   // Handle node drag end - snap back to target position
@@ -798,30 +744,15 @@ function Graph({
       snapBackTimerRef.current = null
     }
     
-    // Re-enable forces to snap back smoothly
-    node.fx = node.targetX // Re-pin X
-    node.fy = node.targetY // Re-pin Y to snap back
+    // Immediately snap back to target position (no animation, no simulation)
+    node.x = node.targetX
+    node.y = node.targetY
+    node.fx = node.targetX
+    node.fy = node.targetY
+    node.vx = 0
+    node.vy = 0
     
-    // Reheat simulation to animate the snap-back
-    if (graphRef.current && 'd3ReheatSimulation' in graphRef.current) {
-      ;(graphRef.current as any).d3AlphaTarget(0.3)
-      ;(graphRef.current as any).d3ReheatSimulation()
-    }
-    
-    // After snap-back animation, ensure position is locked
-    snapBackTimerRef.current = window.setTimeout(() => {
-      if (node) {
-        node.fx = node.targetX
-        node.fy = node.targetY
-      }
-      
-      if (graphRef.current && 'd3AlphaTarget' in graphRef.current) {
-        ;(graphRef.current as any).d3AlphaTarget(0)
-      }
-      
-      snapBackTimerRef.current = null
-      refreshGraph()
-    }, 600) // Snap-back duration
+    refreshGraph()
   }, [refreshGraph])
 
   // Custom node rendering with hexagon shape
@@ -1232,8 +1163,8 @@ function Graph({
           enableZoomInteraction
           minZoom={0.25}
           maxZoom={maxZoom}
-          d3VelocityDecay={0.5}
-          d3AlphaDecay={0.02}
+          d3VelocityDecay={0}
+          d3AlphaDecay={1}
           cooldownTicks={0}
           warmupTicks={0}
         />
