@@ -47,3 +47,18 @@ model CompoundWord {
   @@map("compound_words")
 }
 
+model AdReward {
+  id          Int      @id @default(autoincrement())
+  playerId    String   @map("player_id")
+  rewardType  String   @map("reward_type") // 'hint', 'practice_unlimited', 'streak_protection', 'ad_free'
+  unlockedAt  DateTime @default(now()) @map("unlocked_at")
+  expiresAt   DateTime? @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  metadata    String?  // JSON string for additional data (e.g., hint count, practice puzzle count)
+
+  @@index([playerId])
+  @@index([rewardType])
+  @@index([expiresAt])
+  @@map("ad_rewards")
+}
+

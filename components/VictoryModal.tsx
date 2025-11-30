@@ -4,6 +4,8 @@ import { useEffect, useCallback, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import ShareButton from './ShareButton'
+import RewardedVideoAd from './RewardedVideoAd'
+import { useAdRewards } from '@/hooks/useAdRewards'
 import type { GameStats, PuzzleDifficulty, AverageStats } from '@/types'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
 import { getPlayerId } from '@/lib/player-id'
@@ -77,6 +79,8 @@ export default function VictoryModal({
   const [averageStats, setAverageStats] = useState<AverageStats | null>(null)
   const [loadingAverages, setLoadingAverages] = useState(false)
   const fetchedPuzzleRef = useRef<string | null>(null)
+  const [showPracticeAd, setShowPracticeAd] = useState(false)
+  const { rewards, unlockReward } = useAdRewards()
 
   // Get the first/best path for sharing
   const path = allPaths[0] || []
@@ -614,34 +618,61 @@ export default function VictoryModal({
                   difficulty={difficulty}
                 />
               </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { onClose(); onContinue(); }}
-                  className="flex-1 py-3 rounded-xl bg-hive-yellow hover:bg-hive-gold
-                            text-hive-dark font-medium transition-colors shadow-hive-glow
-                            flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
-                  Continue Playing
-                </button>
-                <button
-                  onClick={onTryAgain}
-                  className="flex-1 py-3 rounded-xl bg-hive-yellow/10 hover:bg-hive-yellow/20
-                            text-hive-yellow font-medium transition-colors border border-hive-yellow/30
-                            flex items-center justify-center gap-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Try Again
-                </button>
+              <div className="flex flex-col gap-3">
+                {!isDaily && !rewards?.hasPracticeUnlimited && (
+                  <button
+                    onClick={() => setShowPracticeAd(true)}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-hive-yellow/20 to-hive-gold/20 hover:from-hive-yellow/30 hover:to-hive-gold/30
+                              text-hive-yellow font-medium transition-colors border border-hive-yellow/30
+                              flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Watch Ad for Unlimited Practice
+                  </button>
+                )}
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { onClose(); onContinue(); }}
+                    className="flex-1 py-3 rounded-xl bg-hive-yellow hover:bg-hive-gold
+                              text-hive-dark font-medium transition-colors shadow-hive-glow
+                              flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                    Continue Playing
+                  </button>
+                  <button
+                    onClick={onTryAgain}
+                    className="flex-1 py-3 rounded-xl bg-hive-yellow/10 hover:bg-hive-yellow/20
+                              text-hive-yellow font-medium transition-colors border border-hive-yellow/30
+                              flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Try Again
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
         </motion.div>
       )}
+
+      {/* Practice unlimited ad modal */}
+      <RewardedVideoAd
+        rewardType="practice_unlimited"
+        isOpen={showPracticeAd}
+        onRewardUnlocked={() => {
+          setShowPracticeAd(false)
+          // Refresh rewards
+        }}
+        onClose={() => setShowPracticeAd(false)}
+      />
     </AnimatePresence>
   )
 }

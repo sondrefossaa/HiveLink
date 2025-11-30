@@ -47,6 +47,7 @@ export default function Game() {
     setDifficulty,
     generatePracticePuzzle,
     isGeneratingPractice,
+    hasUnlimitedPractice,
   } = usePuzzle()
   const gameState = useGameState(puzzle)
   const [showVictory, setShowVictory] = useState(false)
@@ -63,6 +64,17 @@ export default function Game() {
   const previousPuzzleDateRef = useRef<string | null>(null)
   const justSwitchedRef = useRef(false)
   const prevModeRef = useRef(mode)
+  const [hintValue, setHintValue] = useState<string | null>(null)
+  const [showHintToast, setShowHintToast] = useState(false)
+
+  // Handle hint received - autofill the input
+  const handleHintReceived = useCallback((hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => {
+    // Set the hint value to autofill the input
+    setHintValue(hint.suggestedWord)
+    // Show a toast notification
+    setShowHintToast(true)
+    setTimeout(() => setShowHintToast(false), 3000)
+  }, [])
 
   // Reset transient UI state when switching mode or puzzle/date changes
   useEffect(() => {
@@ -366,6 +378,11 @@ export default function Game() {
           graphSpacing={graphSpacing}
           onGraphSpacingChange={setGraphSpacing}
           onRefreshLayout={handleRefreshLayout}
+          onHintReceived={handleHintReceived}
+          goalWord={puzzle.goalWord}
+          nodes={gameState.nodes}
+          externalValue={hintValue}
+          onExternalValueSet={() => setHintValue(null)}
         />
       </div>
 
@@ -493,6 +510,26 @@ export default function Game() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
             New path discovered!
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hint applied toast */}
+      <AnimatePresence>
+        {showHintToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 
+                       bg-gradient-to-r from-blue-500 to-blue-600 
+                       text-white font-bold px-6 py-3 rounded-full
+                       shadow-lg shadow-blue-500/30 flex items-center gap-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            Hint applied! Word filled in.
           </motion.div>
         )}
       </AnimatePresence>

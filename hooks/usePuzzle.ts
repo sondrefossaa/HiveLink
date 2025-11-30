@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useAdRewards } from '@/hooks/useAdRewards'
 import type {
   DailyPuzzle,
   PracticePuzzle,
@@ -64,6 +65,7 @@ interface UsePuzzleResult {
   setDifficulty: (difficulty: PuzzleDifficulty) => void
   generatePracticePuzzle: () => Promise<void>
   isGeneratingPractice: boolean
+  hasUnlimitedPractice: boolean
 }
 
 function resolveClientTimeZone(): string {
@@ -87,6 +89,9 @@ function formatLocalDate(timeZone: string, date: Date = new Date()): string {
 }
 
 export function usePuzzle(): UsePuzzleResult {
+  const { rewards } = useAdRewards()
+  const hasUnlimitedPractice = rewards?.hasPracticeUnlimited ?? false
+  
   // Read URL params on first render (but don't clear yet)
   // Using a ref to store the initial params so they persist across strict mode double-mounting
   const initialParamsRef = useRef<SharedPuzzleParams | null | undefined>(undefined)
@@ -306,6 +311,7 @@ export function usePuzzle(): UsePuzzleResult {
     setDifficulty: handleDifficultyChange,
     generatePracticePuzzle,
     isGeneratingPractice: practiceLoading,
+    hasUnlimitedPractice,
   }
 }
 

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { GraphNode } from '@/types'
+import HintButton from './HintButton'
 
 interface InputBarProps {
   onSubmit: (word: string) => Promise<{ success: boolean; error?: string }>
@@ -13,6 +14,11 @@ interface InputBarProps {
   graphSpacing: number
   onGraphSpacingChange: (spacing: number) => void
   onRefreshLayout?: () => void
+  onHintReceived?: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
+  goalWord?: string
+  nodes?: GraphNode[]
+  externalValue?: string | null
+  onExternalValueSet?: () => void
 }
 
 export default function InputBar({
@@ -24,11 +30,36 @@ export default function InputBar({
   graphSpacing,
   onGraphSpacingChange,
   onRefreshLayout,
+  onHintReceived,
+  goalWord,
+  nodes,
+  externalValue,
+  onExternalValueSet,
 }: InputBarProps) {
   const [input, setInput] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const [shake, setShake] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Sync external value to input (for hints)
+  useEffect(() => {
+    if (externalValue !== undefined && externalValue !== null) {
+      const normalizedValue = externalValue.toLowerCase().replace(/[^a-z]/g, '')
+      if (normalizedValue !== input) {
+        setInput(normalizedValue)
+        // Focus the input when external value is set
+        setTimeout(() => {
+          if (inputRef.current) {
+            inputRef.current.focus()
+          }
+        }, 0)
+        // Notify parent that value was set (after a small delay to avoid conflicts)
+        setTimeout(() => {
+          onExternalValueSet?.()
+        }, 100)
+      }
+    }
+  }, [externalValue]) // Only depend on externalValue to avoid loops
 
   // Focus input on mount
   useEffect(() => {
@@ -164,6 +195,16 @@ export default function InputBar({
                        ${isDisabled ? 'border-hive-graphite' : 'border-hive-graphite focus-within:border-hive-yellow'}
                        ${displayError ? 'border-red-500/50' : ''}`}
             >
+              {/* Hint button - only show when not disabled and hint handler is available */}
+              {!isDisabled && onHintReceived && (
+                <HintButton
+          onHintReceived={onHintReceived}
+          className="hidden sm:flex"
+          nodes={nodes}
+          goalWord={goalWord}
+          selectedNodeId={selectedNode?.id || null}
+        />
+              )}
               <input
                 ref={inputRef}
                 autoFocus
