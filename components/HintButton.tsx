@@ -74,10 +74,18 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
   return (
     <>
       <motion.button
+        type="button"
         onClick={handleGetHint}
         disabled={disabled || loading}
         whileHover={{ scale: hasHint ? 1.05 : 1 }}
         whileTap={{ scale: 0.95 }}
+        onKeyDown={(e) => {
+          // Prevent Enter key from triggering the button
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.stopPropagation()
+          }
+        }}
         className={`px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 ${
           hasHint
             ? 'bg-hive-yellow hover:bg-hive-gold text-hive-dark'

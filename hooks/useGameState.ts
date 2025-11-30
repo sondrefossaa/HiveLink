@@ -18,8 +18,6 @@ import {
   isPuzzleCompleted,
   updatePlayerStats,
   getPlayerId,
-  getPlayerName,
-  clearGameState,
 } from '@/lib/player-id'
 
 interface SavedState {
@@ -60,32 +58,46 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [error, setError] = useState<string | null>(null)
   const [winningPath, setWinningPath] = useState<string[]>([])
   const [allPaths, setAllPaths] = useState<string[][]>([])
+  const allPathsRef = useRef<string[][]>([])
   const [startTime, setStartTime] = useState(() => Date.now())
   const [finalTimeElapsed, setFinalTimeElapsed] = useState<number | null>(null)
   const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
-  const [loadedPuzzleKey, setLoadedPuzzleKey] = useState<string | number | null>(null)
   const scoreSubmittedRef = useRef(false)
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    allPathsRef.current = allPaths
+  }, [allPaths])
 
-  // Helper to check if a path is unique (different set of words from start to end)
+  // Helper to check if a path has all unique words (no duplicates within path)
+  const hasUniqueWords = useCallback((path: string[]): boolean => {
+    const words = path.map(w => w.toLowerCase())
+    const uniqueWords = new Set(words)
+    return words.length === uniqueWords.size
+  }, [])
+
+  // Helper to check if a path is unique (exact sequence of words from start to end)
   const isUniquePath = useCallback((newPath: string[], existingPaths: string[][]): boolean => {
     if (newPath.length < 2) return false
-    // Get all words in path (including start and end) as a sorted set
-    const newWords = [...new Set(newPath.map(w => w.toLowerCase()))].sort().join('|')
+    
+    // First ensure the path itself has no duplicate words
+    if (!hasUniqueWords(newPath)) {
+      return false
+    }
+    
+    // Compare paths by their exact sequence (all words must match in order)
+    const newPathNormalized = newPath.map(w => w.toLowerCase()).join('|')
     return !existingPaths.some(p => {
-      const existingWords = [...new Set(p.map(w => w.toLowerCase()))].sort().join('|')
-      return existingWords === newWords
+      const existingPathNormalized = p.map(w => w.toLowerCase()).join('|')
+      return existingPathNormalized === newPathNormalized
     })
-  }, [])
+  }, [hasUniqueWords])
 
   // Initialize game with start and goal nodes
   useEffect(() => {
     if (!puzzle) return
 
-    // Use a persistence key for both daily and practice
-    const practiceKey = !puzzle.isDaily
-      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
-      : undefined
-    const persistenceKey = puzzle.isDaily ? puzzle.date : practiceKey
+    const persistenceKey = puzzle.isDaily ? puzzle.date : undefined
 
     // Check for saved state (daily puzzles only)
     const savedState = persistenceKey
@@ -93,107 +105,79 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       : null
     
     if (savedState && savedState.nodes && savedState.nodes.length > 0) {
-      const savedStart = savedState.nodes.find(n => n.isStart)
-      const savedGoal = savedState.nodes.find(n => n.id === 'goal')
-
-      const startMatches = savedStart?.word?.toLowerCase() === puzzle.startWord.toLowerCase()
-      const goalMatches = savedGoal?.word?.toLowerCase() === puzzle.goalWord.toLowerCase()
-
-      if (!startMatches || !goalMatches) {
-        // Clear mismatched saved state for this key
-        if (persistenceKey) {
-          clearGameState(persistenceKey)
-        }
-      } else {
-        setNodes(savedState.nodes)
-        setEdges(savedState.edges || [])
-        setWordsUsed(savedState.wordsUsed || 0)
-        setMaxLayer(savedState.maxLayer || 0)
-        setIsComplete(savedState.isComplete || false)
+      setNodes(savedState.nodes)
+      setEdges(savedState.edges || [])
+      setWordsUsed(savedState.wordsUsed || 0)
+      setMaxLayer(savedState.maxLayer || 0)
+      setIsComplete(savedState.isComplete || false)
+      
+      // Restore timing data
+      if (savedState.startTime) {
+        setStartTime(savedState.startTime)
+      }
+      if (savedState.finalTimeElapsed) {
+        setFinalTimeElapsed(savedState.finalTimeElapsed)
+      }
+      
+      // Mark as restored complete so we don't auto-show victory modal
+      if (savedState.isComplete) {
+        setWasRestoredComplete(true)
+        setAllowExploration(true) // Allow exploration on restored complete games
         
-        // Restore timing data
-        if (savedState.startTime) {
-          setStartTime(savedState.startTime)
-        }
-        if (savedState.finalTimeElapsed) {
-          setFinalTimeElapsed(savedState.finalTimeElapsed)
+        // Find the winning word node (the one that connected to the goal)
+        // It's the node with isGoal=true that isn't the original goal node, 
+        // OR find the node that has an edge to the goal
+        const goalNode = savedState.nodes.find(n => n.id === 'goal')
+        const edges = savedState.edges || []
+        
+        // Find the node that connects to the goal (has an edge with goal as source or target)
+        let winningNodeId: string | undefined
+        for (const edge of edges) {
+          const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
+          const targetId = typeof edge.target === 'string' ? edge.target : edge.target
+          if (sourceId === 'goal' || targetId === 'goal') {
+            winningNodeId = sourceId === 'goal' ? targetId : sourceId
+            break
+          }
         }
         
-        // Mark as restored complete so we don't auto-show victory modal
-        if (savedState.isComplete) {
-          setWasRestoredComplete(true)
-          setAllowExploration(true) // Allow exploration on restored complete games
-          
-          // Find the winning word node (the one that connected to the goal)
-          // It's the node with isGoal=true that isn't the original goal node, 
-          // OR find the node that has an edge to the goal
-          const goalNode = savedState.nodes.find(n => n.id === 'goal')
-          const edges = savedState.edges || []
-          
-          // Find the node that connects to the goal (has an edge with goal as source or target)
-          let winningNodeId: string | undefined
-          for (const edge of edges) {
-            const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
-            const targetId = typeof edge.target === 'string' ? edge.target : edge.target
-            if (sourceId === 'goal' || targetId === 'goal') {
-              winningNodeId = sourceId === 'goal' ? targetId : sourceId
-              break
-            }
+        // If no edge to goal found, find the highest layer completed node
+        if (!winningNodeId) {
+          const completedNodes = savedState.nodes
+            .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
+            .sort((a, b) => b.layer - a.layer)
+          if (completedNodes.length > 0) {
+            winningNodeId = completedNodes[0].id
           }
-          
-          // If no edge to goal found, find the highest layer completed node
-          if (!winningNodeId) {
-            const completedNodes = savedState.nodes
-              .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
-              .sort((a, b) => b.layer - a.layer)
-            if (completedNodes.length > 0) {
-              winningNodeId = completedNodes[0].id
-            }
+        }
+        
+        if (winningNodeId) {
+          const path = findPathToNode(winningNodeId, savedState.nodes, edges)
+          // Add the goal word at the end if not already there
+          if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
+            path.push(goalNode.word)
           }
-          
-          if (winningNodeId) {
-            const path = findPathToNode(winningNodeId, savedState.nodes, edges)
-            // Add the goal word at the end if not already there
-            if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
-              path.push(goalNode.word)
-            }
+          // Validate path has all unique words before restoring
+          if (hasUniqueWords(path)) {
             setWinningPath(path)
           }
-          
-          // Restore all paths if saved
-          if (savedState.allPaths && savedState.allPaths.length > 0) {
-            setAllPaths(savedState.allPaths)
+        }
+        
+        // Restore all paths if saved, filtering out any with duplicate words
+        if (savedState.allPaths && savedState.allPaths.length > 0) {
+          const validPaths = savedState.allPaths.filter(p => hasUniqueWords(p))
+          if (validPaths.length > 0) {
+            setAllPaths(validPaths)
+            allPathsRef.current = validPaths // Update ref immediately
           }
         }
-        setLoadedPuzzleKey(persistenceKey || puzzle.id)
-        return
       }
-    }
-
-    const resolveParts = (word: string): string[] => {
-      const normalized = word.toLowerCase()
-      
-      // Check wordParts map first (works for both daily and practice)
-      const mapParts = puzzle.wordParts?.[normalized]
-      if (mapParts && mapParts.length > 0) {
-        return [...mapParts]
-      }
-
-      // Check explicit start/goal parts
-      if (normalized === puzzle.startWord.toLowerCase() && puzzle.startParts?.length) {
-        return [...puzzle.startParts]
-      }
-
-      if (normalized === puzzle.goalWord.toLowerCase() && puzzle.goalParts?.length) {
-        return [...puzzle.goalParts]
-      }
-
-      return parseCompoundWord(word)
+      return
     }
 
     // Initialize with start and goal nodes
-    const startParts = resolveParts(puzzle.startWord)
-    const goalParts = resolveParts(puzzle.goalWord)
+    const startParts = parseCompoundWord(puzzle.startWord)
+    const goalParts = parseCompoundWord(puzzle.goalWord)
 
     const startNode: GraphNode = {
       id: 'start',
@@ -223,12 +207,12 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setAllowExploration(false)
     setWinningPath([])
     setAllPaths([])
+    allPathsRef.current = [] // Update ref immediately
     setSelectedNodeId('start')
     setWasRestoredComplete(false)
     setStartTime(Date.now())
     setFinalTimeElapsed(null)
     scoreSubmittedRef.current = false
-    setLoadedPuzzleKey(persistenceKey || puzzle.id)
   }, [puzzle])
 
   // Save state when it changes
@@ -246,17 +230,12 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       allPaths: allPaths.length > 0 ? allPaths : undefined,
     }
 
-    // Persist for both daily and practice using the same storage helper
-    const practiceKey = !puzzle.isDaily
-      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
-      : undefined
-    const persistenceKey = puzzle.isDaily ? puzzle.date : practiceKey
-    if (persistenceKey) {
-      saveGameState(persistenceKey, state)
+    if (puzzle.isDaily) {
+      saveGameState(puzzle.date, state)
     }
   }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
 
-  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string; isNewPath?: boolean }> => {
+  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
     if (!puzzle) {
       return { success: false, error: 'Puzzle not loaded' }
     }
@@ -396,9 +375,31 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           path.push(goalNode.word)
         }
         
-        // Check if this is a new unique path
+        // Validate path has all unique words (no duplicates)
+        if (!hasUniqueWords(path)) {
+          // Path has duplicate words - skip it
+          return { success: true, isNewPath: false }
+        }
+        
+        // Check if this is a new unique path (by exact sequence)
         const isFirstWin = !isComplete
-        const isNewPath = isFirstWin || isUniquePath(path, allPaths)
+        
+        // Get current paths from ref for immediate check (will be updated by useEffect after state change)
+        const currentPaths = allPathsRef.current
+        const isNewPath = isFirstWin || isUniquePath(path, currentPaths)
+        
+        if (isFirstWin) {
+          setAllPaths([path])
+          allPathsRef.current = [path] // Update ref immediately
+        } else if (isNewPath) {
+          // New unique path found during exploration - keep sorted by length (shortest first)
+          setAllPaths(prev => {
+            const updated = [...prev, path]
+            const sorted = updated.sort((a, b) => a.length - b.length)
+            allPathsRef.current = sorted // Update ref immediately
+            return sorted
+          })
+        }
         
         if (isFirstWin) {
           // First win - lock in time, mark complete, but allow continued exploration
@@ -413,14 +414,6 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
           }
           
           setWinningPath(path)
-          setAllPaths([path])
-        } else if (isNewPath) {
-          // New unique path found during exploration - keep sorted by length (shortest first)
-          setAllPaths(prev => {
-            const updated = [...prev, path]
-            console.log('New path found! All paths now:', updated.map(p => p.join(' → ')))
-            return updated.sort((a, b) => a.length - b.length)
-          })
         }
         
         return { success: true, isNewPath }
@@ -475,19 +468,13 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setIsComplete(false)
     setAllowExploration(false)
     setWinningPath([])
-    setAllPaths([])
     setSelectedNodeId('start')
     setError(null)
     scoreSubmittedRef.current = false
 
     // Clear saved state
-    // Clear saved state for current puzzle key (daily or practice)
-    const practiceKey = puzzle && !puzzle.isDaily
-      ? `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`
-      : undefined
-    const persistenceKey = puzzle?.isDaily ? puzzle.date : practiceKey
-    if (persistenceKey) {
-      saveGameState(persistenceKey, null)
+    if (puzzle.isDaily) {
+      saveGameState(puzzle.date, null)
     }
   }, [puzzle])
 
@@ -498,14 +485,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   }, [isComplete])
 
   const submitScore = useCallback(async () => {
-    if (!puzzle || !puzzle.isDaily || !isComplete) return
+    if (!puzzle || !puzzle.isDaily || !isComplete || scoreSubmittedRef.current) return
 
     try {
-      // Calculate score from shortest path length
-      const shortestPath = allPaths.length > 0 ? allPaths[0] : winningPath
-      // Path length minus 2 (exclude both start and end - only intermediate words count)
-      const shortestPathLength = Math.max(0, shortestPath.length - 2)
-      
       // Calculate layers from winning path (only layers used to reach goal)
       let layersToSubmit = maxLayer
       if (winningPath.length > 0) {
@@ -526,19 +508,17 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       }
 
       const playerId = getPlayerId()
-      const playerName = getPlayerName()
       
       await fetch('/api/score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           playerId,
-          playerName,
-          wordsUsed: shortestPathLength,
+          wordsUsed,
           layers: layersToSubmit,
           puzzleDate: puzzle.date,
           isDaily: puzzle.isDaily,
-          pathsFound: allPaths.length,
+          timeElapsed: finalTimeElapsed,
         }),
       })
 
@@ -546,44 +526,31 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     } catch (error) {
       console.error('Error submitting score:', error)
     }
-  }, [puzzle, isComplete, maxLayer, winningPath, nodes, allPaths])
+  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
 
-  const currentPuzzleKey = puzzle
-    ? (puzzle.isDaily
-        ? puzzle.date
-        : `practice_${puzzle.startWord.toLowerCase()}_${puzzle.goalWord.toLowerCase()}`)
-    : null
-
-  // Auto-submit score when game is complete or when paths are found
+  // Auto-submit score when game is complete
   useEffect(() => {
-    if (!puzzle || !puzzle.isDaily) {
-      return
+    if (isComplete && puzzle?.isDaily && !scoreSubmittedRef.current) {
+      submitScore()
     }
-    if (!isComplete || !currentPuzzleKey || currentPuzzleKey !== loadedPuzzleKey) {
-      return
-    }
-    // Allow resubmission when paths change
-    submitScore()
-  }, [isComplete, submitScore, puzzle, currentPuzzleKey, loadedPuzzleKey, allPaths.length])
-
-  const isStateSync = currentPuzzleKey === loadedPuzzleKey
+  }, [isComplete, submitScore])
 
   return {
-    nodes: isStateSync ? nodes : [],
-    edges: isStateSync ? edges : [],
-    wordsUsed: isStateSync ? wordsUsed : 0,
-    maxLayer: isStateSync ? maxLayer : 0,
-    isComplete: isStateSync ? isComplete : false,
+    nodes,
+    edges,
+    wordsUsed,
+    maxLayer,
+    isComplete,
     isLoading,
-    selectedNodeId: isStateSync ? selectedNodeId : null,
-    error: isStateSync ? error : null,
+    selectedNodeId,
+    error,
     addWord,
     selectNode,
     reset,
-    winningPath: isStateSync ? winningPath : [],
-    allPaths: isStateSync ? allPaths : [],
-    startTime: isStateSync ? startTime : Date.now(),
-    finalTimeElapsed: isStateSync ? finalTimeElapsed : null,
+    winningPath,
+    allPaths,
+    startTime,
+    finalTimeElapsed,
     submitScore,
     allowExploration,
     enableExploration,

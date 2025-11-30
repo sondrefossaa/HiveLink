@@ -121,6 +121,12 @@ export default function InputBar({
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    // Prevent Enter key from bubbling to other elements (like hint button)
+    if (e.key === 'Enter') {
+      e.stopPropagation()
+      return
+    }
+    
     // Allow only letters
     if (
       e.key.length === 1 &&
