@@ -101,7 +101,6 @@ function Graph({
 }: GraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<any>(null)
-  const winningPulseRef = useRef(0)
   const animationFrameRef = useRef<number | null>(null)
   const draggedNodeRef = useRef<string | null>(null)
   const snapBackTimerRef = useRef<number | null>(null)
@@ -460,28 +459,11 @@ function Graph({
     }
   }, [])
 
-  // Ensure nodes stay at exact positions when graph data changes
+  // Configure forces once when graph data changes - nodes are already positioned in graphData
   useEffect(() => {
     const timer = setTimeout(() => {
       configureForces()
-      // Continuously ensure nodes are at exact positions (no simulation running)
-      const fg = graphRef.current as (ForceGraphMethods & {
-        graphData?: () => { nodes: ForceLayoutNode[] }
-      }) | null
-      if (fg) {
-        const data = fg.graphData?.()
-        if (data?.nodes) {
-          data.nodes.forEach((node) => {
-            node.x = node.targetX
-            node.y = node.targetY
-            node.fx = node.targetX
-            node.fy = node.targetY
-            node.vx = 0
-            node.vy = 0
-          })
-        }
-      }
-    }, 50)
+    }, 100)
     return () => clearTimeout(timer)
   }, [configureForces, graphData.nodes.length, graphData.links.length])
 
@@ -502,44 +484,7 @@ function Graph({
     }
   }, [])
 
-  // Animate winning path pulse - throttled to reduce refresh overhead
-  useEffect(() => {
-    if (!graphRef.current) return
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
-      animationFrameRef.current = null
-    }
-
-    if (!isComplete || effectivePreference === 'reduced') {
-      winningPulseRef.current = 0
-      refreshGraph()
-      return
-    }
-
-    let frameCount = 0
-    const THROTTLE_FRAMES = 3 // Refresh every 3 frames (~20fps instead of 60fps)
-
-    const animate = () => {
-      if (!pageVisibilityRef.current) {
-        animationFrameRef.current = requestAnimationFrame(animate)
-        return
-      }
-
-      // Update pulse value every frame (lightweight)
-      winningPulseRef.current = (performance.now() % 2000) / 2000 // 2 second cycle
-      
-      // Only refresh graph every N frames to reduce redraw overhead
-      frameCount++
-      if (frameCount >= THROTTLE_FRAMES) {
-        frameCount = 0
-        refreshGraph()
-      }
-      
-      animationFrameRef.current = requestAnimationFrame(animate)
-    }
-
-    animationFrameRef.current = requestAnimationFrame(animate)
-  }, [effectivePreference, isComplete, refreshGraph])
+  // Winning pulse animation removed - was causing constant redraws on mobile
 
   // Track if initial centering has happened
   const hasInitializedRef = useRef(false)
@@ -767,50 +712,20 @@ function Graph({
       const connectsToGoal = nodesConnectedToGoalRef.current.has(node.id) && node.id !== 'goal'
       const size = getRenderedNodeSize(node, globalScale)
       
-      // Viewport culling: skip rendering nodes outside visible area (with padding for glow effects)
-      // Always render start/goal/selected nodes even if slightly off-screen for better UX
-      if (!node.isStart && !node.isGoal && !isSelected) {
-        const canvasWidth = ctx.canvas.width
-        const canvasHeight = ctx.canvas.height
-        const transform = ctx.getTransform()
-        const viewportLeft = -transform.e / globalScale
-        const viewportTop = -transform.f / globalScale
-        const viewportRight = viewportLeft + canvasWidth / globalScale
-        const viewportBottom = viewportTop + canvasHeight / globalScale
-        const padding = (size * 2) / globalScale // Account for node size + glow
-        
-        // Early return if node is clearly outside viewport bounds
-        if (x + size + padding < viewportLeft || 
-            x - size - padding > viewportRight ||
-            y + size + padding < viewportTop || 
-            y - size - padding > viewportBottom) {
-          return // Skip rendering this node
-        }
-      }
+      // Simplified: Skip viewport culling - it was adding overhead
+      // react-force-graph handles culling internally
 
-      // Draw glow/halo - enhanced for nodes connected to goal
+      // Simplified glow - removed expensive gradients for better mobile performance
       ctx.save()
-      ctx.beginPath()
       if (connectsToGoal) {
-        // Double glow effect for nodes connected to goal - outer ring
-        const gradient = ctx.createRadialGradient(x, y, size * 0.55, x, y, size * 0.9)
-        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.4)')
-        gradient.addColorStop(0.5, 'rgba(34, 197, 94, 0.25)')
-        gradient.addColorStop(1, 'rgba(34, 197, 94, 0)')
-        ctx.fillStyle = gradient
-        ctx.arc(x, y, size * 0.9, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(34, 197, 94, 0.2)'
+        ctx.beginPath()
+        ctx.arc(x, y, size * 1.2, 0, Math.PI * 2)
         ctx.fill()
-        // Inner brighter glow
-        ctx.fillStyle = 'rgba(34, 197, 94, 0.3)'
-        ctx.arc(x, y, size * 0.7, 0, Math.PI * 2)
-        ctx.fill()
-      } else {
-        ctx.fillStyle = isSelected
-          ? 'rgba(244, 180, 0, 0.4)'
-          : node.isGoal
-          ? 'rgba(244, 180, 0, 0.25)'
-          : 'rgba(244, 180, 0, 0.15)'
-        ctx.arc(x, y, size * 1.6, 0, Math.PI * 2)
+      } else if (isSelected || node.isGoal) {
+        ctx.fillStyle = 'rgba(244, 180, 0, 0.2)'
+        ctx.beginPath()
+        ctx.arc(x, y, size * 1.2, 0, Math.PI * 2)
         ctx.fill()
       }
       ctx.restore()
@@ -838,12 +753,7 @@ function Graph({
         : connectsToGoal
         ? '#0A1F0A' // Very dark green background for nodes connected to goal
         : '#0F0D09'
-      ctx.shadowColor = connectsToGoal 
-        ? 'rgba(34, 197, 94, 0.8)' // Green shadow for nodes connected to goal
-        : isSelected 
-        ? 'rgba(255, 196, 0, 0.9)' 
-        : 'rgba(244, 180, 0, 0.45)'
-      ctx.shadowBlur = connectsToGoal ? 20 : isSelected ? 25 : 12
+      // Removed expensive shadow effects for mobile performance
       ctx.fill()
 
       // Draw border - thicker and double for nodes connected to goal
@@ -869,25 +779,16 @@ function Graph({
       }
       ctx.restore()
 
-      // Draw text with perfect readability
+      // Simplified text rendering for better performance
       const label = node.word.length > 14 ? `${node.word.slice(0, 12)}…` : node.word
-      // Scale text proportionally to the rendered node size (which already accounts for zoom)
-      // This makes text scale the same way as the nodes
       const fontSize = size * 0.4
 
-      ctx.save()
       ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      
-      // Text shadow/outline for readability - scale lineWidth proportionally with fontSize
-      ctx.lineWidth = fontSize * 0.2
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.75)'
-      ctx.strokeText(label, x, y)
-      
       ctx.fillStyle = '#FFFFFF'
+      // Simplified: Single text fill without expensive stroke for performance
       ctx.fillText(label, x, y)
-      ctx.restore()
 
       // Draw parts when selected
       if (isSelected && node.parts.length > 1) {
@@ -928,31 +829,7 @@ function Graph({
         return
       }
 
-      // Viewport culling: skip rendering edges where both endpoints are off-screen
-      // Always render winning edges and edges connected to start/goal
-      const isWinningEdge = link.isWinning
-      const isSpecialEdge = (source.isStart || source.isGoal || target.isStart || target.isGoal)
-      
-      if (!isWinningEdge && !isSpecialEdge) {
-        const canvasWidth = ctx.canvas.width
-        const canvasHeight = ctx.canvas.height
-        const transform = ctx.getTransform()
-        const viewportLeft = -transform.e / globalScale
-        const viewportTop = -transform.f / globalScale
-        const viewportRight = viewportLeft + canvasWidth / globalScale
-        const viewportBottom = viewportTop + canvasHeight / globalScale
-        const padding = 50 / globalScale
-        
-        // Check if both source and target are outside viewport
-        const sourceVisible = source.x + padding >= viewportLeft && source.x - padding <= viewportRight &&
-                              source.y + padding >= viewportTop && source.y - padding <= viewportBottom
-        const targetVisible = target.x + padding >= viewportLeft && target.x - padding <= viewportRight &&
-                              target.y + padding >= viewportTop && target.y - padding <= viewportBottom
-        
-        if (!sourceVisible && !targetVisible) {
-          return // Both endpoints off-screen, skip rendering
-        }
-      }
+      // Simplified: Skip viewport culling for edges - library handles it
 
       const dx = target.x - source.x
       const dy = target.y - source.y
@@ -1066,26 +943,17 @@ function Graph({
         ctx.setLineDash([])
       }
 
-      // Create gradient for edge color (use padded points for side branches)
-      const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
-      
+      // Simplified edge colors - no gradients for better performance
       if (link.isWinning && isCompleteRef.current) {
-        // Winning path after completion: green
-        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.9)')
-        gradient.addColorStop(1, 'rgba(74, 222, 128, 0.9)')
+        ctx.strokeStyle = '#22c55e' // Solid green for winning path
       } else if (isSideLineageEdge || isStapleEdge) {
-        // Side or stapled branch: dimmer
-        gradient.addColorStop(0, 'rgba(244, 180, 0, 0.45)')
-        gradient.addColorStop(1, 'rgba(255, 220, 120, 0.25)')
+        ctx.strokeStyle = 'rgba(244, 180, 0, 0.5)' // Solid dimmer yellow
       } else {
-        // Forward branch: bright honey-yellow
-        gradient.addColorStop(0, '#F4B400')
-        gradient.addColorStop(1, '#FFD369')
+        ctx.strokeStyle = '#F4B400' // Solid bright yellow
       }
 
-      ctx.strokeStyle = gradient
       ctx.lineWidth = link.isWinning
-        ? (5 + 2 * Math.sin(winningPulseRef.current * Math.PI * 2)) / globalScale
+        ? 4 / globalScale // Fixed width, no pulse animation
         : isSideLineageEdge || isStapleEdge
         ? 1.8 / globalScale
         : 2.8 / globalScale
