@@ -322,7 +322,7 @@ function rebalanceLayerPositions(
   const maxLayerInGraph = Math.max(...Array.from(nodesByLayer.keys()))
   
   for (const [layer, nodeIds] of nodesByLayer.entries()) {
-    if (nodeIds.length <= 1) continue
+    if (nodeIds.length <= 1) continue;
 
     // Get node parts for sorting
     const nodePartsMap = new Map<string, string[]>();
@@ -331,31 +331,69 @@ function rebalanceLayerPositions(
       nodePartsMap.set(nodeId, node?.parts ?? []);
     }
 
-    // Sort nodes so those sharing a part are adjacent
-    const sortedNodeIds = [...nodeIds].sort((a, b) => {
-      const partsA = nodePartsMap.get(a) ?? [];
-      const partsB = nodePartsMap.get(b) ?? [];
-      // If they share any part, group together
-      const shared = partsA.some(part => partsB.includes(part));
-      if (shared) return 0;
-      // Otherwise, sort alphabetically by first part
-      return (partsA[0] ?? '').localeCompare(partsB[0] ?? '');
-    });
+    // Group nodes by shared part
+    const groups: string[][] = [];
+    const used = new Set<string>();
+    for (const nodeId of nodeIds) {
+      if (used.has(nodeId)) continue;
+      const partsA = nodePartsMap.get(nodeId) ?? [];
+      const group = [nodeId];
+      used.add(nodeId);
+      for (const otherId of nodeIds) {
+        if (used.has(otherId) || otherId === nodeId) continue;
+        const partsB = nodePartsMap.get(otherId) ?? [];
+        if (partsA.some(part => partsB.includes(part))) {
+          group.push(otherId);
+          used.add(otherId);
+        }
+      }
+      groups.push(group);
+    }
 
-    // Calculate spread and center
-    const positions = sortedNodeIds.map((nodeId) => branchAssignments.get(nodeId)!.crossAxisPos);
-    const minPos = Math.min(...positions);
-    const maxPos = Math.max(...positions);
-    const spread = maxPos - minPos;
+    // Calculate spread and center, but ensure minimum spacing
     const minSpacing = 60;
-    const actualSpread = Math.max(spread, minSpacing * (sortedNodeIds.length - 1));
+    const maxAllowedSpread = 220; // Limit max spread for layer
+    const requiredSpread = minSpacing * (nodeIds.length - 1);
+    const actualSpread = Math.max(Math.min(requiredSpread, maxAllowedSpread), requiredSpread);
     const startPos = centerCrossAxis - actualSpread / 2;
 
-    // Assign new positions maintaining the spread but with new order
-    sortedNodeIds.forEach((nodeId, index) => {
-      const newPos = startPos + (index * actualSpread / Math.max(sortedNodeIds.length - 1, 1));
-      branchAssignments.get(nodeId)!.crossAxisPos = newPos;
-    });
+    // Place groups together, lone nodes near their parent, but always enforce minSpacing between all nodes
+    let index = 0;
+    for (const group of groups) {
+      if (group.length === 1) {
+        const nodeId = group[0];
+        const assignment = branchAssignments.get(nodeId)!;
+        const parentId = assignment.parentId;
+        const parentPos = parentId ? branchAssignments.get(parentId)?.crossAxisPos : centerCrossAxis;
+        // Clamp lone node within layer spread, but also ensure it doesn't overlap neighbors
+        let newPos = clampValue(parentPos ?? startPos, startPos, startPos + actualSpread);
+        // If not first, ensure spacing from previous
+        if (index > 0) {
+          const prevNodeId = nodeIds[index - 1];
+          const prevPos = branchAssignments.get(prevNodeId)!.crossAxisPos;
+          if (newPos - prevPos < minSpacing) {
+            newPos = prevPos + minSpacing;
+          }
+        }
+        assignment.crossAxisPos = newPos;
+        index++;
+      } else {
+        // Place grouped nodes together, enforcing minSpacing
+        for (const nodeId of group) {
+          let newPos = startPos + (index * minSpacing);
+          // If not first, ensure spacing from previous
+          if (index > 0) {
+            const prevNodeId = nodeIds[index - 1];
+            const prevPos = branchAssignments.get(prevNodeId)!.crossAxisPos;
+            if (newPos - prevPos < minSpacing) {
+              newPos = prevPos + minSpacing;
+            }
+          }
+          branchAssignments.get(nodeId)!.crossAxisPos = newPos;
+          index++;
+        }
+      }
+    }
   }
 }
 
