@@ -86,6 +86,8 @@ function determineBranchKind(
 function buildLayerMap(
   startNodeId: string,
   adjacency: Map<string, string[]>,
+  nodeMap: Map<string, GraphNode>,
+  edgeMap: Map<string, GraphEdge>,
   goalNodeId?: string
 ): Map<string, number> {
   const layerMap = new Map<string, number>()
@@ -97,11 +99,24 @@ function buildLayerMap(
   while (queue.length > 0) {
     const currentId = queue.shift()!
     const currentLayer = layerMap.get(currentId) ?? 0
+    const currentNode = nodeMap.get(currentId)
     const children = adjacency.get(currentId) ?? []
 
     for (const childId of children) {
       if (childId === goalNodeId) continue
-      const nextLayer = currentLayer + 1
+      
+      const childNode = nodeMap.get(childId)
+      const edge = edgeMap.get(`${currentId}->${childId}`)
+      
+      // Determine if this is a forward or side expansion
+      const branchKind = determineBranchKind(edge, currentNode, childNode!)
+      
+      // First layer (from start): always increment to layer 1
+      // Forward expansion: increment layer
+      // Side expansion: same layer as parent
+      const isFromStart = currentId === startNodeId
+      const nextLayer = (isFromStart || branchKind === 'forward') ? currentLayer + 1 : currentLayer
+      
       if (!layerMap.has(childId) || nextLayer < (layerMap.get(childId) ?? Infinity)) {
         layerMap.set(childId, nextLayer)
         queue.push(childId)
@@ -142,6 +157,7 @@ const clampValue = (value: number, min: number, max: number): number =>
 /**
  * Rebalance layer positions for clean, centered layout
  * Uses iterative relaxation to minimize edge crossings and spread nodes evenly
+ * Prioritizes nodes with forward paths (descendants) toward the center
  */
 function rebalanceLayerPositions(
   nodes: GraphNode[],
@@ -181,6 +197,30 @@ function rebalanceLayerPositions(
     parentsMap.get(targetId)!.push(sourceId)
   }
   
+  // Count descendants for each node (nodes with more descendants = more important paths)
+  const descendantCount = new Map<string, number>()
+  
+  const countDescendants = (nodeId: string, visited: Set<string> = new Set()): number => {
+    if (visited.has(nodeId)) return 0
+    if (descendantCount.has(nodeId)) return descendantCount.get(nodeId)!
+    
+    visited.add(nodeId)
+    const children = childrenMap.get(nodeId) || []
+    let count = children.length
+    
+    for (const childId of children) {
+      count += countDescendants(childId, visited)
+    }
+    
+    descendantCount.set(nodeId, count)
+    return count
+  }
+  
+  // Calculate descendant counts for all nodes
+  for (const [nodeId] of branchAssignments.entries()) {
+    countDescendants(nodeId)
+  }
+  
   // Iterative relaxation: adjust positions to minimize crossings and balance spacing
   const iterations = 3
   for (let iter = 0; iter < iterations; iter++) {
@@ -192,35 +232,62 @@ function rebalanceLayerPositions(
       if (nodeIds.length <= 1) continue
       
       // Calculate barycenter (weighted average of parent/child positions)
+      // Weight children more heavily than parents since we want to point toward goal
       const barycenters = nodeIds.map((nodeId) => {
         const parents = parentsMap.get(nodeId) || []
         const children = childrenMap.get(nodeId) || []
+        const hasDescendants = (descendantCount.get(nodeId) || 0) > 0
         
         let sum = 0
         let count = 0
         
+        // Parents have lower weight
         for (const parentId of parents) {
           const parentAssignment = branchAssignments.get(parentId)
           if (parentAssignment) {
-            sum += parentAssignment.crossAxisPos
-            count++
+            sum += parentAssignment.crossAxisPos * 0.5
+            count += 0.5
           }
         }
         
+        // Children have higher weight - they pull the node toward the path to goal
         for (const childId of children) {
           const childAssignment = branchAssignments.get(childId)
           if (childAssignment) {
-            sum += childAssignment.crossAxisPos
-            count++
+            sum += childAssignment.crossAxisPos * 1.5
+            count += 1.5
           }
         }
         
+        // Nodes with descendants get pulled toward center
+        if (hasDescendants) {
+          const descendantWeight = Math.min((descendantCount.get(nodeId) || 0) * 0.3, 2)
+          sum += centerCrossAxis * descendantWeight
+          count += descendantWeight
+        }
+        
         const barycenter = count > 0 ? sum / count : branchAssignments.get(nodeId)!.crossAxisPos
-        return { nodeId, barycenter }
+        return { nodeId, barycenter, hasDescendants }
       })
       
-      // Sort by barycenter to reduce crossings
-      barycenters.sort((a, b) => a.barycenter - b.barycenter)
+      // Sort by barycenter to reduce crossings, but keep nodes with descendants closer to center
+      // Nodes with descendants should be sorted toward the middle of the array
+      barycenters.sort((a, b) => {
+        // Both have descendants or both don't - sort by barycenter
+        if (a.hasDescendants === b.hasDescendants) {
+          return a.barycenter - b.barycenter
+        }
+        // Node with descendants should be closer to center
+        // If a has descendants, it should be closer to middle position
+        // Compare distance from center
+        const aDist = Math.abs(a.barycenter - centerCrossAxis)
+        const bDist = Math.abs(b.barycenter - centerCrossAxis)
+        if (a.hasDescendants && !b.hasDescendants) {
+          // a should be more centered - if a is already more centered, keep order
+          return aDist - bDist - 50 // bias a toward center
+        }
+        return bDist - aDist + 50 // bias b away from center
+      })
       
       // Redistribute with even spacing
       const totalNodes = barycenters.length
@@ -242,25 +309,53 @@ function rebalanceLayerPositions(
         const assignment = branchAssignments.get(item.nodeId)!
         const idealPos = startPos + (index * actualSpread / Math.max(totalNodes - 1, 1))
         
-        // Blend current position with ideal position for smooth transition
-        const blendFactor = iter === iterations - 1 ? 0.8 : 0.5
+        // Nodes with descendants get pulled more strongly toward their ideal (centered) position
+        const descendantBonus = item.hasDescendants ? 0.15 : 0
+        const blendFactor = (iter === iterations - 1 ? 0.8 : 0.5) + descendantBonus
         assignment.crossAxisPos = assignment.crossAxisPos * (1 - blendFactor) + idealPos * blendFactor
       })
     }
   }
   
-  // Final centering pass - ensure each layer is centered
+  // Final centering pass - apply progressive centering (stronger for layers closer to goal)
+  // Reorder nodes so those with descendants are closer to center, then center the whole layer
+  const maxLayerInGraph = Math.max(...Array.from(nodesByLayer.keys()))
+  
   for (const [layer, nodeIds] of nodesByLayer.entries()) {
     if (nodeIds.length <= 1) continue
-    
-    const positions = nodeIds.map((nodeId) => branchAssignments.get(nodeId)!.crossAxisPos)
-    const meanCenter = positions.reduce((a, b) => a + b, 0) / positions.length
-    const offset = centerCrossAxis - meanCenter
-    
+
+    // Get node parts for sorting
+    const nodePartsMap = new Map<string, string[]>();
     for (const nodeId of nodeIds) {
-      const assignment = branchAssignments.get(nodeId)!
-      assignment.crossAxisPos += offset
+      const node = nodes.find(n => n.id === nodeId);
+      nodePartsMap.set(nodeId, node?.parts ?? []);
     }
+
+    // Sort nodes so those sharing a part are adjacent
+    const sortedNodeIds = [...nodeIds].sort((a, b) => {
+      const partsA = nodePartsMap.get(a) ?? [];
+      const partsB = nodePartsMap.get(b) ?? [];
+      // If they share any part, group together
+      const shared = partsA.some(part => partsB.includes(part));
+      if (shared) return 0;
+      // Otherwise, sort alphabetically by first part
+      return (partsA[0] ?? '').localeCompare(partsB[0] ?? '');
+    });
+
+    // Calculate spread and center
+    const positions = sortedNodeIds.map((nodeId) => branchAssignments.get(nodeId)!.crossAxisPos);
+    const minPos = Math.min(...positions);
+    const maxPos = Math.max(...positions);
+    const spread = maxPos - minPos;
+    const minSpacing = 60;
+    const actualSpread = Math.max(spread, minSpacing * (sortedNodeIds.length - 1));
+    const startPos = centerCrossAxis - actualSpread / 2;
+
+    // Assign new positions maintaining the spread but with new order
+    sortedNodeIds.forEach((nodeId, index) => {
+      const newPos = startPos + (index * actualSpread / Math.max(sortedNodeIds.length - 1, 1));
+      branchAssignments.get(nodeId)!.crossAxisPos = newPos;
+    });
   }
 }
 
@@ -312,7 +407,8 @@ export function computeGraphLayout(
   })
   
   // Calculate layers for all nodes (Rule #1)
-  const layerMap = buildLayerMap(startNode.id, adjacency, goalNode?.id)
+  // Forward expansion increments layer, side expansion stays on same layer
+  const layerMap = buildLayerMap(startNode.id, adjacency, nodeMap, edgeMap, goalNode?.id)
 
   nodes.forEach((node) => {
     if (!layerMap.has(node.id)) {
@@ -372,17 +468,28 @@ export function computeGraphLayout(
     const takenPerEdge = layerOccupancy.get(key) ?? []
     const takenGlobal = globalLayerOccupancy.get(layer) ?? []
 
+    // Always bias new nodes toward the goal's Y position (centerCrossAxis)
+    // This creates a "pointing toward goal" effect
+    const layerProgress = Math.min(layer / Math.max(goalLayer, 1), 1) // 0 at start, 1 at goal
+    const goalBias = 0.3 + 0.4 * layerProgress // 30-70% bias toward goal center
+    const goalBiasedPreferred = preferredPos + (centerCrossAxis - preferredPos) * goalBias
+
+    // When we need to offset due to collisions, ALWAYS prefer the direction toward goal (center)
+    // This ensures new nodes are placed on the side of their parent that points toward goal
+    const goalDirection = centerCrossAxis > goalBiasedPreferred ? 1 : -1
+    
     const offsets: number[] = [0]
     for (let step = 1; step <= MAX_OFFSET_STEPS; step++) {
       const delta = step * forwardConflictUnit * 0.35 + MIN_LAYER_SPACING
-      offsets.push(delta, -delta)
+      // ALWAYS try goal-side offset first, then opposite side
+      offsets.push(delta * goalDirection, -delta * goalDirection)
     }
 
     let bestCandidate: number | undefined
     let bestScore = -Infinity
 
     for (const offset of offsets) {
-      const candidate = clampValue(preferredPos + offset, crossAxisMargin, safeCanvasSize - crossAxisMargin)
+      const candidate = clampValue(goalBiasedPreferred + offset, crossAxisMargin, safeCanvasSize - crossAxisMargin)
       const minEdgeDistance = takenPerEdge.reduce(
         (acc, value) => Math.min(acc, Math.abs(value - candidate)),
         Number.POSITIVE_INFINITY
@@ -406,7 +513,14 @@ export function computeGraphLayout(
       const closenessScore = parentPos === undefined
         ? 1
         : Math.max(0, 1 - Math.abs(candidate - parentPos) / (forwardConflictUnit * 4))
-      const score = closenessScore * 0.3 + edgeSpacingScore * 0.4 + globalSpacingScore * 0.3
+      
+      // Add goal proximity score - reward positions closer to goal's Y (center)
+      const distanceToGoalCenter = Math.abs(candidate - centerCrossAxis)
+      const maxDistance = safeCanvasSize / 2
+      const goalProximityScore = 1 - (distanceToGoalCenter / maxDistance)
+      
+      // Weight scores: parent closeness, edge spacing, global spacing, goal proximity
+      const score = closenessScore * 0.25 + edgeSpacingScore * 0.35 + globalSpacingScore * 0.25 + goalProximityScore * 0.15
 
       if (score > bestScore) {
         bestScore = score
@@ -414,7 +528,7 @@ export function computeGraphLayout(
       }
     }
 
-    const fallbackCandidate = bestCandidate ?? clampValue(preferredPos, crossAxisMargin, safeCanvasSize - crossAxisMargin)
+    const fallbackCandidate = bestCandidate ?? clampValue(goalBiasedPreferred, crossAxisMargin, safeCanvasSize - crossAxisMargin)
     return registerLayerPosition(layer, fallbackCandidate, parentId)
   }
 
@@ -449,7 +563,20 @@ export function computeGraphLayout(
 
     const preferredPos = parentAssignment?.crossAxisPos ?? centerCrossAxis
     const alignmentTarget = parentAssignment?.crossAxisPos
-    const crossAxisPos = selectLayerPosition(nodeLayer, preferredPos, parentId, alignmentTarget)
+
+    // Check if node is a dead-end (no forward edge toward goal)
+    let crossAxisPos: number
+    const hasForwardEdge = edges.some(e => resolveNodeId(e.source) === node.id && layerMap.get(resolveNodeId(e.target))! > nodeLayer)
+    if (!hasForwardEdge) {
+      // Place dead-end node directly between parent and goal
+      if (parentAssignment) {
+        crossAxisPos = parentAssignment.crossAxisPos + (centerCrossAxis - parentAssignment.crossAxisPos) * 0.7
+      } else {
+        crossAxisPos = centerCrossAxis
+      }
+    } else {
+      crossAxisPos = selectLayerPosition(nodeLayer, preferredPos, parentId, alignmentTarget)
+    }
 
     branchAssignments.set(node.id, {
       branchId,

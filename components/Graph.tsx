@@ -175,8 +175,9 @@ export default function Graph({
   }, [startAnchor])
 
   // Calculate winning edge IDs for highlighting
+  // Track edges on the winning path both before and after completion
   const winningEdgeIds = useMemo(() => {
-    if (!isComplete || winningPath.length < 2) {
+    if (winningPath.length < 2) {
       return new Set<string>()
     }
 
@@ -187,8 +188,15 @@ export default function Graph({
       const fromId = wordToNode.get(winningPath[i].toLowerCase())
       const toId = wordToNode.get(winningPath[i + 1].toLowerCase())
       if (!fromId || !toId) continue
+      
+      // Check both directions since edges can go either way
       const connectingEdge = edges.find(
-        (edge) => resolveId(edge.source) === fromId && resolveId(edge.target) === toId
+        (edge) => {
+          const sourceId = resolveId(edge.source)
+          const targetId = resolveId(edge.target)
+          return (sourceId === fromId && targetId === toId) || 
+                 (sourceId === toId && targetId === fromId)
+        }
       )
       if (connectingEdge) {
         chain.add(connectingEdge.id)
@@ -196,7 +204,7 @@ export default function Graph({
     }
 
     return chain
-  }, [edges, nodes, winningPath, isComplete])
+  }, [edges, nodes, winningPath])
 
   // Identify nodes that connect to the goal (but aren't the goal itself)
   const nodesConnectedToGoal = useMemo(() => {
@@ -228,81 +236,6 @@ export default function Graph({
     
     return connectedNodeIds
   }, [edges, nodes])
-
-  // Compute edges on the path from start to goal-connected nodes
-  // Uses BFS (same as findPathToNode) to find the shortest path to each green node
-  const edgesOnGoalPath = useMemo(() => {
-    const pathEdges = new Set<string>()
-    
-    // If no nodes connect to goal, no edges should be green
-    if (nodesConnectedToGoal.size === 0) {
-      return pathEdges
-    }
-    
-    // Build adjacency list (forward direction for BFS) - same as findPathToNode
-    const adjacency = new Map<string, { targetId: string, edgeId: string }[]>()
-    edges.forEach((edge) => {
-      const sourceId = resolveId(edge.source)
-      const targetId = resolveId(edge.target)
-      if (sourceId && targetId && targetId !== 'goal') {
-        if (!adjacency.has(sourceId)) adjacency.set(sourceId, [])
-        adjacency.get(sourceId)!.push({ targetId, edgeId: edge.id })
-      }
-    })
-    
-    // For each goal-connected node, find the shortest path from start using BFS
-    nodesConnectedToGoal.forEach((goalNodeId) => {
-      // BFS to find shortest path from start to this goal-connected node
-      const visited = new Set<string>()
-      const parentEdge = new Map<string, string>() // nodeId -> edgeId that led to it
-      const parentNode = new Map<string, string>() // nodeId -> parentNodeId
-      const queue: string[] = ['start']
-      visited.add('start')
-      
-      while (queue.length > 0) {
-        const current = queue.shift()!
-        
-        if (current === goalNodeId) {
-          // Found the target - reconstruct path by following parent edges
-          let curr: string | undefined = goalNodeId
-          while (curr && curr !== 'start') {
-            const edgeId = parentEdge.get(curr)
-            if (edgeId) {
-              pathEdges.add(edgeId)
-            }
-            curr = parentNode.get(curr)
-          }
-          break
-        }
-        
-        const neighbors = adjacency.get(current) || []
-        for (const { targetId, edgeId } of neighbors) {
-          if (!visited.has(targetId)) {
-            visited.add(targetId)
-            parentEdge.set(targetId, edgeId)
-            parentNode.set(targetId, current)
-            queue.push(targetId)
-          }
-        }
-      }
-    })
-    
-    // Add edges that directly connect to goal node (from goal-connected nodes only)
-    edges.forEach((edge) => {
-      const sourceId = resolveId(edge.source)
-      const targetId = resolveId(edge.target)
-      // Edge TO goal from a goal-connected node
-      if (targetId === 'goal' && sourceId && nodesConnectedToGoal.has(sourceId)) {
-        pathEdges.add(edge.id)
-      }
-      // Edge FROM goal to a goal-connected node (reverse direction)
-      if (sourceId === 'goal' && targetId && nodesConnectedToGoal.has(targetId)) {
-        pathEdges.add(edge.id)
-      }
-    })
-    
-    return pathEdges
-  }, [edges, nodesConnectedToGoal])
 
   // Prepare graph data with layout positions
   const graphData = useMemo(() => {
@@ -957,18 +890,10 @@ export default function Graph({
       // Create gradient for edge color (use padded points for side branches)
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
       
-      // Check if this edge is on the path from start to goal
-      const edgeOnGoalPath = edgesOnGoalPath.has(link.id)
-      
       if (link.isWinning && isComplete) {
-        // Winning path after completion: animated golden glow
-        const pulse = 0.7 + 0.3 * Math.sin(winningPulseRef.current * Math.PI * 2)
-        gradient.addColorStop(0, `rgba(255, 215, 130, ${pulse})`)
-        gradient.addColorStop(1, `rgba(244, 201, 89, ${pulse})`)
-      } else if (edgeOnGoalPath || link.isWinning) {
-        // Edges on the path from start to goal (or winning edges before completion): green
-        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.8)')
-        gradient.addColorStop(1, 'rgba(74, 222, 128, 0.8)')
+        // Winning path after completion: green
+        gradient.addColorStop(0, 'rgba(34, 197, 94, 0.9)')
+        gradient.addColorStop(1, 'rgba(74, 222, 128, 0.9)')
       } else if (isSideLineageEdge || isStapleEdge) {
         // Side or stapled branch: dimmer
         gradient.addColorStop(0, 'rgba(244, 180, 0, 0.45)')
@@ -1019,7 +944,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [isComplete, startAnchorPosition, orientation, edgesOnGoalPath]
+    [isComplete, startAnchorPosition, orientation]
   )
 
   return (
