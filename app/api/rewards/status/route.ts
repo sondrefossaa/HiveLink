@@ -60,21 +60,24 @@ export async function GET(request: NextRequest) {
         
         return true
       })
-      .map(reward => ({
-        id: reward.id,
-        rewardType: reward.rewardType,
-        unlockedAt: reward.unlockedAt.toISOString(),
-        expiresAt: reward.expiresAt?.toISOString() || null,
-        usedAt: reward.usedAt?.toISOString() || null,
-        metadata: reward.metadata ? parseMetadata(reward.metadata) : {},
-        isActive: isRewardActive({
-          type: reward.rewardType,
-          isUnlocked: true,
-          expiresAt: reward.expiresAt,
-          usedAt: reward.usedAt,
+      .map(reward => {
+        const rewardType = reward.rewardType as RewardType
+        return {
+          id: reward.id,
+          rewardType,
+          unlockedAt: reward.unlockedAt.toISOString(),
+          expiresAt: reward.expiresAt?.toISOString() || null,
+          usedAt: reward.usedAt?.toISOString() || null,
           metadata: reward.metadata ? parseMetadata(reward.metadata) : {},
-        }),
-      }))
+          isActive: isRewardActive({
+            type: rewardType,
+            isUnlocked: true,
+            expiresAt: reward.expiresAt,
+            usedAt: reward.usedAt,
+            metadata: reward.metadata ? parseMetadata(reward.metadata) : {},
+          }),
+        }
+      })
 
     // Group by reward type
     const rewardsByType: Record<string, typeof activeRewards> = {}
