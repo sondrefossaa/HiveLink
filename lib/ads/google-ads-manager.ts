@@ -7,13 +7,14 @@ declare global {
   interface Window {
     googletag?: {
       cmd: Array<() => void>
-      pubads: () => {
+      pubads?: () => {
         addEventListener: (event: string, callback: () => void) => void
         removeEventListener: (event: string, callback: () => void) => void
+        refresh?: () => void
       }
-      defineSlot: (adUnitPath: string, size: number[], divId: string) => unknown
-      enableServices: () => void
-      display: (divId: string) => void
+      defineSlot?: (adUnitPath: string, size: number[], divId: string) => unknown
+      enableServices?: () => void
+      display?: (divId: string) => void
     }
   }
 }
@@ -36,7 +37,9 @@ export function loadGoogleAdManagerScript(): void {
   if (window.googletag) return
 
   // Initialize googletag command queue
-  window.googletag = window.googletag || { cmd: [] }
+  if (!window.googletag) {
+    window.googletag = { cmd: [] } as Window['googletag']
+  }
 
   // Load the script
   const script = document.createElement('script')
@@ -63,8 +66,7 @@ export function createGoogleAdManagerRewardedVideo(
   let loaded = false
   let adContainer: HTMLDivElement | null = null
 
-  return {
-    load: async () => {
+  const loadFn = async () => {
       loadGoogleAdManagerScript()
 
       // Wait for googletag to be available
@@ -91,21 +93,21 @@ export function createGoogleAdManagerRewardedVideo(
       document.body.appendChild(adContainer)
 
       // Define and display ad
-      if (window.googletag) {
+      if (window.googletag && window.googletag.defineSlot && window.googletag.enableServices && window.googletag.display && window.googletag.pubads) {
         window.googletag.cmd.push(() => {
           try {
-            const slot = window.googletag!.defineSlot(
+            const slot = window.googletag!.defineSlot!(
               config.adUnitPath,
               [1, 1], // Size for rewarded video
               adContainer!.id
             )
             
             if (slot) {
-              window.googletag!.enableServices()
-              window.googletag!.display(adContainer!.id)
+              window.googletag!.enableServices!()
+              window.googletag!.display!(adContainer!.id)
               
               // Listen for ad events
-              const pubads = window.googletag!.pubads()
+              const pubads = window.googletag!.pubads!()
               pubads.addEventListener('rewardedVideoComplete', () => {
                 config.onRewarded()
                 config.onAdClosed?.()
@@ -121,19 +123,25 @@ export function createGoogleAdManagerRewardedVideo(
           }
         })
       }
-    },
+    }
+
+  return {
+    load: loadFn,
     show: async () => {
       if (!loaded) {
-        await this.load()
+        await loadFn()
       }
 
       // Show the ad container
       if (adContainer) {
         adContainer.style.display = 'block'
         // Trigger ad display
-        if (window.googletag) {
+        if (window.googletag && window.googletag.pubads) {
           window.googletag.cmd.push(() => {
-            window.googletag!.pubads().refresh()
+            const pubads = window.googletag!.pubads!()
+            if (pubads.refresh) {
+              pubads.refresh()
+            }
           })
         }
       }

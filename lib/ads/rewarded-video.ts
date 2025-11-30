@@ -30,15 +30,17 @@ export function createMockRewardedVideoAd(
 ): RewardedVideoAd {
   let loaded = false
 
+  const loadFn = async () => {
+    // Simulate loading delay
+    await new Promise(resolve => setTimeout(resolve, 500))
+    loaded = true
+  }
+
   return {
-    load: async () => {
-      // Simulate loading delay
-      await new Promise(resolve => setTimeout(resolve, 500))
-      loaded = true
-    },
+    load: loadFn,
     show: async () => {
       if (!loaded) {
-        await this.load()
+        await loadFn()
       }
       
       // In development, simulate ad completion after a short delay

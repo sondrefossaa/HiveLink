@@ -56,33 +56,35 @@ export function createUnityAdsRewardedVideo(
 } {
   let loaded = false
 
-  return {
-    load: async () => {
-      loadUnityAdsScript(config.gameId)
+  const loadFn = async () => {
+    loadUnityAdsScript(config.gameId)
 
-      // Wait for Unity Ads to be available
-      await new Promise<void>((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (window.u3d) {
-            clearInterval(checkInterval)
-            loaded = window.u3d.isReady(config.zoneId)
-            resolve()
-          }
-        }, 100)
-
-        // Timeout after 5 seconds
-        setTimeout(() => {
+    // Wait for Unity Ads to be available
+    await new Promise<void>((resolve) => {
+      const checkInterval = setInterval(() => {
+        if (window.u3d) {
           clearInterval(checkInterval)
-          if (!window.u3d) {
-            config.onError?.(new Error('Unity Ads failed to load'))
-          }
+          loaded = window.u3d.isReady(config.zoneId)
           resolve()
-        }, 5000)
-      })
-    },
+        }
+      }, 100)
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval)
+        if (!window.u3d) {
+          config.onError?.(new Error('Unity Ads failed to load'))
+        }
+        resolve()
+      }, 5000)
+    })
+  }
+
+  return {
+    load: loadFn,
     show: async () => {
       if (!window.u3d) {
-        await this.load()
+        await loadFn()
       }
 
       if (!window.u3d) {
@@ -92,6 +94,10 @@ export function createUnityAdsRewardedVideo(
 
       return new Promise<boolean>((resolve) => {
         try {
+          if (!window.u3d) {
+            config.onError?.(new Error('Unity Ads not available'))
+            return false
+          }
           window.u3d.showRewardedAd(
             config.zoneId,
             () => {

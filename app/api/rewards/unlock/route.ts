@@ -60,9 +60,9 @@ export async function POST(request: NextRequest) {
           success: true,
           data: {
             id: updated.id,
-            rewardType: updated.rewardType,
+            rewardType: updated.rewardType as RewardType,
             expiresAt: updated.expiresAt?.toISOString() || null,
-            metadata,
+            metadata: metadata as Record<string, unknown>,
           },
         })
       }
@@ -82,9 +82,9 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         id: reward.id,
-        rewardType: reward.rewardType,
+        rewardType: reward.rewardType as RewardType,
         expiresAt: reward.expiresAt?.toISOString() || null,
-        metadata: reward.metadata ? JSON.parse(reward.metadata) : {},
+        metadata: reward.metadata ? (JSON.parse(reward.metadata) as Record<string, unknown>) : {},
       },
     })
   } catch (error) {
