@@ -1,10 +1,9 @@
 /**
  * Rewarded video ad manager
- * Supports multiple ad providers with a unified interface
+ * Google Ads only - supports both browser and mobile web
  */
 
 import { createGoogleAdManagerRewardedVideo } from './google-ads-manager'
-import { createUnityAdsRewardedVideo } from './unity-ads'
 
 export type RewardType = 'hint' | 'practice_unlimited' | 'streak_protection' | 'ad_free'
 
@@ -62,54 +61,37 @@ export function createMockRewardedVideoAd(
 
 /**
  * Create a Google AdMob rewarded video ad
- * Note: AdMob requires additional setup and is primarily for mobile apps
- * For web, you may want to use Google AdSense or other web ad networks
+ * AdMob can work on both mobile web and desktop browsers with proper setup
+ * Note: Requires AdMob SDK to be loaded separately
  */
 export function createAdMobRewardedVideoAd(
   config: RewardedVideoConfig
 ): RewardedVideoAd | null {
-  // AdMob is primarily for mobile apps, not web
-  // For web, you'd typically use Google AdSense or other providers
-  // This is a placeholder for future mobile app support
-  
   if (typeof window === 'undefined') {
     return null
   }
 
-  // Check if AdMob SDK is available (would need to be loaded separately)
-  // For now, return mock in development
-  if (process.env.NODE_ENV === 'development') {
-    return createMockRewardedVideoAd(config)
-  }
+  // Check if AdMob SDK is available
+  // AdMob requires the SDK to be loaded via script tag or npm package
+  // For web, you can use AdMob with the Google Mobile Ads SDK for web
+  const admobAppId = process.env.NEXT_PUBLIC_ADMOB_APP_ID
+  const admobAdUnitId = process.env.NEXT_PUBLIC_ADMOB_AD_UNIT_ID || config.adUnitId
 
-  // In production, you would integrate with actual AdMob SDK
-  // This requires additional setup and is beyond the scope of this implementation
-  console.warn('AdMob integration requires additional setup')
-  return null
-}
-
-/**
- * Create a Unity Ads rewarded video ad
- * Unity Ads is a good option for web rewarded video ads
- */
-export function createUnityAdsRewardedVideoAd(
-  config: RewardedVideoConfig
-): RewardedVideoAd | null {
-  const gameId = process.env.NEXT_PUBLIC_UNITY_ADS_GAME_ID
-  const zoneId = process.env.NEXT_PUBLIC_UNITY_ADS_ZONE_ID
-
-  if (!gameId || !zoneId) {
+  if (!admobAppId) {
     return null
   }
 
-  return createUnityAdsRewardedVideo({
-    gameId,
-    zoneId,
-    onRewarded: () => config.onRewarded(config.adUnitId as RewardType, 1),
-    onError: config.onError,
-    onAdClosed: config.onAdClosed,
-  })
+  // In development, return mock if SDK not available
+  if (process.env.NODE_ENV === 'development' && !(window as any).google?.ima) {
+    return createMockRewardedVideoAd(config)
+  }
+
+  // For production, AdMob SDK would need to be loaded
+  // This is a placeholder - full AdMob web integration requires additional SDK setup
+  console.warn('AdMob web SDK integration requires additional setup. Consider using Google Ad Manager for web rewarded video ads.')
+  return null
 }
+
 
 /**
  * Create a Google Ad Manager rewarded video ad
@@ -135,7 +117,8 @@ export function createGoogleAdManagerRewardedVideoAd(
 
 /**
  * Create a rewarded video ad instance
- * Automatically selects the appropriate provider based on environment and configuration
+ * Google Ads only - works on both browser and mobile web
+ * Priority: Google Ad Manager > Google AdMob > Mock (fallback)
  */
 export function createRewardedVideoAd(
   config: RewardedVideoConfig
@@ -145,27 +128,21 @@ export function createRewardedVideoAd(
     return createMockRewardedVideoAd(config)
   }
 
-  // Try Unity Ads first (good web support)
-  const unityAd = createUnityAdsRewardedVideoAd(config)
-  if (unityAd) {
-    return unityAd
-  }
-
-  // Try Google Ad Manager
+  // Try Google Ad Manager first (best for web rewarded video, works on browser and mobile web)
   const adManagerAd = createGoogleAdManagerRewardedVideoAd(config)
   if (adManagerAd) {
     return adManagerAd
   }
 
-  // Try AdMob (primarily for mobile, but can work with web)
+  // Try AdMob (works on mobile web and can work on desktop browsers with proper setup)
   const admobAd = createAdMobRewardedVideoAd(config)
   if (admobAd) {
     return admobAd
   }
 
-  // Fallback to mock if no provider available
+  // Fallback to mock if no Google ad provider configured
   if (process.env.NODE_ENV === 'production') {
-    console.warn('No ad provider configured. Please set up Unity Ads, Google Ad Manager, or AdMob.')
+    console.warn('No Google ad provider configured. Please set up Google Ad Manager or AdMob for rewarded video ads.')
   }
   return createMockRewardedVideoAd(config)
 }

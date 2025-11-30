@@ -1,10 +1,10 @@
-# Ad Setup Guide
+# Ad Setup Guide - Google Ads Only
 
-This guide explains how to set up real ads for HiveLink.
+This guide explains how to set up Google Ads for HiveLink. All ads use Google's ad network, which works on both browser and mobile web.
 
 ## Banner Ads (Google AdSense)
 
-Banner ads are already integrated and will work once you configure AdSense.
+Banner ads use Google AdSense and work on both desktop browsers and mobile web.
 
 ### Setup Steps:
 
@@ -31,35 +31,16 @@ Banner ads are already integrated and will work once you configure AdSense.
 
 ## Rewarded Video Ads
 
-Rewarded video ads require a provider that supports web. Here are your options:
+Rewarded video ads use Google Ad Manager (recommended) or Google AdMob. Both work on browser and mobile web.
 
-### Option 1: Unity Ads (Recommended for Web)
+### Option 1: Google Ad Manager (Recommended)
 
-Unity Ads has excellent web support for rewarded video ads.
+**Yes, Google Ad Manager supports rewarded video ads and they work on both desktop browsers and mobile web browsers.**
 
-#### Setup Steps:
-
-1. **Sign up for Unity Ads**
-   - Go to https://operate.dashboard.unity3d.com
-   - Create an account
-   - Create a new project
-   - Get your Game ID
-
-2. **Create Rewarded Video Ad Units**
-   - In Unity Ads dashboard, create rewarded video ad units
-   - Get the Zone ID for each reward type
-
-3. **Add to Environment Variables**
-   ```env
-   NEXT_PUBLIC_UNITY_ADS_GAME_ID="1234567"
-   NEXT_PUBLIC_UNITY_ADS_ZONE_ID="Rewarded_Android"  # or your zone ID
-   ```
-
-4. **The code will automatically use Unity Ads** when these variables are set.
-
-### Option 2: Google Ad Manager
-
-Google Ad Manager supports rewarded video ads but requires more setup.
+Google Ad Manager is the best option for web rewarded video ads. It works on:
+- ✅ Desktop browsers (Chrome, Firefox, Safari, Edge)
+- ✅ Mobile web browsers (Safari on iOS, Chrome on Android, etc.)
+- ✅ All devices that can access your web app
 
 #### Setup Steps:
 
@@ -69,7 +50,9 @@ Google Ad Manager supports rewarded video ads but requires more setup.
    - Get your Network Code
 
 2. **Create Rewarded Video Ad Units**
-   - Create rewarded video ad units in Ad Manager
+   - In Ad Manager dashboard, create a new ad unit
+   - Select "Rewarded video" as the ad format
+   - Configure the reward type and amount (e.g., "hint", "extra practice")
    - Get the ad unit path (format: `/network-code/ad-unit-path`)
 
 3. **Add to Environment Variables**
@@ -78,23 +61,31 @@ Google Ad Manager supports rewarded video ads but requires more setup.
    NEXT_PUBLIC_GOOGLE_AD_MANAGER_AD_UNIT_PATH="/123456789/rewarded-video"
    ```
 
-### Option 3: Google AdMob (Mobile Apps)
+**Note**: The same implementation works on both desktop and mobile - no separate setup needed for mobile devices.
 
-AdMob is primarily for mobile apps, but can work with web in some cases.
+### Option 2: Google AdMob
+
+AdMob can work on both mobile web and desktop browsers, but requires additional SDK setup.
 
 #### Setup Steps:
 
-1. **Sign up for AdMob**
+1. **Sign up for Google AdMob**
    - Go to https://admob.google.com
    - Create an account
-   - Create a rewarded ad unit
+   - Create a new app (select "Web" as platform)
+   - Get your App ID (format: `ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX`)
 
-2. **Add to Environment Variables**
+2. **Create Rewarded Video Ad Units**
+   - Create rewarded video ad units in AdMob dashboard
+   - Get the Ad Unit ID (format: `ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX`)
+
+3. **Add to Environment Variables**
    ```env
    NEXT_PUBLIC_ADMOB_APP_ID="ca-app-pub-XXXXXXXXXXXXXXXX~XXXXXXXXXX"
+   NEXT_PUBLIC_ADMOB_AD_UNIT_ID="ca-app-pub-XXXXXXXXXXXXXXXX/XXXXXXXXXX"
    ```
 
-3. **Note**: AdMob requires additional SDK setup and is better suited for mobile apps.
+4. **Note**: AdMob web integration requires loading the Google Mobile Ads SDK. For easier setup, use Google Ad Manager instead.
 
 ## Testing Real Ads
 
@@ -109,18 +100,19 @@ To test real ads in development:
 - [ ] Google AdSense account approved
 - [ ] AdSense Publisher ID configured
 - [ ] Ad units created in AdSense
-- [ ] Rewarded video ad provider configured (Unity Ads, Ad Manager, or AdMob)
+- [ ] Rewarded video ad provider configured (Google Ad Manager or AdMob)
 - [ ] Environment variables set in production (Vercel, etc.)
 - [ ] Test ads in production environment
 - [ ] Monitor ad performance in provider dashboards
 
 ## Ad Provider Priority
 
-The system tries providers in this order:
-1. Unity Ads (if configured)
-2. Google Ad Manager (if configured)
-3. AdMob (if configured)
-4. Mock ads (fallback)
+The system uses Google Ads only and tries providers in this order:
+1. **Google Ad Manager** (if configured) - **Best for web, works on desktop browsers AND mobile web browsers**
+2. **Google AdMob** (if configured) - Works on mobile web and desktop browsers (requires SDK setup)
+3. **Mock ads** (fallback for development)
+
+**Mobile Support**: Google Ad Manager rewarded video ads work on mobile web browsers (Safari on iOS, Chrome on Android, etc.) - no native app required. The same code works on all devices.
 
 ## Troubleshooting
 

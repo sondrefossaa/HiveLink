@@ -1,6 +1,7 @@
 /**
  * Google Ad Manager integration for rewarded video ads
- * Ad Manager supports rewarded video ads on web
+ * Ad Manager supports rewarded video ads on both desktop and mobile web browsers
+ * Works on all devices that can access the web app (no native app required)
  */
 
 declare global {

@@ -64,6 +64,7 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <head>
         <meta name="google-adsense-account" content="ca-pub-6391311831202615"></meta>
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6391311831202615"crossOrigin="anonymous"></script>
       </head>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
