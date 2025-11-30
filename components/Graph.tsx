@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 import { forceCollide, forceManyBody, forceX, forceY } from 'd3-force'
@@ -97,7 +97,7 @@ const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number
 const isSideBranchLineage = (node?: { branchId?: string }): boolean =>
   !!node?.branchId && node.branchId.includes('-side-')
 
-export default function Graph({
+function Graph({
   nodes,
   edges,
   selectedNodeId,
@@ -115,12 +115,24 @@ export default function Graph({
   const animationFrameRef = useRef<number | null>(null)
   const draggedNodeRef = useRef<string | null>(null)
   const snapBackTimerRef = useRef<number | null>(null)
-  const pointerScaleRef = useRef(1)
-  const pageVisibilityRef = useRef(true)
-  const { effectivePreference } = useMotionPreference()
-
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
+  
+  const pointerScaleRef = useRef(1)
+  const pageVisibilityRef = useRef(true)
+  const selectedNodeIdRef = useRef(selectedNodeId)
+  const nodesConnectedToGoalRef = useRef<Set<string>>(new Set())
+  const isCompleteRef = useRef(isComplete)
+  const startAnchorPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const orientationRef = useRef(orientation)
+  const { effectivePreference } = useMotionPreference()
+
+  // Keep refs in sync with props for stable callback dependencies
+  useEffect(() => {
+    selectedNodeIdRef.current = selectedNodeId
+    isCompleteRef.current = isComplete
+    orientationRef.current = orientation
+  }, [selectedNodeId, isComplete, orientation])
 
   const refreshGraph = useCallback(() => {
     const api = graphRef.current as (ForceGraphMethods & { refresh?: () => void }) | null
@@ -137,6 +149,8 @@ export default function Graph({
   }, [])
 
   useEffect(() => {
+    let resizeTimer: number | null = null
+    
     const updateDimensions = () => {
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
@@ -147,9 +161,25 @@ export default function Graph({
       setOrientation(rect.width < 768 ? 'vertical' : 'horizontal')
     }
 
-    updateDimensions()
-    window.addEventListener('resize', updateDimensions)
-    return () => window.removeEventListener('resize', updateDimensions)
+    const throttledUpdateDimensions = () => {
+      // Throttle resize events to avoid excessive layout recalculations
+      if (resizeTimer) {
+        cancelAnimationFrame(resizeTimer)
+      }
+      resizeTimer = requestAnimationFrame(() => {
+        updateDimensions()
+        resizeTimer = null
+      })
+    }
+
+    updateDimensions() // Initial update
+    window.addEventListener('resize', throttledUpdateDimensions)
+    return () => {
+      window.removeEventListener('resize', throttledUpdateDimensions)
+      if (resizeTimer) {
+        cancelAnimationFrame(resizeTimer)
+      }
+    }
   }, [])
 
   // Compute layout with strict rules
@@ -181,8 +211,13 @@ export default function Graph({
   }, [layout])
 
   const startAnchorPosition = useMemo(() => {
-    if (!startAnchor) return null
-    return { x: startAnchor.targetX, y: startAnchor.targetY }
+    if (!startAnchor) {
+      startAnchorPositionRef.current = null
+      return null
+    }
+    const pos = { x: startAnchor.targetX, y: startAnchor.targetY }
+    startAnchorPositionRef.current = pos
+    return pos
   }, [startAnchor])
 
   // Calculate winning edge IDs for highlighting
@@ -245,6 +280,9 @@ export default function Graph({
       }
     })
     
+    // Update ref for stable callback dependencies
+    nodesConnectedToGoalRef.current = connectedNodeIds
+    
     return connectedNodeIds
   }, [edges, nodes])
 
@@ -296,19 +334,50 @@ export default function Graph({
     })
 
     // Remove duplicate edges and edges that span over other connected nodes on the same layer
-    // (e.g., if A→B→C exist on same layer, remove A→C as it overlaps visually)
+    // Optimized with pre-computed data structures to avoid O(n²) lookups
     const seenEdges = new Set<string>()
     const edgeSet = new Set<string>()
+    const nodeById = new Map(graphNodes.map((n) => [n.id, n]))
     
-    // First pass: collect all edges
+    // Pre-build edge adjacency maps for faster lookups
+    const sourceToTargets = new Map<string, Set<string>>()
+    const targetToSources = new Map<string, Set<string>>()
+    
+    // First pass: collect all edges and build adjacency maps
     graphLinks.forEach((link) => {
       const sourceId = typeof link.source === 'string' ? link.source : link.source
       const targetId = typeof link.target === 'string' ? link.target : link.target
-      edgeSet.add(`${sourceId}->${targetId}`)
+      const key = `${sourceId}->${targetId}`
+      edgeSet.add(key)
+      
+      if (!sourceToTargets.has(sourceId)) sourceToTargets.set(sourceId, new Set())
+      if (!targetToSources.has(targetId)) targetToSources.set(targetId, new Set())
+      sourceToTargets.get(sourceId)!.add(targetId)
+      targetToSources.get(targetId)!.add(sourceId)
     })
     
-    // Build adjacency for same-layer nodes
-    const nodeById = new Map(graphNodes.map((n) => [n.id, n]))
+    // Pre-build nodes by layer position (rounded to nearest 50px) for same-layer checks
+    const nodesByLayerPos = new Map<number, ForceLayoutNode[]>()
+    graphNodes.forEach((node) => {
+      const layerPos = Math.round(node.targetX / 50) * 50
+      if (!nodesByLayerPos.has(layerPos)) {
+        nodesByLayerPos.set(layerPos, [])
+      }
+      nodesByLayerPos.get(layerPos)!.push(node)
+    })
+    
+    // Helper to check if path exists through intermediate node
+    const hasPathThrough = (sourceId: string, targetId: string, intermediateId: string): boolean => {
+      const sourceToIntermediate = sourceToTargets.get(sourceId)?.has(intermediateId) || 
+                                    targetToSources.get(intermediateId)?.has(sourceId) ||
+                                    edgeSet.has(`${sourceId}->${intermediateId}`) ||
+                                    edgeSet.has(`${intermediateId}->${sourceId}`)
+      const intermediateToTarget = sourceToTargets.get(intermediateId)?.has(targetId) ||
+                                    targetToSources.get(targetId)?.has(intermediateId) ||
+                                    edgeSet.has(`${intermediateId}->${targetId}`) ||
+                                    edgeSet.has(`${targetId}->${intermediateId}`)
+      return Boolean(sourceToIntermediate && intermediateToTarget)
+    }
     
     const uniqueLinks = graphLinks.filter((link) => {
       const sourceId = typeof link.source === 'string' ? link.source : link.source
@@ -324,36 +393,36 @@ export default function Graph({
       const sourceNode = nodeById.get(sourceId)
       const targetNode = nodeById.get(targetId)
       
+      if (!sourceNode || !targetNode) {
+        seenEdges.add(key)
+        return true
+      }
+      
       // Check if source and target are on the same layer (vertical edge)
-      if (sourceNode && targetNode) {
-        const sameLayer = Math.abs(sourceNode.targetX - targetNode.targetX) < 50
+      const sameLayer = Math.abs(sourceNode.targetX - targetNode.targetX) < 50
+      
+      if (sameLayer) {
+        // Only check intermediate nodes on the same layer (pre-filtered)
+        const layerPos = Math.round(sourceNode.targetX / 50) * 50
+        const sameLayerNodes = nodesByLayerPos.get(layerPos) || []
         
-        if (sameLayer) {
-          // Check if there's an intermediate node that both connect to
-          // If A→B and B→C exist, then A→C should be removed
-          const hasIntermediateNode = graphNodes.some((node) => {
-            if (node.id === sourceId || node.id === targetId) return false
-            
-            // Check if this node is on the same layer
-            if (Math.abs(node.targetX - sourceNode.targetX) > 50) return false
-            
-            // Check if this node is vertically between source and target
-            const minY = Math.min(sourceNode.targetY, targetNode.targetY)
-            const maxY = Math.max(sourceNode.targetY, targetNode.targetY)
-            if (node.targetY <= minY || node.targetY >= maxY) return false
-            
-            // Check if edges exist through this intermediate node
-            const hasPathThrough = 
-              (edgeSet.has(`${sourceId}->${node.id}`) || edgeSet.has(`${node.id}->${sourceId}`)) &&
-              (edgeSet.has(`${node.id}->${targetId}`) || edgeSet.has(`${targetId}->${node.id}`))
-            
-            return hasPathThrough
-          })
+        const minY = Math.min(sourceNode.targetY, targetNode.targetY)
+        const maxY = Math.max(sourceNode.targetY, targetNode.targetY)
+        
+        // Check for intermediate node with optimized lookup
+        const hasIntermediateNode = sameLayerNodes.some((node) => {
+          if (node.id === sourceId || node.id === targetId) return false
           
-          if (hasIntermediateNode) {
-            // This edge spans over an intermediate connected node - remove it
-            return false
-          }
+          // Check if this node is vertically between source and target
+          if (node.targetY <= minY || node.targetY >= maxY) return false
+          
+          // Check if edges exist through this intermediate node (optimized lookup)
+          return hasPathThrough(sourceId, targetId, node.id)
+        })
+        
+        if (hasIntermediateNode) {
+          // This edge spans over an intermediate connected node - remove it
+          return false
         }
       }
       
@@ -417,31 +486,43 @@ export default function Graph({
     fg.d3Force?.('center', null)
 
     if ('d3AlphaTarget' in fg) {
-      ;(fg as any).d3AlphaTarget(0.95)
-      ;(fg as any).d3ReheatSimulation?.()
-
+      // Clear any existing settle timer
       if (settleTimerRef.current) {
         clearTimeout(settleTimerRef.current)
+        settleTimerRef.current = null
       }
 
+      // Pin all nodes to target positions immediately
+      const data = fg.graphData?.()
+      if (data?.nodes) {
+        data.nodes.forEach((node) => {
+          node.fx = node.targetX
+          node.fy = node.targetY
+        })
+      }
+
+      // Allow brief settling for smooth transitions, then stop simulation completely
+      // Reduced duration since nodes are already at target positions
+      ;(fg as any).d3AlphaTarget(0.3) // Lower initial alpha
+      ;(fg as any).d3ReheatSimulation?.()
+
+      // Stop simulation quickly after brief settling period
       settleTimerRef.current = window.setTimeout(() => {
         if ('d3AlphaTarget' in fg) {
-          ;(fg as any).d3AlphaTarget(0)
+          ;(fg as any).d3AlphaTarget(0) // Stop simulation completely
         }
-        const data = fg.graphData?.()
-        if (data?.nodes) {
-          data.nodes.forEach((node) => {
-            // Always pin start/goal nodes to their target positions
-            if (node.isStart || (node.isGoal && !node.isCompleted)) {
-              node.fx = node.targetX
-              node.fy = node.targetY
-            } else {
-              node.fx = node.targetX
-              node.fy = node.targetY
-            }
+        
+        // Ensure all nodes remain pinned
+        const finalData = fg.graphData?.()
+        if (finalData?.nodes) {
+          finalData.nodes.forEach((node) => {
+            node.fx = node.targetX
+            node.fy = node.targetY
           })
         }
-      }, SIMULATION_DURATION_MS)
+        
+        settleTimerRef.current = null
+      }, Math.min(SIMULATION_DURATION_MS, 300)) // Faster settling: 300ms max
     }
   }, [orientation])
 
@@ -451,36 +532,8 @@ export default function Graph({
     return () => clearTimeout(timer)
   }, [configureForces, graphData.nodes.length, graphData.links.length])
 
-  // Continuously pin start/goal nodes to their target positions
-  useEffect(() => {
-    if (!graphRef.current) return
-    
-    const pinStartGoalNodes = () => {
-      const fg = graphRef.current as (ForceGraphMethods & {
-        graphData?: () => { nodes: ForceLayoutNode[] }
-      }) | null
-      if (!fg) return
-      
-      const data = fg.graphData?.()
-      if (data?.nodes) {
-        data.nodes.forEach((node) => {
-          // Always pin start/goal nodes - they should never move
-          if (node.isStart || (node.isGoal && !node.isCompleted)) {
-            node.fx = node.targetX
-            node.fy = node.targetY
-            // Also directly set position to prevent any drift
-            if (typeof node.x === 'number') node.x = node.targetX
-            if (typeof node.y === 'number') node.y = node.targetY
-          }
-        })
-      }
-    }
-    
-    // Pin nodes on every frame to ensure they stay locked
-    const interval = setInterval(pinStartGoalNodes, 16) // ~60fps
-    
-    return () => clearInterval(interval)
-  }, [graphData.nodes])
+  // Pin nodes once when graph data changes - nodes are already pinned in graphData useMemo
+  // No need for continuous interval since nodes are pinned at initialization and simulation settles quickly
 
   // Cleanup timers
   useEffect(() => {
@@ -500,7 +553,7 @@ export default function Graph({
     }
   }, [])
 
-  // Animate winning path pulse
+  // Animate winning path pulse - throttled to reduce refresh overhead
   useEffect(() => {
     if (!graphRef.current) return
     if (animationFrameRef.current) {
@@ -514,14 +567,25 @@ export default function Graph({
       return
     }
 
+    let frameCount = 0
+    const THROTTLE_FRAMES = 3 // Refresh every 3 frames (~20fps instead of 60fps)
+
     const animate = () => {
       if (!pageVisibilityRef.current) {
         animationFrameRef.current = requestAnimationFrame(animate)
         return
       }
 
+      // Update pulse value every frame (lightweight)
       winningPulseRef.current = (performance.now() % 2000) / 2000 // 2 second cycle
-      refreshGraph()
+      
+      // Only refresh graph every N frames to reduce redraw overhead
+      frameCount++
+      if (frameCount >= THROTTLE_FRAMES) {
+        frameCount = 0
+        refreshGraph()
+      }
+      
       animationFrameRef.current = requestAnimationFrame(animate)
     }
 
@@ -767,10 +831,31 @@ export default function Graph({
       pointerScaleRef.current = globalScale
       const x = node.x ?? node.targetX
       const y = node.y ?? node.targetY
-      const isSelected = node.id === selectedNodeId
+      const isSelected = node.id === selectedNodeIdRef.current
       const isGoalCompleted = node.isGoal && node.isCompleted
-      const connectsToGoal = nodesConnectedToGoal.has(node.id) && node.id !== 'goal'
+      const connectsToGoal = nodesConnectedToGoalRef.current.has(node.id) && node.id !== 'goal'
       const size = getRenderedNodeSize(node, globalScale)
+      
+      // Viewport culling: skip rendering nodes outside visible area (with padding for glow effects)
+      // Always render start/goal/selected nodes even if slightly off-screen for better UX
+      if (!node.isStart && !node.isGoal && !isSelected) {
+        const canvasWidth = ctx.canvas.width
+        const canvasHeight = ctx.canvas.height
+        const transform = ctx.getTransform()
+        const viewportLeft = -transform.e / globalScale
+        const viewportTop = -transform.f / globalScale
+        const viewportRight = viewportLeft + canvasWidth / globalScale
+        const viewportBottom = viewportTop + canvasHeight / globalScale
+        const padding = (size * 2) / globalScale // Account for node size + glow
+        
+        // Early return if node is clearly outside viewport bounds
+        if (x + size + padding < viewportLeft || 
+            x - size - padding > viewportRight ||
+            y + size + padding < viewportTop || 
+            y - size - padding > viewportBottom) {
+          return // Skip rendering this node
+        }
+      }
 
       // Draw glow/halo - enhanced for nodes connected to goal
       ctx.save()
@@ -889,7 +974,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [selectedNodeId, nodesConnectedToGoal]
+    [] // Dependencies accessed via refs for stability
   )
 
   // Custom link rendering with curved bezier edges
@@ -912,6 +997,32 @@ export default function Graph({
         return
       }
 
+      // Viewport culling: skip rendering edges where both endpoints are off-screen
+      // Always render winning edges and edges connected to start/goal
+      const isWinningEdge = link.isWinning
+      const isSpecialEdge = (source.isStart || source.isGoal || target.isStart || target.isGoal)
+      
+      if (!isWinningEdge && !isSpecialEdge) {
+        const canvasWidth = ctx.canvas.width
+        const canvasHeight = ctx.canvas.height
+        const transform = ctx.getTransform()
+        const viewportLeft = -transform.e / globalScale
+        const viewportTop = -transform.f / globalScale
+        const viewportRight = viewportLeft + canvasWidth / globalScale
+        const viewportBottom = viewportTop + canvasHeight / globalScale
+        const padding = 50 / globalScale
+        
+        // Check if both source and target are outside viewport
+        const sourceVisible = source.x + padding >= viewportLeft && source.x - padding <= viewportRight &&
+                              source.y + padding >= viewportTop && source.y - padding <= viewportBottom
+        const targetVisible = target.x + padding >= viewportLeft && target.x - padding <= viewportRight &&
+                              target.y + padding >= viewportTop && target.y - padding <= viewportBottom
+        
+        if (!sourceVisible && !targetVisible) {
+          return // Both endpoints off-screen, skip rendering
+        }
+      }
+
       const dx = target.x - source.x
       const dy = target.y - source.y
       const distance = Math.sqrt(dx * dx + dy * dy) || 1
@@ -922,11 +1033,12 @@ export default function Graph({
       const sourceTargetY = source.targetY ?? source.y
       const targetTargetY = target.targetY ?? target.y
       
-      const sameLayer = orientation === 'horizontal'
+      const currentOrientation = orientationRef.current
+      const sameLayer = currentOrientation === 'horizontal'
         ? Math.abs(sourceTargetX - targetTargetX) < SAME_LAYER_X_EPSILON
         : Math.abs(sourceTargetY - targetTargetY) < SAME_LAYER_X_EPSILON
 
-      const mainAxisDrift = orientation === 'horizontal' ? Math.abs(dx) : Math.abs(dy)
+      const mainAxisDrift = currentOrientation === 'horizontal' ? Math.abs(dx) : Math.abs(dy)
       const nearlyPerpendicular = sameLayer || mainAxisDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
       const shouldRenderStaple = nearlyPerpendicular
       
@@ -954,19 +1066,21 @@ export default function Graph({
       ctx.beginPath()
 
       const computeCurveStrength = (baseStrength: number) => {
-        if (!startAnchorPosition) return baseStrength
-        const anchorPos = orientation === 'horizontal' ? startAnchorPosition.x : startAnchorPosition.y
-        const sourcePos = orientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorPos) : (source.targetY ?? source.y ?? anchorPos)
-        const distanceFromStart = Math.abs(sourcePos - anchorPos)
+        const anchorPos = startAnchorPositionRef.current
+        if (!anchorPos) return baseStrength
+        const anchorValue = currentOrientation === 'horizontal' ? anchorPos.x : anchorPos.y
+        const sourcePos = currentOrientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorValue) : (source.targetY ?? source.y ?? anchorValue)
+        const distanceFromStart = Math.abs(sourcePos - anchorValue)
         const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
         const attenuation = Math.max(0.3, 1 - normalized * 0.7)
         return baseStrength * attenuation
       }
 
       const getCurveMode = () => {
-        if (!startAnchorPosition) return { direction: 1, isFlat: false }
-        const anchorCross = orientation === 'horizontal' ? startAnchorPosition.y : startAnchorPosition.x
-        const sourceCross = orientation === 'horizontal' ? (source.targetY ?? source.y ?? anchorCross) : (source.targetX ?? source.x ?? anchorCross)
+        const anchorPos = startAnchorPositionRef.current
+        if (!anchorPos) return { direction: 1, isFlat: false }
+        const anchorCross = currentOrientation === 'horizontal' ? anchorPos.y : anchorPos.x
+        const sourceCross = currentOrientation === 'horizontal' ? (source.targetY ?? source.y ?? anchorCross) : (source.targetX ?? source.x ?? anchorCross)
         const delta = sourceCross - anchorCross
         if (Math.abs(delta) <= START_HEIGHT_TOLERANCE) {
           return { direction: 0, isFlat: true }
@@ -976,7 +1090,7 @@ export default function Graph({
       const { direction: curveDirection, isFlat: isFlatToStart } = getCurveMode()
 
       if (isStapleEdge) {
-        if (orientation === 'horizontal') {
+        if (currentOrientation === 'horizontal') {
           const verticalDir = dy >= 0 ? 1 : -1
           startY = source.y + verticalDir * sourceRadius
           endY = target.y - verticalDir * targetRadius
@@ -1024,7 +1138,7 @@ export default function Graph({
       // Create gradient for edge color (use padded points for side branches)
       const gradient = ctx.createLinearGradient(startX, startY, endX, endY)
       
-      if (link.isWinning && isComplete) {
+      if (link.isWinning && isCompleteRef.current) {
         // Winning path after completion: green
         gradient.addColorStop(0, 'rgba(34, 197, 94, 0.9)')
         gradient.addColorStop(1, 'rgba(74, 222, 128, 0.9)')
@@ -1078,7 +1192,7 @@ export default function Graph({
         ctx.restore()
       }
     },
-    [isComplete, startAnchorPosition, orientation]
+    [] // Dependencies accessed via refs for stability
   )
 
   return (
@@ -1129,3 +1243,6 @@ export default function Graph({
     </div>
   )
 }
+
+// Memoize component to prevent unnecessary re-renders when props haven't changed
+export default memo(Graph)
