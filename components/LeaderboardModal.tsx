@@ -117,9 +117,9 @@ export default function LeaderboardModal({
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
             transition={{ type: 'spring', damping: 24, stiffness: 250 }}
             onClick={(event) => event.stopPropagation()}
-            className="relative w-full max-w-2xl max-h-[85vh] bg-hive-charcoal rounded-2xl border border-hive-graphite shadow-2xl overflow-hidden"
+            className="relative w-full max-w-2xl max-h-[85vh] bg-hive-charcoal rounded-2xl border border-hive-graphite shadow-2xl overflow-hidden flex flex-col"
           >
-            <div className="flex items-center justify-between gap-4 border-b border-hive-graphite px-5 py-4">
+            <div className="flex items-center justify-between gap-4 border-b border-hive-graphite px-5 py-4 flex-shrink-0">
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <svg className="w-5 h-5 text-hive-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -156,7 +156,7 @@ export default function LeaderboardModal({
               </div>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto">
+            <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               {loading && (
                 <div className="flex justify-center py-10">
                   <div className="w-10 h-10 border-4 border-hive-yellow/40 border-t-hive-yellow rounded-full animate-spin" />

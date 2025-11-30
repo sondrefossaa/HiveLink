@@ -235,7 +235,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
   }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
 
-  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string }> => {
+  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string; isNewPath?: boolean }> => {
     if (!puzzle) {
       return { success: false, error: 'Puzzle not loaded' }
     }
