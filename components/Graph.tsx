@@ -179,7 +179,7 @@ function Graph({
       orientation,
       graphSpacing
     )
-  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion]) // layoutVersion forces recalculation when layout changes
+  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion])
 
   // Calculate dynamic max zoom based on graph size
   // Smaller graphs can zoom in more for better detail viewing
@@ -497,43 +497,113 @@ function Graph({
 
   // Winning pulse animation removed - was causing constant redraws on mobile
 
-  // Track if initial centering has happened
-  const hasInitializedRef = useRef(false)
-  const hasInitialZoomRef = useRef(false)
-
-  // Handle initial camera positioning - position to show start node on left
+  // Auto-center and auto-zoom to fit entire graph whenever layout changes
+  // Centers on the midpoint between start and end nodes
   useEffect(() => {
-    if (hasInitializedRef.current) return
     if (!graphRef.current) return
     if (nodes.length === 0) return
     
-    // Mark as initialized
-    hasInitializedRef.current = true
-    hasInitialZoomRef.current = true
-    
-    // Small delay to ensure graph is rendered
-    setTimeout(() => {
+    // Wait for graph to be fully initialized and rendered
+    const timeoutId = setTimeout(() => {
       if (!graphRef.current) return
       
-      // Get the graph's bounding box to understand the layout
-      const startNode = layout.nodeMeta.get(layout.startNodeId ?? '')
-      const goalNode = layout.nodeMeta.get(layout.goalNodeId ?? '')
+      const { boundingBox } = layout
       
-      if (!startNode) return
+      // Get start and goal nodes to center on their midpoint
+      const startNode = layout.startNodeId ? layout.nodeMeta.get(layout.startNodeId) : null
+      const goalNode = layout.goalNodeId ? layout.nodeMeta.get(layout.goalNodeId) : null
       
-      // Calculate the center point of the graph
-      const graphWidth = (goalNode?.targetX ?? layout.maxLayer * 150) - (startNode.targetX)
+      // Calculate center point: since layout is now centered around 0, 
+      // the start/end midpoint should be at or near 0
+      let centerX: number
+      let centerY: number
       
-      // We want to position the camera so the start is on the left
-      // Center the camera at a point that puts the start node at ~20% from left edge
-      const targetCenterX = startNode.targetX + graphWidth * 0.3
+      if (startNode && goalNode) {
+        // Center on midpoint between start and goal (should be near 0 after layout centering)
+        centerX = (startNode.targetX + goalNode.targetX) / 2
+        centerY = (startNode.targetY + goalNode.targetY) / 2
+      } else if (startNode) {
+        // Only start node available, center on it (should be near 0 after layout centering)
+        centerX = startNode.targetX
+        centerY = startNode.targetY
+      } else {
+        // Fallback to bounding box center
+        centerX = boundingBox.centerX
+        centerY = boundingBox.centerY
+      }
       
-      graphRef.current.centerAt(targetCenterX, 0, 1000)
+      // Calculate zoom level to fit entire graph
+      const viewportWidth = dimensions.width
+      const viewportHeight = dimensions.height
       
-      // Zoom out to show more of the graph (lower zoom = more visible area)
-      graphRef.current.zoom(0.6, 1000)
-    }, 100)
-  }, [nodes.length, dimensions.width, layout])
+      // For single node or very small graphs, use a reasonable minimum view size
+      // This prevents excessive zoom when there's only one node
+      // Use a percentage of viewport size to ensure reasonable zoom
+      const MIN_VIEW_WIDTH = viewportWidth * 0.5
+      const MIN_VIEW_HEIGHT = viewportHeight * 0.5
+      
+      // Use actual bounding box dimensions, but ensure minimums for zoom calculation
+      // This ensures we don't zoom in too much on a single node
+      const effectiveWidth = Math.max(boundingBox.width, MIN_VIEW_WIDTH)
+      const effectiveHeight = Math.max(boundingBox.height, MIN_VIEW_HEIGHT)
+      
+      // Add padding (15% margin) around the bounding box
+      const padding = 0.15
+      const paddedWidth = effectiveWidth * (1 + padding * 2)
+      const paddedHeight = effectiveHeight * (1 + padding * 2)
+      
+      // For horizontal orientation: X is main axis, Y is cross axis
+      // For vertical orientation: Y is main axis, X is cross axis
+      let zoomX: number
+      let zoomY: number
+      
+      if (orientation === 'horizontal') {
+        zoomX = paddedWidth > 0 ? (viewportWidth / paddedWidth) * 0.9 : 1
+        zoomY = paddedHeight > 0 ? (viewportHeight / paddedHeight) * 0.9 : 1
+      } else {
+        // Vertical orientation: swap axes
+        zoomX = paddedHeight > 0 ? (viewportWidth / paddedHeight) * 0.9 : 1
+        zoomY = paddedWidth > 0 ? (viewportHeight / paddedWidth) * 0.9 : 1
+      }
+      
+      // Use the smaller zoom to ensure entire graph fits
+      let calculatedZoom = Math.min(zoomX, zoomY)
+      
+      // Handle edge case: if zoom calculation fails, use default
+      if (!isFinite(calculatedZoom) || calculatedZoom <= 0) {
+        calculatedZoom = 1
+      }
+      
+      // Respect min/max zoom limits
+      const MIN_ZOOM = 0.25
+      calculatedZoom = Math.max(MIN_ZOOM, Math.min(calculatedZoom, maxZoom))
+      
+      // Ensure center coordinates are valid
+      const finalCenterX = isFinite(centerX) ? centerX : 0
+      const finalCenterY = isFinite(centerY) ? centerY : 0
+      
+      // Center on start/end midpoint and zoom to fit entire graph
+      // Use a longer delay to ensure graph data is fully set and rendered
+      setTimeout(() => {
+        if (!graphRef.current) return
+        
+        // Apply both zoom and center - the library should handle the coordinate transform
+        // Do it synchronously first to establish the view, then animate
+        graphRef.current.zoom(calculatedZoom, 0)
+        graphRef.current.centerAt(finalCenterX, finalCenterY, 0)
+        
+        // Then animate smoothly to the final position
+        setTimeout(() => {
+          if (graphRef.current) {
+            graphRef.current.zoom(calculatedZoom, 1000)
+            graphRef.current.centerAt(finalCenterX, finalCenterY, 1000)
+          }
+        }, 100)
+      }, 300) // Longer delay to ensure graph is fully initialized
+    }, 200) // Increased delay to ensure graph is ready
+    
+    return () => clearTimeout(timeoutId)
+  }, [layout, dimensions.width, dimensions.height, orientation, maxZoom, nodes.length])
 
   // Handle initial graph render
   const handleRenderFrame = useCallback(() => {
@@ -625,15 +695,9 @@ function Graph({
     }
   }, [maxZoom])
 
-  // Center on selected node only (not on frontier changes)
+  // Center on selected node when user clicks (will be overridden by auto-center on layout changes)
   useEffect(() => {
     if (!graphRef.current) return
-    if (!hasInitializedRef.current) return // Skip initial load
-    if (hasInitialZoomRef.current) {
-      // After initial zoom to fit, allow subsequent centering
-      hasInitialZoomRef.current = false
-      return
-    }
     if (!selectedNodeId) return // Only center when user clicks a node
     const anchorNode = layout.nodeMeta.get(selectedNodeId)
     if (!anchorNode) return

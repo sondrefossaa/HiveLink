@@ -71,7 +71,7 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                    <span>Your new word&apos;s <strong className="text-white">FIRST part</strong> must match the <strong className="text-white">LAST part</strong> of the previous word.</span>
+                    <span>Your new word's <strong className="text-white">FIRST part</strong> must match the <strong className="text-white">LAST part</strong> of the previous word.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">4</span>

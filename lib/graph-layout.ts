@@ -275,6 +275,16 @@ export interface GraphLayoutResult {
   startNodeId?: string
   goalNodeId?: string
   farthestNodeId?: string
+  boundingBox: {
+    minX: number
+    maxX: number
+    minY: number
+    maxY: number
+    centerX: number
+    centerY: number
+    width: number
+    height: number
+  }
 }
 
 const resolveNodeId = (endpoint: string | GraphNode): string =>
@@ -675,6 +685,15 @@ export function computeGraphLayout(
   let farthestNodeId: string | undefined
   let farthestLayer = -Infinity
   
+  // Calculate the center X position between start and goal to center the graph
+  const startLayer = 0
+  const goalLayerX = goalLayer * LAYER_HORIZONTAL_SPACING + START_X
+  const startLayerX = startLayer * LAYER_HORIZONTAL_SPACING + START_X
+  const graphCenterX = goalNode ? (startLayerX + goalLayerX) / 2 : startLayerX
+  
+  // Calculate offset to center the graph (shift so center is at 0)
+  const xOffset = -graphCenterX
+  
   const layoutNodes: LayoutNodeMeta[] = nodes.map((node) => {
     let computedLayer = layerMap.get(node.id) ?? 0
     if (node.id === goalNode?.id) {
@@ -690,7 +709,8 @@ export function computeGraphLayout(
     const nodePos = positions.get(node.id)!
     
     // Horizontal positioning: targetX = LAYER_HORIZONTAL_SPACING * layer + START_X
-    const targetX = LAYER_HORIZONTAL_SPACING * computedLayer + START_X
+    // Then shift by xOffset to center the graph around 0
+    const targetX = (LAYER_HORIZONTAL_SPACING * computedLayer + START_X) + xOffset
     const targetY = nodePos.y - safeCanvasSize / 2 // Relative to center
     
     let finalTargetX: number
@@ -730,6 +750,38 @@ export function computeGraphLayout(
 
   const nodeMeta = new Map(layoutNodes.map((node) => [node.id, node]))
 
+  // Calculate bounding box of all nodes (accounting for node sizes)
+  // Start/goal nodes: 48px base size, regular nodes: 36px base size
+  // Add buffer for stroke and visual radius
+  const START_GOAL_NODE_RADIUS = 50
+  const REGULAR_NODE_RADIUS = 40
+  
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+
+  if (layoutNodes.length > 0) {
+    layoutNodes.forEach((node) => {
+      const nodeRadius = node.isStart || node.isGoal ? START_GOAL_NODE_RADIUS : REGULAR_NODE_RADIUS
+      minX = Math.min(minX, node.targetX - nodeRadius)
+      maxX = Math.max(maxX, node.targetX + nodeRadius)
+      minY = Math.min(minY, node.targetY - nodeRadius)
+      maxY = Math.max(maxY, node.targetY + nodeRadius)
+    })
+  } else {
+    // Empty graph - use default bounds
+    minX = -100
+    maxX = 100
+    minY = -100
+    maxY = 100
+  }
+
+  const width = maxX - minX
+  const height = maxY - minY
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+
   return {
     nodes: layoutNodes,
     nodeMeta,
@@ -738,6 +790,16 @@ export function computeGraphLayout(
     startNodeId: startNode.id,
     goalNodeId: goalNode?.id,
     farthestNodeId,
+    boundingBox: {
+      minX: isFinite(minX) ? minX : -100,
+      maxX: isFinite(maxX) ? maxX : 100,
+      minY: isFinite(minY) ? minY : -100,
+      maxY: isFinite(maxY) ? maxY : 100,
+      centerX: isFinite(centerX) ? centerX : 0,
+      centerY: isFinite(centerY) ? centerY : 0,
+      width: Math.max(width, 0), // Ensure non-negative
+      height: Math.max(height, 0), // Ensure non-negative
+    },
   }
 }
 
