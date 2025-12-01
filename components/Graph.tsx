@@ -59,14 +59,19 @@ const MIN_VISUAL_SCALE = 0.2
 const getZoomCompensation = (node: ForceLayoutNode, globalScale: number): number => {
   if (node.isStart || node.isGoal) return 1
   if (globalScale >= 1) return 1
+  // When zoomed out, maintain larger node size by using a less aggressive reduction
+  // Use square root instead of square to reduce less, keeping nodes bigger
   const normalized = Math.max(Math.min(globalScale, 1), MIN_VISUAL_SCALE)
-  return normalized * normalized
+  return Math.sqrt(normalized) // Less aggressive reduction = bigger nodes when zoomed out
 }
 
 const getRenderedNodeSize = (node: ForceLayoutNode, globalScale: number): number => {
-  const baseSize = node.isStart || node.isGoal ? 38 : 28
+  const baseSize = node.isStart || node.isGoal ? 48 : 36
   const inverseScale = 1 / Math.max(globalScale, 0.001)
-  return baseSize * inverseScale * getZoomCompensation(node, globalScale)
+  const compensatedSize = baseSize * inverseScale * getZoomCompensation(node, globalScale)
+  // Ensure minimum size when zoomed out (at least 60% of base size)
+  const minSize = baseSize * 0.6
+  return Math.max(compensatedSize, minSize)
 }
 
 const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number => {

@@ -205,12 +205,12 @@ export default function InputBar({
               {/* Hint button - only show when not disabled and hint handler is available */}
               {!isDisabled && onHintReceived && (
                 <HintButton
-          onHintReceived={onHintReceived}
-          className="hidden sm:flex"
-          nodes={nodes}
-          goalWord={goalWord}
-          selectedNodeId={selectedNode?.id || null}
-        />
+                  onHintReceived={onHintReceived}
+                  className="flex-shrink-0"
+                  nodes={nodes}
+                  goalWord={goalWord}
+                  selectedNodeId={selectedNode?.id || null}
+                />
               )}
               <input
                 ref={inputRef}
