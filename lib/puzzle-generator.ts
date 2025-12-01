@@ -2,7 +2,6 @@ import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
 import type { CompoundWord } from '@/types'
 import compoundWords from '@/data/compound-words.json'
 import {
-  findSharedPart,
   parseCompoundWord,
   isLikelyCompoundWord,
   registerCompoundParts,
@@ -69,21 +68,33 @@ let practiceEnvironmentCache: WordEnvironment | null = null
 let practiceEnvironmentPromise: Promise<WordEnvironment> | null = null
 
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
-  easy: { min: 4, max: 5 },
-  medium: { min: 6, max: 7 },
-  hard: { min: 8, max: 9 },
+  easy: { min: 3, max: 4 }, // Reduced for suffix chaining
+  medium: { min: 4, max: 5 }, // Reduced for suffix chaining - was 6-7
+  hard: { min: 6, max: 7 }, // Reduced for suffix chaining - was 8-9
 }
 
-const MAX_CHAIN_ATTEMPTS = 400
+const MAX_CHAIN_ATTEMPTS = 800 // Increased for suffix chaining which is more restrictive
 
 function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
   const index = new Map<string, WordEntry[]>()
   for (const entry of words) {
+    // For suffix chaining, index by FIRST part (to find candidates that start with a given part)
+    if (entry.parts.length > 0) {
+      const firstPart = entry.parts[0].toLowerCase()
+      const list = index.get(firstPart) ?? []
+      list.push(entry)
+      index.set(firstPart, list)
+    }
+    // Also index by all parts for other uses
     const uniqueParts = Array.from(new Set(entry.parts))
     for (const part of uniqueParts) {
-      const list = index.get(part) ?? []
-      list.push(entry)
-      index.set(part, list)
+      const partLower = part.toLowerCase()
+      if (partLower === entry.parts[0].toLowerCase()) continue // Already added above
+      const list = index.get(partLower) ?? []
+      if (!list.includes(entry)) {
+        list.push(entry)
+      }
+      index.set(partLower, list)
     }
   }
   return index
@@ -159,24 +170,24 @@ function pickRandomStart(environment: WordEnvironment): WordEntry {
 }
 
 function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEnvironment): WordEntry | null {
-  const parts = shuffleInPlace(Array.from(new Set(current.parts)))
+  // Suffix chaining rule: candidate's FIRST part must match current's LAST part
+  const currentLastPart = current.parts.length > 0 ? current.parts[current.parts.length - 1].toLowerCase() : null
+  if (!currentLastPart) return null
 
-  for (const part of parts) {
-    const candidates = environment.partIndex.get(part)
-    if (!candidates) continue
+  const candidates = environment.partIndex.get(currentLastPart)
+  if (!candidates) return null
 
-    const shuffled = shuffleInPlace([...candidates])
-    for (const candidate of shuffled) {
-      if (candidate.word === current.word) continue
-      if (used.has(candidate.word)) continue
+  const shuffled = shuffleInPlace([...candidates])
+  for (const candidate of shuffled) {
+    if (candidate.word === current.word) continue
+    if (used.has(candidate.word)) continue
 
-      const shared = findSharedPart(current.parts, candidate.parts)
-      if (!shared) continue
+    // Verify suffix chaining: candidate's first part must match current's last part
+    const candidateFirstPart = candidate.parts.length > 0 ? candidate.parts[0].toLowerCase() : null
+    if (!candidateFirstPart || candidateFirstPart !== currentLastPart) continue
 
-      // Ensure the connection only shares the intended part
-      used.add(candidate.word)
-      return candidate
-    }
+    used.add(candidate.word)
+    return candidate
   }
 
   return null
@@ -214,54 +225,84 @@ function attemptBuildChain(targetLength: number, environment: WordEnvironment): 
 }
 
 function startAndGoalSharePart(chain: WordEntry[]): boolean {
-  if (chain.length < 2) {
+  if (chain.length < 1) {
     return false
   }
 
-  const start = chain[0]
-  const goal = chain[chain.length - 1]
-  return Boolean(findSharedPart(start.parts, goal.parts))
+  // With suffix chaining: start word = first part of first compound, goal word = last part of last compound
+  // Check if they're the same (trivial puzzle)
+  const firstCompound = chain[0]
+  const lastCompound = chain[chain.length - 1]
+  
+  if (firstCompound.parts.length === 0 || lastCompound.parts.length === 0) {
+    return false
+  }
+  
+  const startWord = firstCompound.parts[0].toLowerCase()
+  const goalWord = lastCompound.parts[lastCompound.parts.length - 1].toLowerCase()
+  
+  return startWord === goalWord
 }
 
-// Detect if there exists a direct one-word bridge that combines a part from start and a part from goal
+// Detect if there exists a direct one-word bridge that connects start to goal via suffix chaining
+// With suffix chaining: a word exists that starts with start word and ends with goal word
 function directBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
-  const startParts = Array.from(new Set(start.parts))
-  const goalParts = Array.from(new Set(goal.parts))
-  // Build a fast lookup of words by normalized parts sequence
-  const wordsSet = new Set(environment.words.map(w => w.word))
-
-  // Helper to check if concatenation of a and b exists as a known compound word
-  const existsConcat = (a: string, b: string): boolean => {
-    const candidate = (a + b).toLowerCase()
-    return wordsSet.has(candidate)
-  }
-
-  for (const sp of startParts) {
-    for (const gp of goalParts) {
-      if (existsConcat(sp, gp) || existsConcat(gp, sp)) {
-        return true
-      }
+  // Extract actual start and goal words (first part of start, last part of goal)
+  const startWord = start.parts.length > 0 ? start.parts[0].toLowerCase() : start.word.toLowerCase()
+  const goalWord = goal.parts.length > 0 ? goal.parts[goal.parts.length - 1].toLowerCase() : goal.word.toLowerCase()
+  
+  // Check if there's a compound word that starts with startWord and ends with goalWord
+  // This would be a trivial one-word solution: startWord + ... + goalWord = compound
+  for (const candidate of environment.words) {
+    if (candidate.parts.length < 2) continue
+    
+    const candidateFirstPart = candidate.parts[0].toLowerCase()
+    const candidateLastPart = candidate.parts[candidate.parts.length - 1].toLowerCase()
+    
+    // Check if this word directly bridges start to goal
+    if (candidateFirstPart === startWord && candidateLastPart === goalWord) {
+      return true
     }
   }
+  
   return false
 }
 
-// Detect if there exists a two-step bridge: a word that shares a part with start
-// and also shares a different part with goal, enabling start -> bridge -> goal
+// Detect if there exists a two-step bridge via suffix chaining
+// With suffix chaining: start -> word1 -> word2 -> goal
+// Where: start == word1's first part, word1's last part == word2's first part, word2's last part == goal
 function twoStepBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
-  const startParts = Array.from(new Set(start.parts))
-  const goalParts = Array.from(new Set(goal.parts))
-
-  // For each candidate in environment, check if it connects to both start and goal via different parts
-  for (const candidate of environment.words) {
-    if (candidate.word === start.word || candidate.word === goal.word) continue
-    const sharedWithStart = findSharedPart(candidate.parts, startParts)
-    const sharedWithGoal = findSharedPart(candidate.parts, goalParts)
-    if (!sharedWithStart || !sharedWithGoal) continue
-    // Ensure it's not the same shared part connecting both ends (trivial reuse)
-    if (sharedWithStart === sharedWithGoal) continue
-    return true
+  // Extract actual start and goal words (first part of start, last part of goal)
+  const startWord = start.parts.length > 0 ? start.parts[0].toLowerCase() : start.word.toLowerCase()
+  const goalWord = goal.parts.length > 0 ? goal.parts[goal.parts.length - 1].toLowerCase() : goal.word.toLowerCase()
+  
+  // Check for two-step bridge: startWord -> word1 -> word2 -> goalWord
+  // word1 must start with startWord
+  // word2 must start with word1's last part and end with goalWord
+  for (const word1 of environment.words) {
+    if (word1.parts.length < 2) continue
+    
+    const word1FirstPart = word1.parts[0].toLowerCase()
+    const word1LastPart = word1.parts[word1.parts.length - 1].toLowerCase()
+    
+    // word1 must start with startWord
+    if (word1FirstPart !== startWord) continue
+    
+    // Now find word2 that starts with word1's last part and ends with goalWord
+    for (const word2 of environment.words) {
+      if (word2.word === word1.word) continue
+      if (word2.parts.length < 2) continue
+      
+      const word2FirstPart = word2.parts[0].toLowerCase()
+      const word2LastPart = word2.parts[word2.parts.length - 1].toLowerCase()
+      
+      // word2 must start with word1's last part and end with goalWord
+      if (word2FirstPart === word1LastPart && word2LastPart === goalWord) {
+        return true // Two-step bridge found: startWord -> word1 -> word2 -> goalWord
+      }
+    }
   }
+  
   return false
 }
 
@@ -365,23 +406,26 @@ export async function generatePracticePuzzle(
     }
 
     const seed = `shared-${sharedStartWord}-${sharedGoalWord}-${difficulty}`
-    const startParts = startEntry.parts.length >= 2 ? [...startEntry.parts] : parseCompoundWord(startEntry.word)
-    const goalParts = goalEntry.parts.length >= 2 ? [...goalEntry.parts] : parseCompoundWord(goalEntry.word)
-    const wordParts: Record<string, string[]> = {
-      [startEntry.word.toLowerCase()]: [...startParts],
-      [goalEntry.word.toLowerCase()]: [...goalParts],
-    }
+    
+    // Start and goal are always simple words (single part = the word itself)
+    const startWord = sharedStartWord.toLowerCase()
+    const goalWord = sharedGoalWord.toLowerCase()
+    const startParts = [startWord]
+    const goalParts = [goalWord]
+    
+    const wordParts: Record<string, string[]> = {}
+    // Only include compound words in wordParts (not start/goal simple words)
     
     return {
       id: seed,
       seed,
       difficulty,
-      startWord: startEntry.word,
-      goalWord: goalEntry.word,
+      startWord,
+      goalWord,
       optimalSteps: 5, // Default optimal steps for shared puzzles
       isDaily: false,
       mode: 'practice',
-      solutionPath: [startEntry.word, goalEntry.word], // Minimal path
+      solutionPath: [startWord, goalWord], // Minimal path
       startParts,
       goalParts,
       wordParts,
@@ -393,12 +437,12 @@ export async function generatePracticePuzzle(
   const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)
 
   let chain: WordEntry[] | null = null
-  // For medium practice, use only local canonical words (no DB)
+  // For medium practice, try canonical words first, then fall back to full environment if needed
   const environmentsToTry =
     difficulty === 'easy'
       ? [DEFAULT_ENVIRONMENT, fullEnvironment]
       : difficulty === 'medium'
-        ? [DEFAULT_ENVIRONMENT]
+        ? [DEFAULT_ENVIRONMENT, fullEnvironment] // Allow full environment as fallback for medium
         : [fullEnvironment]
 
   for (const environment of environmentsToTry) {
@@ -409,26 +453,32 @@ export async function generatePracticePuzzle(
         continue
       }
 
-      if ((difficulty === 'hard' || difficulty === 'medium') && startAndGoalSharePart(candidate)) {
+      // Only check for trivial puzzles (start == goal) for hard difficulty
+      // Allow medium to have start == goal if chain is long enough
+      if (difficulty === 'hard' && startAndGoalSharePart(candidate)) {
         continue
       }
 
       // Enforce minimum steps: optimalSteps = chain.length - 1
-      // Enforce minimum steps; for medium ensure at least 5
+      // For medium, allow at least 2 steps (chain of 3 words) - very lenient for suffix chaining
       const candidateOptimalSteps = Math.max(1, candidate.length - 1)
-      const effectiveMinSteps = difficulty === 'medium' ? Math.max(5, minSteps) : Math.max(1, minSteps)
+      const effectiveMinSteps = difficulty === 'medium' ? Math.max(2, minSteps) : Math.max(1, minSteps)
       if (candidateOptimalSteps < effectiveMinSteps) {
         continue
       }
 
-      // Prevent trivial one-word bridge between start and goal
-      if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-        continue
-      }
-
-      // For medium, also prevent trivial two-step bridge (start -> bridge -> goal)
-      if (difficulty === 'medium' && twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-        continue
+      // For medium difficulty, skip bridge detection - accept any valid chain
+      // Only check bridges for hard difficulty
+      if (difficulty === 'hard') {
+        const chainSteps = candidate.length - 1
+        // Prevent trivial one-word bridge for very short chains
+        if (chainSteps <= 3 && directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
+          continue
+        }
+        // Prevent trivial two-step bridge for very short chains
+        if (chainSteps <= 2 && twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
+          continue
+        }
       }
 
       chain = candidate
@@ -460,11 +510,18 @@ export async function generatePracticePuzzle(
     wordParts[entry.word.toLowerCase()] = [...entry.parts]
   }
 
-  // Ensure start and goal nodes respect casing (use original dataset casing if available)
-  const startWord = normalizedChain[0].word
-  const goalWord = normalizedChain[normalizedChain.length - 1].word
-  const startParts = [...normalizedChain[0].parts]
-  const goalParts = [...normalizedChain[normalizedChain.length - 1].parts]
+  // Start and goal are simple words (single part):
+  // - Start = first part of first compound word in chain
+  // - Goal = last part of last compound word in chain
+  const firstCompound = normalizedChain[0]
+  const lastCompound = normalizedChain[normalizedChain.length - 1]
+  
+  const startWord = firstCompound.parts.length > 0 ? firstCompound.parts[0] : firstCompound.word
+  const goalWord = lastCompound.parts.length > 0 ? lastCompound.parts[lastCompound.parts.length - 1] : lastCompound.word
+  
+  // Start and goal are always single words (parts = [word])
+  const startParts = [startWord]
+  const goalParts = [goalWord]
 
   return {
     id: seed,
@@ -500,23 +557,24 @@ function pickSeededNextWord(
   random: () => number,
   environment: WordEnvironment
 ): WordEntry | null {
-  const parts = seededShuffleInPlace(Array.from(new Set(current.parts)), random)
+  // Suffix chaining rule: candidate's FIRST part must match current's LAST part
+  const currentLastPart = current.parts.length > 0 ? current.parts[current.parts.length - 1].toLowerCase() : null
+  if (!currentLastPart) return null
 
-  for (const part of parts) {
-    const candidates = environment.partIndex.get(part)
-    if (!candidates) continue
+  const candidates = environment.partIndex.get(currentLastPart)
+  if (!candidates) return null
 
-    const shuffled = seededShuffleInPlace([...candidates], random)
-    for (const candidate of shuffled) {
-      if (candidate.word === current.word) continue
-      if (used.has(candidate.word)) continue
+  const shuffled = seededShuffleInPlace([...candidates], random)
+  for (const candidate of shuffled) {
+    if (candidate.word === current.word) continue
+    if (used.has(candidate.word)) continue
 
-      const shared = findSharedPart(current.parts, candidate.parts)
-      if (!shared) continue
+    // Verify suffix chaining: candidate's first part must match current's last part
+    const candidateFirstPart = candidate.parts.length > 0 ? candidate.parts[0].toLowerCase() : null
+    if (!candidateFirstPart || candidateFirstPart !== currentLastPart) continue
 
-      used.add(candidate.word)
-      return candidate
-    }
+    used.add(candidate.word)
+    return candidate
   }
 
   return null
@@ -567,9 +625,66 @@ function attemptSeededBuildChain(
  * Step length is medium (6-7 steps) for a good challenge.
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
-  // Use only the canonical compound words (easy word pool) for daily puzzles
-  // This ensures familiar, recognizable words and consistency across environments.
-  const environment = DEFAULT_ENVIRONMENT
+  // For daily puzzles, prefer canonical words but allow filtered common words if needed
+  // This ensures familiar, recognizable words while allowing suffix chain building
+  
+  // Start with canonical words, then add filtered common words from database if available
+  const baseEnvironment = DEFAULT_ENVIRONMENT
+  let environment = baseEnvironment
+  
+  // If we have wordEntries provided, merge in common words (words whose parts are all common)
+  if (options.wordEntries && options.wordEntries.length > 0) {
+    // Filter to words whose parts are all common/recognizable
+    const commonParts = new Set([
+      'air', 'any', 'back', 'ball', 'bed', 'bird', 'black', 'blue', 'book', 'box',
+      'bread', 'break', 'butter', 'cake', 'car', 'card', 'care', 'coat', 'corn',
+      'cup', 'day', 'dog', 'door', 'down', 'dream', 'drop', 'eye', 'fall', 'fire',
+      'fish', 'flower', 'fly', 'foot', 'fruit', 'gold', 'grand', 'grass', 'green',
+      'ground', 'gun', 'hair', 'hand', 'head', 'heart', 'high', 'hill', 'home',
+      'honey', 'horse', 'hot', 'house', 'ice', 'key', 'land', 'life', 'light',
+      'line', 'mail', 'man', 'meat', 'milk', 'mine', 'moon', 'mother', 'night',
+      'out', 'over', 'pan', 'paper', 'pass', 'place', 'play', 'port', 'pot',
+      'print', 'proof', 'rail', 'rain', 'ring', 'road', 'rock', 'room', 'sand',
+      'sea', 'shine', 'ship', 'shoe', 'shop', 'side', 'silver', 'sky', 'snow',
+      'some', 'son', 'star', 'step', 'stone', 'stop', 'storm', 'straw', 'sub', 'sun',
+      'table', 'tail', 'thing', 'time', 'top', 'town', 'trap', 'tree', 'under',
+      'up', 'walk', 'wall', 'ward', 'water', 'way', 'week', 'white', 'wind',
+      'wood', 'work', 'worm', 'yard', 'berry', 'boat', 'bow', 'bush', 'chain',
+      'cloth', 'craft', 'field', 'guard', 'keeper', 'knob', 'less', 'like',
+      'maker', 'mark', 'master', 'mate', 'piece', 'plane', 'power', 'scape',
+      'smith', 'ware', 'wheel', 'wise', 'wright', 'board', 'bridge', 'brook',
+      'case', 'child', 'class', 'club', 'court', 'crew', 'cross', 'drive',
+      'driver', 'farm', 'father', 'force', 'front', 'game', 'gate', 'girl',
+      'glass', 'hill', 'hold', 'holder', 'iron', 'jack', 'king', 'lady', 'lane',
+      'layer', 'lord', 'love', 'market', 'meal', 'mill', 'nail', 'neck', 'net',
+      'news', 'note', 'pack', 'path', 'pen', 'point', 'pool', 'post', 'queen',
+      'safe', 'sauce', 'school', 'shell'
+    ])
+    
+    // Filter to words whose ALL parts are common
+    const filteredEntries = options.wordEntries
+      .map((entry) => toWordEntry(entry.word, entry.parts, 'runtime'))
+      .filter((entry): entry is WordEntry => {
+        if (!entry || entry.parts.length < 2) return false
+        // Only include if ALL parts are common words
+        return entry.parts.every(part => commonParts.has(part.toLowerCase()))
+      })
+    
+    // Merge with canonical words
+    const merged = new Map<string, WordEntry>()
+    for (const entry of environment.words) {
+      merged.set(entry.word, entry)
+    }
+    for (const entry of filteredEntries) {
+      if (!merged.has(entry.word)) {
+        merged.set(entry.word, entry)
+      }
+    }
+    
+    if (merged.size > environment.words.length) {
+      environment = createEnvironment(Array.from(merged.values()))
+    }
+  }
 
   if (environment.words.length === 0) {
     throw new Error('No compound words available for daily puzzle generation')
@@ -625,9 +740,18 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   const wordsOnly = chain.map((entry) => entry.word)
   const optimalSteps = Math.max(1, chain.length - 1)
 
+  // Start and goal are simple words:
+  // - Start = first part of first compound word in chain
+  // - Goal = last part of last compound word in chain
+  const firstCompound = chain[0]
+  const lastCompound = chain[chain.length - 1]
+  
+  const startWord = firstCompound.parts.length > 0 ? firstCompound.parts[0] : firstCompound.word
+  const goalWord = lastCompound.parts.length > 0 ? lastCompound.parts[lastCompound.parts.length - 1] : lastCompound.word
+
   return {
-    startWord: chain[0].word,
-    goalWord: chain[chain.length - 1].word,
+    startWord,
+    goalWord,
     optimalSteps,
     solutionPath: wordsOnly,
   }
