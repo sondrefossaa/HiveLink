@@ -375,9 +375,6 @@ export default function Game() {
           isDisabled={gameState.isComplete && !gameState.allowExploration}
           error={gameState.error}
           selectedNode={selectedNode}
-          graphSpacing={graphSpacing}
-          onGraphSpacingChange={setGraphSpacing}
-          onRefreshLayout={handleRefreshLayout}
           onHintReceived={handleHintReceived}
           goalWord={puzzle.goalWord}
           nodes={gameState.nodes}

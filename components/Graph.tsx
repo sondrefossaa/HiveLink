@@ -179,7 +179,7 @@ function Graph({
       orientation,
       graphSpacing
     )
-  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion])
+  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing])
 
   // Calculate dynamic max zoom based on graph size
   // Smaller graphs can zoom in more for better detail viewing
