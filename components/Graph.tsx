@@ -111,6 +111,7 @@ function Graph({
   const startAnchorPositionRef = useRef<{ x: number; y: number } | null>(null)
   const orientationRef = useRef(orientation)
   const animationManagerRef = useRef(getAnimationManager())
+  const prevMaxLayerRef = useRef<number>(-1)
   const [animationFrame, setAnimationFrame] = useState(0) // Force re-render for animation
 
   // Keep refs in sync with props for stable callback dependencies
@@ -137,6 +138,7 @@ function Graph({
 
   useEffect(() => {
     let resizeTimer: number | null = null
+    let visualViewportTimer: number | null = null
     
     const updateDimensions = () => {
       if (!containerRef.current) return
@@ -159,12 +161,39 @@ function Graph({
       })
     }
 
+    // Handle visual viewport changes (mobile browser UI show/hide)
+    const handleVisualViewportChange = () => {
+      if (visualViewportTimer) {
+        cancelAnimationFrame(visualViewportTimer)
+      }
+      visualViewportTimer = requestAnimationFrame(() => {
+        updateDimensions()
+        // Dimensions change will automatically trigger zoom adjustment via existing useEffect
+        visualViewportTimer = null
+      })
+    }
+
     updateDimensions() // Initial update
     window.addEventListener('resize', throttledUpdateDimensions)
+    
+    // Listen to visual viewport changes (mobile browser UI)
+    // This helps detect when mobile browser address bar shows/hides
+    if (typeof window !== 'undefined' && window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportChange)
+      window.visualViewport.addEventListener('scroll', handleVisualViewportChange)
+    }
+    
     return () => {
       window.removeEventListener('resize', throttledUpdateDimensions)
+      if (typeof window !== 'undefined' && window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportChange)
+        window.visualViewport.removeEventListener('scroll', handleVisualViewportChange)
+      }
       if (resizeTimer) {
         cancelAnimationFrame(resizeTimer)
+      }
+      if (visualViewportTimer) {
+        cancelAnimationFrame(visualViewportTimer)
       }
     }
   }, [])
@@ -206,6 +235,186 @@ function Graph({
     startAnchorPositionRef.current = pos
     return pos
   }, [startAnchor])
+
+  // Extract zoom adjustment logic into reusable function
+  const adjustZoomToFitGraph = useCallback(() => {
+    if (!graphRef.current) return
+    if (nodes.length === 0) return
+    
+    // Helper to get accurate viewport dimensions (especially important on mobile)
+    const getViewportDimensions = () => {
+      if (!containerRef.current) {
+        // Fallback to window dimensions if container not available
+        return {
+          width: typeof window !== 'undefined' ? window.innerWidth : 800,
+          height: typeof window !== 'undefined' ? window.innerHeight : 520,
+        }
+      }
+      
+      const rect = containerRef.current.getBoundingClientRect()
+      // Use actual container dimensions, fallback to window if invalid
+      const width = rect.width > 0 ? rect.width : (typeof window !== 'undefined' ? window.innerWidth : 800)
+      const height = rect.height > 0 ? rect.height : (typeof window !== 'undefined' ? window.innerHeight : 520)
+      
+      return { width, height }
+    }
+    
+    // Wait for graph to be fully initialized and rendered
+    // Use longer delay on mobile to account for slower rendering
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+    const initialDelay = isMobile ? 400 : 200
+    const animationDelay = isMobile ? 500 : 300
+    
+    setTimeout(() => {
+      if (!graphRef.current) return
+      
+      const { boundingBox } = layout
+      
+      // Get start and goal nodes to center on their midpoint
+      const startNode = layout.startNodeId ? layout.nodeMeta.get(layout.startNodeId) : null
+      const goalNode = layout.goalNodeId ? layout.nodeMeta.get(layout.goalNodeId) : null
+      
+      // Calculate center point: since layout is now centered around 0, 
+      // the start/end midpoint should be at or near 0
+      let centerX: number
+      let centerY: number
+      
+      if (startNode && goalNode) {
+        // Center on midpoint between start and goal (should be near 0 after layout centering)
+        centerX = (startNode.targetX + goalNode.targetX) / 2
+        centerY = (startNode.targetY + goalNode.targetY) / 2
+      } else if (startNode) {
+        // Only start node available, center on it (should be near 0 after layout centering)
+        centerX = startNode.targetX
+        centerY = startNode.targetY
+      } else {
+        // Fallback to bounding box center
+        centerX = boundingBox.centerX
+        centerY = boundingBox.centerY
+      }
+      
+      // Calculate zoom level to fit entire graph
+      // Use fresh viewport dimensions to account for mobile browser UI changes
+      const viewportDims = getViewportDimensions()
+      const viewportWidth = viewportDims.width
+      const viewportHeight = viewportDims.height
+      
+      // For single node or very small graphs, use a reasonable minimum view size
+      // This prevents excessive zoom when there's only one node
+      // Use a percentage of viewport size to ensure reasonable zoom
+      const MIN_VIEW_WIDTH = viewportWidth * 0.5
+      const MIN_VIEW_HEIGHT = viewportHeight * 0.5
+      
+      // Use actual bounding box dimensions, but ensure minimums for zoom calculation
+      // This ensures we don't zoom in too much on a single node
+      // Only apply minimum for very small graphs (when bounding box is actually smaller)
+      const effectiveWidth = boundingBox.width < MIN_VIEW_WIDTH 
+        ? Math.max(boundingBox.width, MIN_VIEW_WIDTH)
+        : boundingBox.width
+      const effectiveHeight = boundingBox.height < MIN_VIEW_HEIGHT
+        ? Math.max(boundingBox.height, MIN_VIEW_HEIGHT)
+        : boundingBox.height
+      
+      // Add padding around the bounding box
+      // Use more padding for larger graphs to ensure nodes don't go offscreen
+      const basePadding = 0.15
+      // Increase padding for larger graphs (more layers = more padding needed)
+      const layerBasedPadding = Math.min(0.25, basePadding + (layout.maxLayer * 0.01))
+      const padding = layerBasedPadding
+      const paddedWidth = effectiveWidth * (1 + padding * 2)
+      const paddedHeight = effectiveHeight * (1 + padding * 2)
+      
+      // For horizontal orientation: X is main axis, Y is cross axis
+      // For vertical orientation: Y is main axis, X is cross axis
+      let zoomX: number
+      let zoomY: number
+      
+      // Use 85% of viewport instead of 90% to ensure better margin for larger graphs
+      const viewportUsage = 0.85
+      
+      if (orientation === 'horizontal') {
+        zoomX = paddedWidth > 0 ? (viewportWidth / paddedWidth) * viewportUsage : 1
+        zoomY = paddedHeight > 0 ? (viewportHeight / paddedHeight) * viewportUsage : 1
+      } else {
+        // Vertical orientation: swap axes
+        zoomX = paddedHeight > 0 ? (viewportWidth / paddedHeight) * viewportUsage : 1
+        zoomY = paddedWidth > 0 ? (viewportHeight / paddedWidth) * viewportUsage : 1
+      }
+      
+      // Use the smaller zoom to ensure entire graph fits
+      let calculatedZoom = Math.min(zoomX, zoomY)
+      
+      // Handle edge case: if zoom calculation fails, use default
+      if (!isFinite(calculatedZoom) || calculatedZoom <= 0) {
+        calculatedZoom = 1
+      }
+      
+      // Respect min/max zoom limits
+      const MIN_ZOOM = 0.25
+      calculatedZoom = Math.max(MIN_ZOOM, Math.min(calculatedZoom, maxZoom))
+      
+      // Ensure center coordinates are valid
+      const finalCenterX = isFinite(centerX) ? centerX : 0
+      const finalCenterY = isFinite(centerY) ? centerY : 0
+      
+      // Center on start/end midpoint and zoom to fit entire graph
+      // Use a longer delay to ensure graph data is fully set and rendered (especially on mobile)
+      setTimeout(() => {
+        if (!graphRef.current) return
+        
+        // Re-check viewport dimensions in case they changed (mobile browser UI)
+        const finalViewportDims = getViewportDimensions()
+        const finalViewportWidth = finalViewportDims.width
+        const finalViewportHeight = finalViewportDims.height
+        
+        // Recalculate zoom if viewport changed significantly (mobile browser UI show/hide)
+        let finalZoom = calculatedZoom
+        if (Math.abs(finalViewportWidth - viewportWidth) > 10 || Math.abs(finalViewportHeight - viewportHeight) > 10) {
+          // Viewport changed, recalculate zoom with new dimensions
+          const recalcMinViewWidth = finalViewportWidth * 0.5
+          const recalcMinViewHeight = finalViewportHeight * 0.5
+          
+          const effectiveWidth = boundingBox.width < recalcMinViewWidth 
+            ? Math.max(boundingBox.width, recalcMinViewWidth)
+            : boundingBox.width
+          const effectiveHeight = boundingBox.height < recalcMinViewHeight
+            ? Math.max(boundingBox.height, recalcMinViewHeight)
+            : boundingBox.height
+          const paddedWidth = effectiveWidth * (1 + padding * 2)
+          const paddedHeight = effectiveHeight * (1 + padding * 2)
+          
+          let recalcZoomX: number
+          let recalcZoomY: number
+          
+          if (orientation === 'horizontal') {
+            recalcZoomX = paddedWidth > 0 ? (finalViewportWidth / paddedWidth) * viewportUsage : 1
+            recalcZoomY = paddedHeight > 0 ? (finalViewportHeight / paddedHeight) * viewportUsage : 1
+          } else {
+            recalcZoomX = paddedHeight > 0 ? (finalViewportWidth / paddedHeight) * viewportUsage : 1
+            recalcZoomY = paddedWidth > 0 ? (finalViewportHeight / paddedWidth) * viewportUsage : 1
+          }
+          
+          const recalcZoom = Math.min(recalcZoomX, recalcZoomY)
+          if (isFinite(recalcZoom) && recalcZoom > 0) {
+            finalZoom = Math.max(MIN_ZOOM, Math.min(recalcZoom, maxZoom))
+          }
+        }
+        
+        // Apply both zoom and center - the library should handle the coordinate transform
+        // Do it synchronously first to establish the view, then animate
+        graphRef.current.zoom(finalZoom, 0)
+        graphRef.current.centerAt(finalCenterX, finalCenterY, 0)
+        
+        // Then animate smoothly to the final position
+        setTimeout(() => {
+          if (graphRef.current) {
+            graphRef.current.zoom(finalZoom, 1000)
+            graphRef.current.centerAt(finalCenterX, finalCenterY, 1000)
+          }
+        }, 100)
+      }, animationDelay) // Longer delay on mobile to ensure graph is fully initialized
+    }, initialDelay) // Increased delay on mobile to ensure graph is ready
+  }, [layout, dimensions.width, dimensions.height, orientation, maxZoom, nodes.length])
 
   // Calculate winning edge IDs for highlighting
   // Track edges on the winning path both before and after completion
@@ -500,110 +709,28 @@ function Graph({
   // Auto-center and auto-zoom to fit entire graph whenever layout changes
   // Centers on the midpoint between start and end nodes
   useEffect(() => {
-    if (!graphRef.current) return
+    adjustZoomToFitGraph()
+  }, [layout, dimensions.width, dimensions.height, orientation, maxZoom, nodes.length, adjustZoomToFitGraph])
+
+  // Auto-zoom when a new layer is added
+  useEffect(() => {
     if (nodes.length === 0) return
     
-    // Wait for graph to be fully initialized and rendered
-    const timeoutId = setTimeout(() => {
-      if (!graphRef.current) return
-      
-      const { boundingBox } = layout
-      
-      // Get start and goal nodes to center on their midpoint
-      const startNode = layout.startNodeId ? layout.nodeMeta.get(layout.startNodeId) : null
-      const goalNode = layout.goalNodeId ? layout.nodeMeta.get(layout.goalNodeId) : null
-      
-      // Calculate center point: since layout is now centered around 0, 
-      // the start/end midpoint should be at or near 0
-      let centerX: number
-      let centerY: number
-      
-      if (startNode && goalNode) {
-        // Center on midpoint between start and goal (should be near 0 after layout centering)
-        centerX = (startNode.targetX + goalNode.targetX) / 2
-        centerY = (startNode.targetY + goalNode.targetY) / 2
-      } else if (startNode) {
-        // Only start node available, center on it (should be near 0 after layout centering)
-        centerX = startNode.targetX
-        centerY = startNode.targetY
-      } else {
-        // Fallback to bounding box center
-        centerX = boundingBox.centerX
-        centerY = boundingBox.centerY
-      }
-      
-      // Calculate zoom level to fit entire graph
-      const viewportWidth = dimensions.width
-      const viewportHeight = dimensions.height
-      
-      // For single node or very small graphs, use a reasonable minimum view size
-      // This prevents excessive zoom when there's only one node
-      // Use a percentage of viewport size to ensure reasonable zoom
-      const MIN_VIEW_WIDTH = viewportWidth * 0.5
-      const MIN_VIEW_HEIGHT = viewportHeight * 0.5
-      
-      // Use actual bounding box dimensions, but ensure minimums for zoom calculation
-      // This ensures we don't zoom in too much on a single node
-      const effectiveWidth = Math.max(boundingBox.width, MIN_VIEW_WIDTH)
-      const effectiveHeight = Math.max(boundingBox.height, MIN_VIEW_HEIGHT)
-      
-      // Add padding (15% margin) around the bounding box
-      const padding = 0.15
-      const paddedWidth = effectiveWidth * (1 + padding * 2)
-      const paddedHeight = effectiveHeight * (1 + padding * 2)
-      
-      // For horizontal orientation: X is main axis, Y is cross axis
-      // For vertical orientation: Y is main axis, X is cross axis
-      let zoomX: number
-      let zoomY: number
-      
-      if (orientation === 'horizontal') {
-        zoomX = paddedWidth > 0 ? (viewportWidth / paddedWidth) * 0.9 : 1
-        zoomY = paddedHeight > 0 ? (viewportHeight / paddedHeight) * 0.9 : 1
-      } else {
-        // Vertical orientation: swap axes
-        zoomX = paddedHeight > 0 ? (viewportWidth / paddedHeight) * 0.9 : 1
-        zoomY = paddedWidth > 0 ? (viewportHeight / paddedWidth) * 0.9 : 1
-      }
-      
-      // Use the smaller zoom to ensure entire graph fits
-      let calculatedZoom = Math.min(zoomX, zoomY)
-      
-      // Handle edge case: if zoom calculation fails, use default
-      if (!isFinite(calculatedZoom) || calculatedZoom <= 0) {
-        calculatedZoom = 1
-      }
-      
-      // Respect min/max zoom limits
-      const MIN_ZOOM = 0.25
-      calculatedZoom = Math.max(MIN_ZOOM, Math.min(calculatedZoom, maxZoom))
-      
-      // Ensure center coordinates are valid
-      const finalCenterX = isFinite(centerX) ? centerX : 0
-      const finalCenterY = isFinite(centerY) ? centerY : 0
-      
-      // Center on start/end midpoint and zoom to fit entire graph
-      // Use a longer delay to ensure graph data is fully set and rendered
-      setTimeout(() => {
-        if (!graphRef.current) return
-        
-        // Apply both zoom and center - the library should handle the coordinate transform
-        // Do it synchronously first to establish the view, then animate
-        graphRef.current.zoom(calculatedZoom, 0)
-        graphRef.current.centerAt(finalCenterX, finalCenterY, 0)
-        
-        // Then animate smoothly to the final position
-        setTimeout(() => {
-          if (graphRef.current) {
-            graphRef.current.zoom(calculatedZoom, 1000)
-            graphRef.current.centerAt(finalCenterX, finalCenterY, 1000)
-          }
-        }, 100)
-      }, 300) // Longer delay to ensure graph is fully initialized
-    }, 200) // Increased delay to ensure graph is ready
+    const currentMaxLayer = layout.maxLayer
+    const previousMaxLayer = prevMaxLayerRef.current
     
-    return () => clearTimeout(timeoutId)
-  }, [layout, dimensions.width, dimensions.height, orientation, maxZoom, nodes.length])
+    // Check if a new layer was added (maxLayer increased)
+    // This will trigger when:
+    // - First layer appears (previousMaxLayer is -1, currentMaxLayer is 0 or more)
+    // - New layer is added (currentMaxLayer > previousMaxLayer)
+    if (currentMaxLayer > previousMaxLayer) {
+      // New layer detected - adjust zoom to ensure start and end nodes are visible
+      adjustZoomToFitGraph()
+    }
+    
+    // Always update the ref with the current maxLayer value
+    prevMaxLayerRef.current = currentMaxLayer
+  }, [layout.maxLayer, adjustZoomToFitGraph, nodes.length])
 
   // Handle initial graph render
   const handleRenderFrame = useCallback(() => {

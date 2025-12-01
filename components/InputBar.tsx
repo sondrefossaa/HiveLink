@@ -265,7 +265,7 @@ export default function InputBar({
 
           {/* Hint text */}
           <p className="mt-3 text-center text-xs text-gray-500">
-            Enter a compound word that shares one part with{' '}
+            Enter a word that starts with the last part of{' '}
             <span className="text-hive-yellow">
               {selectedNode ? selectedNode.word : 'the start word'}
             </span>
