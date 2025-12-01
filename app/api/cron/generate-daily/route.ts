@@ -16,6 +16,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Check for force parameter to regenerate existing puzzles
+    const { searchParams } = new URL(request.url)
+    const force = searchParams.get('force') === 'true'
+
     const results: { date: string; status: string; puzzle?: string }[] = []
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
         where: { date: targetDate },
       })
 
-      if (existing) {
+      if (existing && !force) {
         results.push({
           date: dateStr,
           status: 'exists',
@@ -52,25 +56,34 @@ export async function GET(request: NextRequest) {
         continue
       }
 
-      // Generate new puzzle
+      // Generate new puzzle (or regenerate if force=true)
       try {
         const generated = await generateDailyPuzzle(targetDate, {
           wordEntries,
           minSteps: 3,
         })
         
-        const puzzle = await prisma.dailyPuzzle.create({
-          data: {
-            date: targetDate,
-            startWord: generated.startWord,
-            goalWord: generated.goalWord,
-            optimalSteps: generated.optimalSteps,
-          },
-        })
+        const puzzle = existing && force
+          ? await prisma.dailyPuzzle.update({
+              where: { date: targetDate },
+              data: {
+                startWord: generated.startWord,
+                goalWord: generated.goalWord,
+                optimalSteps: generated.optimalSteps,
+              },
+            })
+          : await prisma.dailyPuzzle.create({
+              data: {
+                date: targetDate,
+                startWord: generated.startWord,
+                goalWord: generated.goalWord,
+                optimalSteps: generated.optimalSteps,
+              },
+            })
 
         results.push({
           date: dateStr,
-          status: 'created',
+          status: existing && force ? 'regenerated' : 'created',
           puzzle: `${puzzle.startWord} -> ${puzzle.goalWord}`,
         })
       } catch (genError) {
