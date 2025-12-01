@@ -45,7 +45,9 @@ export default function InputBar({
   useEffect(() => {
     if (externalValue !== undefined && externalValue !== null) {
       const normalizedValue = externalValue.toLowerCase().replace(/[^a-z]/g, '')
-      if (normalizedValue !== input) {
+      // Use a ref to track current input to avoid dependency
+      const currentInput = inputRef.current?.value || ''
+      if (normalizedValue !== currentInput) {
         setInput(normalizedValue)
         // Focus the input when external value is set
         setTimeout(() => {
@@ -59,7 +61,8 @@ export default function InputBar({
         }, 100)
       }
     }
-  }, [externalValue]) // Only depend on externalValue to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalValue]) // Only depend on externalValue to avoid loops - onExternalValueSet is stable
 
   // Focus input on mount
   useEffect(() => {
