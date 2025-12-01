@@ -494,6 +494,8 @@ function rebalanceLayerPositions(
         const posB = assignmentB.crossAxisPos
         const distance = Math.abs(posB - posA)
         
+        // Only resolve collisions if nodes are actually too close (real collision)
+        // Skip if nodes are far enough apart to avoid unnecessary movements
         if (distance < MIN_NODE_SPACING) {
           hasCollisions = true
           
@@ -509,34 +511,14 @@ function rebalanceLayerPositions(
           // Single children MUST stay at their parent's exact position - they are never moved directly
           if (isASingleChild && !isBSingleChild) {
             // A is a single child - it cannot be moved. Move B away from A.
+            // Move B directly, not its parent, to avoid unnecessary parent movement
             const newPosB = posA + MIN_NODE_SPACING
-            if (parentBId) {
-              // Calculate offset needed to move B to newPosB
-              const offset = newPosB - posB
-              const parentB = branchAssignments.get(parentBId)
-              if (parentB) {
-                const newParentPos = parentB.crossAxisPos + offset
-                moveParentAndChildren(parentBId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
-              }
-            } else {
-              // B has no parent, move it directly
-              assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
-            }
+            assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
           } else if (isBSingleChild && !isASingleChild) {
             // B is a single child - it cannot be moved. Move A away from B.
+            // Move A directly, not its parent, to avoid unnecessary parent movement
             const newPosA = posB - MIN_NODE_SPACING
-            if (parentAId) {
-              // Calculate offset needed to move A to newPosA
-              const offset = newPosA - posA
-              const parentA = branchAssignments.get(parentAId)
-              if (parentA) {
-                const newParentPos = parentA.crossAxisPos + offset
-                moveParentAndChildren(parentAId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
-              }
-            } else {
-              // A has no parent, move it directly
-              assignmentA.crossAxisPos = clampValue(newPosA, margin, canvasSize - margin)
-            }
+            assignmentA.crossAxisPos = clampValue(newPosA, margin, canvasSize - margin)
           } else if (isASingleChild && isBSingleChild) {
             // Both are single children - move one parent
             const center = canvasSize / 2
@@ -561,57 +543,186 @@ function rebalanceLayerPositions(
             // Neither is a single child - check parent positions to maintain order
             // If A's parent is above B's parent, B should move down (stay below A)
             let shouldMoveB = false
+            let shouldMoveParent = false
+            let parentToMove: string | undefined
+            
             if (parentAId && parentBId) {
               const parentA = branchAssignments.get(parentAId)
               const parentB = branchAssignments.get(parentBId)
               if (parentA && parentB) {
-                // A's parent is above B's parent, so A should stay above B
-                if (parentA.crossAxisPos < parentB.crossAxisPos) {
-                  shouldMoveB = true
-                } else if (parentA.crossAxisPos > parentB.crossAxisPos) {
-                  shouldMoveB = false // Move A down
+                // If parents are the same, don't move the parent - just move children
+                // But siblings should maintain even distribution, so we'll re-distribute after collision
+                if (parentAId === parentBId) {
+                  // Siblings colliding - we'll re-distribute them after resolving this collision
+                  // For now, move the one further from parent position
+                  const parentPos = parentA.crossAxisPos
+                  const distA = Math.abs(posA - parentPos)
+                  const distB = Math.abs(posB - parentPos)
+                  shouldMoveB = distA < distB // Move B if A is closer to parent
+                  // Mark that we need to re-distribute siblings
+                  // (this will be handled by the sibling re-distribution step after collision)
+                } else {
+                  // Different parents - we need to move parents to resolve collision
+                  // This maintains sibling distribution while resolving collisions
+                  if (parentA.crossAxisPos < parentB.crossAxisPos) {
+                    shouldMoveB = true
+                    shouldMoveParent = true
+                    parentToMove = parentBId // Move B's parent down
+                  } else if (parentA.crossAxisPos > parentB.crossAxisPos) {
+                    shouldMoveB = false
+                    shouldMoveParent = true
+                    parentToMove = parentAId // Move A's parent up
+                  } else {
+                    // Parents at same position - determine by distance from center
+                    const center = canvasSize / 2
+                    const distA = Math.abs(posA - center)
+                    const distB = Math.abs(posB - center)
+                    if (distA > distB) {
+                      shouldMoveB = true
+                      shouldMoveParent = true
+                      parentToMove = parentBId
+                    } else {
+                      shouldMoveB = false
+                      shouldMoveParent = true
+                      parentToMove = parentAId
+                    }
+                  }
                 }
               }
             }
             
-            // If parent order doesn't determine, move the one further from center
-            if (shouldMoveB === false && (!parentAId || !parentBId)) {
-              const center = canvasSize / 2
-              const distA = Math.abs(posA - center)
-              const distB = Math.abs(posB - center)
-              shouldMoveB = distA > distB
-            }
-            
-            if (shouldMoveB) {
-              // Move B away (down)
-              const newPosB = posA + MIN_NODE_SPACING
-              if (parentBId) {
-                const offset = newPosB - posB
-                const parentB = branchAssignments.get(parentBId)
-                if (parentB) {
-                  const newParentPos = parentB.crossAxisPos + offset
-                  moveParentAndChildren(parentBId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
-                }
-              } else {
-                assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
-              }
-            } else {
-              // Move A away (up)
-              const newPosA = posB - MIN_NODE_SPACING
-              if (parentAId) {
-                const offset = newPosA - posA
+            // Move children directly (not parents) to resolve collision
+            // Only use distance from center if parent order wasn't determined
+            if (!shouldMoveParent) {
+              // If shouldMoveB wasn't set by parent order, use distance from center
+              if (shouldMoveB === false && parentAId && parentBId && parentAId !== parentBId) {
+                // Check if we actually determined shouldMoveB from parent positions
                 const parentA = branchAssignments.get(parentAId)
-                if (parentA) {
-                  const newParentPos = parentA.crossAxisPos + offset
-                  moveParentAndChildren(parentAId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+                const parentB = branchAssignments.get(parentBId)
+                if (parentA && parentB && parentA.crossAxisPos === parentB.crossAxisPos) {
+                  // Parents at same position, use distance from center
+                  const center = canvasSize / 2
+                  const distA = Math.abs(posA - center)
+                  const distB = Math.abs(posB - center)
+                  shouldMoveB = distA > distB
                 }
+                // Otherwise shouldMoveB was already set by parent order logic above
+              } else if (!parentAId || !parentBId || parentAId === parentBId) {
+                // No parents or siblings - use distance from center
+                const center = canvasSize / 2
+                const distA = Math.abs(posA - center)
+                const distB = Math.abs(posB - center)
+                shouldMoveB = distA > distB
+              }
+              
+              if (shouldMoveB) {
+                // Move B away (down) - but only B, not its parent
+                const newPosB = posA + MIN_NODE_SPACING
+                assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
               } else {
+                // Move A away (up) - but only A, not its parent
+                const newPosA = posB - MIN_NODE_SPACING
                 assignmentA.crossAxisPos = clampValue(newPosA, margin, canvasSize - margin)
               }
+            } else if (shouldMoveParent && parentToMove) {
+              // Move the parent (and all its children) to resolve collision
+              // This maintains sibling distribution while resolving collisions
+              // CRITICAL: Ensure ALL children of moved parent stay below/above ALL children of other parent
+              const parent = branchAssignments.get(parentToMove)
+              if (!parent) continue
+              
+              // Get all children of both parents to ensure proper separation
+              const childrenOfMovedParent = childrenByParent.get(parentToMove) ?? []
+              const otherParentId = parentToMove === parentAId ? parentBId : parentAId
+              const childrenOfOtherParent = otherParentId ? (childrenByParent.get(otherParentId) ?? []) : []
+              
+              // Find the extreme positions of each parent's children
+              let minMovedChildPos = Infinity
+              let maxMovedChildPos = -Infinity
+              let minOtherChildPos = Infinity
+              let maxOtherChildPos = -Infinity
+              
+              childrenOfMovedParent.forEach(childId => {
+                const child = branchAssignments.get(childId)
+                if (child) {
+                  minMovedChildPos = Math.min(minMovedChildPos, child.crossAxisPos)
+                  maxMovedChildPos = Math.max(maxMovedChildPos, child.crossAxisPos)
+                }
+              })
+              
+              childrenOfOtherParent.forEach(childId => {
+                const child = branchAssignments.get(childId)
+                if (child) {
+                  minOtherChildPos = Math.min(minOtherChildPos, child.crossAxisPos)
+                  maxOtherChildPos = Math.max(maxOtherChildPos, child.crossAxisPos)
+                }
+              })
+              
+              // Determine how much to move based on ensuring complete separation
+              let offset = 0
+              if (shouldMoveB && parentToMove === parentBId) {
+                // Moving B's parent down - ensure ALL of B's children are below ALL of A's children
+                // Move so that the topmost child of B is below the bottommost child of A
+                const requiredSeparation = maxOtherChildPos + MIN_NODE_SPACING - minMovedChildPos
+                if (requiredSeparation > 0) {
+                  offset = requiredSeparation
+                } else {
+                  // Already separated, but individual nodes are colliding - use collision-based offset
+                  offset = posA + MIN_NODE_SPACING - posB
+                }
+              } else if (!shouldMoveB && parentToMove === parentAId) {
+                // Moving A's parent up - ensure ALL of A's children are above ALL of B's children
+                // Move so that the bottommost child of A is above the topmost child of B
+                const requiredSeparation = minOtherChildPos - MIN_NODE_SPACING - maxMovedChildPos
+                if (requiredSeparation < 0) {
+                  offset = requiredSeparation
+                } else {
+                  // Already separated, but individual nodes are colliding - use collision-based offset
+                  offset = posB - MIN_NODE_SPACING - posA
+                }
+              } else {
+                // Fallback - shouldn't happen but handle gracefully
+                continue
+              }
+              
+              // Move parent and all its children by the offset
+              const newParentPos = parent.crossAxisPos + offset
+              moveParentAndChildren(parentToMove, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
             }
           }
         }
       }
+    }
+    
+    // After each collision resolution iteration, re-distribute siblings to maintain even spacing
+    // This ensures that if children were moved during collision resolution, siblings are still evenly distributed
+    for (const [parentId, childIds] of childrenByParent.entries()) {
+      // Skip single children - they stay at parent position
+      if (childIds.length <= 1) continue
+      
+      const parentAssignment = branchAssignments.get(parentId)
+      if (!parentAssignment) continue
+      
+      const parentPos = parentAssignment.crossAxisPos
+      const childCount = childIds.length
+      const midpoint = (childCount - 1) / 2
+      
+      // Sort children by current position for stability
+      const sortedChildren = [...childIds].sort((a, b) => {
+        const posA = branchAssignments.get(a)?.crossAxisPos ?? parentPos
+        const posB = branchAssignments.get(b)?.crossAxisPos ?? parentPos
+        return posA - posB
+      })
+      
+      // Re-distribute evenly around parent's position
+      sortedChildren.forEach((childId, i) => {
+        const childAssignment = branchAssignments.get(childId)
+        if (childAssignment) {
+          const offset = (i - midpoint) * VERTICAL_SPACING
+          const idealPos = parentPos + offset
+          childAssignment.crossAxisPos = clampValue(idealPos, margin, canvasSize - margin)
+        }
+      })
     }
   }
   

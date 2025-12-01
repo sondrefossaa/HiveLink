@@ -468,9 +468,9 @@ function Graph({
       nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
       links: uniqueLinks,
     }
-    // Include animationFrame in dependencies to trigger recomputation during animation
+    // Include selectedNodeId to trigger recomputation and redraw when selection changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, edges, winningEdgeIds, animationFrame])
+  }, [layout, edges, winningEdgeIds, animationFrame, selectedNodeId])
 
 
   // Pin nodes once when graph data changes - nodes are already pinned in graphData useMemo
@@ -679,6 +679,28 @@ function Graph({
     // No simulation to reheat - positions set directly
   }, [])
 
+  // Force graph redraw when selectedNodeId changes to update visual styling
+  useEffect(() => {
+    if (!graphRef.current) return
+    
+    // Use requestAnimationFrame to ensure the refresh happens after React has updated
+    requestAnimationFrame(() => {
+      if (graphRef.current) {
+        // Refresh the graph to update visual selection
+        refreshGraph()
+        // Also trigger a re-render by accessing the canvas
+        const api = graphRef.current as any
+        if (api?.canvas && typeof api.canvas === 'function') {
+          const canvas = api.canvas()
+          if (canvas) {
+            // Force canvas redraw by accessing it
+            canvas.getContext('2d')
+          }
+        }
+      }
+    })
+  }, [selectedNodeId, refreshGraph])
+
   // Handle node drag end - snap back to target position
   const handleNodeDragEnd = useCallback((nodeObj: any) => {
     const node = nodeObj as ForceLayoutNode
@@ -713,7 +735,8 @@ function Graph({
       pointerScaleRef.current = globalScale
       const x = node.x ?? node.targetX
       const y = node.y ?? node.targetY
-      const isSelected = node.id === selectedNodeIdRef.current
+      // Use selectedNodeId directly for immediate visual updates
+      const isSelected = node.id === selectedNodeId
       const isGoalCompleted = node.isGoal && node.isCompleted
       const connectsToGoal = nodesConnectedToGoalRef.current.has(node.id) && node.id !== 'goal'
       const size = getRenderedNodeSize(node, globalScale)
@@ -812,7 +835,7 @@ function Graph({
         ctx.restore()
       }
     },
-    [] // Dependencies accessed via refs for stability
+    [selectedNodeId] // Include selectedNodeId to update visual selection immediately
   )
 
   // Custom link rendering with curved bezier edges
