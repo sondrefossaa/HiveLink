@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { findAllConnections, parseCompoundWord } from '@/lib/compound-utils'
+import { findSuffixConnections, parseCompoundWord } from '@/lib/compound-utils'
 import type { GraphNode } from '@/types'
 
 export async function POST(request: NextRequest) {
@@ -71,91 +71,95 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get all parts from the source node
+    // Get the last part from the source node (for suffix chaining)
     const sourceParts = sourceNode.parts
-    const goalParts = parseCompoundWord(goalWord)
-    const goalPartsSet = new Set(goalParts.map(p => p.toLowerCase()))
+    const sourceLastPart = sourceParts.length > 0
+      ? sourceParts[sourceParts.length - 1].toLowerCase()
+      : sourceNode.word.toLowerCase()
+    
+    const goalWordLower = goalWord.toLowerCase()
+    const goalPartsSet = new Set([goalWordLower])
 
-    // Find compound words that share a part with source
+    // Find compound words that can extend from source node's last part
+    // Rule: new word's FIRST part must match source node's LAST part
     const candidateWords: Array<{
       word: string
       parts: string[]
       sharedPart: string
-      extendsForward: boolean
       hasGoalPart: boolean
       sourceLayer: number
       confidence: 'high' | 'medium' | 'low'
       score: number
     }> = []
     
-    for (const part of sourceParts) {
-      try {
-        // Find words that contain this part
-        const words = await prisma.compoundWord.findMany({
-          where: {
-            parts: {
-              has: part.toLowerCase(),
-            },
+    try {
+      // Find words that start with the source node's last part
+      const words = await prisma.compoundWord.findMany({
+        where: {
+          parts: {
+            has: sourceLastPart,
           },
-          take: 50,
-        })
+        },
+        take: 100,
+      })
 
-        for (const wordEntry of words) {
-          const wordParts = wordEntry.parts
-          const sharedPart = wordParts.find(p => p.toLowerCase() === part.toLowerCase())
-          
-          if (sharedPart && !(nodes as GraphNode[]).some(n => n.word.toLowerCase() === wordEntry.word.toLowerCase())) {
-            // Check if this word can connect
-            const connectionResult = findAllConnections(wordEntry.word, wordParts, nodes as GraphNode[])
-            
-            if (connectionResult.canConnect) {
-              // Find the connection to the source node (must connect FROM source node)
-              const sourceConnection = connectionResult.connections.find(
-                conn => conn.node.id === sourceNode.id
-              )
-              
-              // Only consider words that can connect from the source node
-              if (!sourceConnection) continue
-              
-              // Check if this extends forward (shared part is the LAST part of source node)
-              // This means the new word continues the chain toward the goal
-              const sourcePartsList = sourceNode.parts
-              const extendsForward = sourcePartsList.length > 0 && 
-                sourcePartsList[sourcePartsList.length - 1].toLowerCase() === sharedPart.toLowerCase()
-              
-              // Check if word has parts in common with goal
-              const hasGoalPart = wordParts.some(p => goalPartsSet.has(p.toLowerCase()))
-              
-              // Calculate score (higher is better)
-              let score = 0
-              if (extendsForward) score += 1000 // Highest priority
-              if (hasGoalPart) score += 100
-              score += sourceNode.layer * 10 // Prefer words from higher layers
-              
-              // Calculate confidence based on score
-              let confidence: 'high' | 'medium' | 'low' = 'low'
-              if (extendsForward && hasGoalPart) {
-                confidence = 'high'
-              } else if (extendsForward || hasGoalPart) {
-                confidence = 'medium'
-              }
-
-              candidateWords.push({
-                word: wordEntry.word,
-                parts: wordParts,
-                sharedPart,
-                extendsForward,
-                hasGoalPart,
-                sourceLayer: sourceNode.layer,
-                confidence,
-                score,
-              })
-            }
-          }
+      for (const wordEntry of words) {
+        const wordParts = wordEntry.parts
+        
+        // Check if this word's first part matches source's last part (suffix chaining rule)
+        if (wordParts.length === 0 || wordParts[0].toLowerCase() !== sourceLastPart) {
+          continue
         }
-      } catch (error) {
-        console.warn('Error querying database for hints:', error)
+        
+        // Skip if word is already used
+        if ((nodes as GraphNode[]).some(n => n.word.toLowerCase() === wordEntry.word.toLowerCase())) {
+          continue
+        }
+        
+        // Check if this word can connect via suffix chaining
+        const connectionResult = findSuffixConnections(wordEntry.word, wordParts, nodes as GraphNode[])
+        
+        if (connectionResult.canConnect) {
+          // Verify it connects from the source node
+          const sourceConnection = connectionResult.connections.find(
+            conn => conn.node.id === sourceNode.id
+          )
+          
+          if (!sourceConnection) continue
+          
+          // Check if word's last part matches goal word
+          const wordLastPart = wordParts.length > 0
+            ? wordParts[wordParts.length - 1].toLowerCase()
+            : wordEntry.word.toLowerCase()
+          const hasGoalPart = wordLastPart === goalWordLower
+          
+          // Calculate score (higher is better)
+          let score = 0
+          if (hasGoalPart) score += 1000 // Highest priority - word leads to goal
+          score += sourceNode.layer * 10 // Prefer words from higher layers
+          
+          // Calculate confidence
+          let confidence: 'high' | 'medium' | 'low' = 'medium'
+          if (hasGoalPart) {
+            confidence = 'high'
+          } else {
+            // Check if word's last part is a common compound part that might lead to goal
+            confidence = 'medium'
+          }
+
+          candidateWords.push({
+            word: wordEntry.word,
+            parts: wordParts,
+            sharedPart: sourceLastPart,
+            hasGoalPart,
+            sourceLayer: sourceNode.layer,
+            confidence,
+            score,
+          })
+        }
       }
+    } catch (error) {
+      console.warn('Error querying database for hints:', error)
     }
 
     if (candidateWords.length === 0) {
@@ -165,13 +169,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sort by score (highest first) - prioritizes forward-extending words
+    // Sort by score (highest first) - prioritizes words that lead to goal
     candidateWords.sort((a, b) => b.score - a.score)
 
     const bestHint = candidateWords[0]
-    const parentNode = (nodes as GraphNode[]).find(n => 
-      n.parts.some(p => p.toLowerCase() === bestHint.sharedPart.toLowerCase())
-    )
+    const parentNode = sourceNode // The source node is always the parent in suffix chaining
 
     // Mark hint as used (decrement count or mark used)
     const metadata = hintReward.metadata ? JSON.parse(hintReward.metadata) : { hintCount: 1 }

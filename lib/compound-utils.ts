@@ -284,6 +284,7 @@ export function parseCompoundWord(word: string): string[] {
 
 /**
  * Check if two compound words share exactly one part
+ * NOTE: This is kept for puzzle generation only. Gameplay uses suffix chaining.
  */
 export function findSharedPart(partsA: string[], partsB: string[]): string | null {
   const sharedParts: string[] = []
@@ -307,62 +308,29 @@ export function findSharedPart(partsA: string[], partsB: string[]): string | nul
 }
 
 /**
- * Check if a new word can connect to any existing node in the graph
+ * Validate that a new word can chain from a previous word via suffix matching
+ * Rule: last part of previous word must exactly match first part of new word
  */
-export function canConnect(
-  newWord: string,
-  newParts: string[],
-  existingNodes: GraphNode[]
-): ConnectionResult {
-  // Find all possible connections
-  const connections: Array<{ node: GraphNode; sharedPart: string; newPart: string }> = []
+export function validateSuffixChain(previousWord: string, newWord: string): boolean {
+  const prevParts = parseCompoundWord(previousWord)
+  const newParts = parseCompoundWord(newWord)
   
-  for (const node of existingNodes) {
-    // Skip the goal node (we connect TO it, not FROM it, unless completing)
-    if (node.isGoal && !node.isCompleted) {
-      const sharedPart = findSharedPart(node.parts, newParts)
-      if (sharedPart && node.word.toLowerCase() === newWord.toLowerCase()) {
-        // This is the winning move!
-        return {
-          canConnect: true,
-          parentNode: node,
-          sharedPart,
-          newPart: newParts.find(p => p.toLowerCase() !== sharedPart.toLowerCase()) || '',
-        }
-      }
-      continue
-    }
-    
-    const sharedPart = findSharedPart(node.parts, newParts)
-    if (sharedPart) {
-      const newPart = newParts.find(p => p.toLowerCase() !== sharedPart.toLowerCase())
-      if (newPart) {
-        connections.push({ node, sharedPart, newPart })
-      }
-    }
+  if (prevParts.length === 0 || newParts.length === 0) {
+    return false
   }
   
-  if (connections.length === 0) {
-    return { canConnect: false }
-  }
+  // Must match exactly: last part of previous == first part of new
+  const prevLastPart = prevParts[prevParts.length - 1].toLowerCase()
+  const newFirstPart = newParts[0].toLowerCase()
   
-  // Prefer connecting to the node with the highest layer (most progress)
-  connections.sort((a, b) => b.node.layer - a.node.layer)
-  const best = connections[0]
-  
-  return {
-    canConnect: true,
-    parentNode: best.node,
-    sharedPart: best.sharedPart,
-    newPart: best.newPart,
-  }
+  return prevLastPart === newFirstPart
 }
 
 /**
- * Find ALL nodes that a new word can connect to
- * Returns all valid connections, not just the best one
+ * Find ALL nodes that a new word can connect to via suffix chaining
+ * Returns all valid connections where the node's last part matches new word's first part
  */
-export function findAllConnections(
+export function findSuffixConnections(
   newWord: string,
   newParts: string[],
   existingNodes: GraphNode[]
@@ -370,15 +338,54 @@ export function findAllConnections(
   const connections: NodeConnection[] = []
   let minLayer = Infinity
   
+  if (newParts.length === 0) {
+    return { canConnect: false, connections: [], minLayer: 0 }
+  }
+  
+  const newFirstPart = newParts[0].toLowerCase()
+  
   for (const node of existingNodes) {
-    // Allow connecting to goal node if we share a part with it
-    const sharedPart = findSharedPart(node.parts, newParts)
-    if (sharedPart) {
-      connections.push({ node, sharedPart })
-      // Track the minimum layer among all connections (treat goal as high layer)
-      const effectiveLayer = node.isGoal ? 999 : node.layer
-      if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
-        minLayer = effectiveLayer
+    // Skip goal node unless it's the exact word we're adding (winning move)
+    if (node.isGoal && !node.isCompleted) {
+      // For goal connection: the connecting word's last part must match the goal word
+      // (Goal word itself is treated as a simple word with parts = [goalWord])
+      const nodeLastPart = node.parts.length > 0 
+        ? node.parts[node.parts.length - 1].toLowerCase()
+        : node.word.toLowerCase()
+      
+      // Check if new word's last part matches goal word
+      const newLastPart = newParts.length > 0 
+        ? newParts[newParts.length - 1].toLowerCase()
+        : newWord.toLowerCase()
+      
+      if (newLastPart === nodeLastPart && node.word.toLowerCase() === newWord.toLowerCase()) {
+        // This is the winning move - connecting the exact goal word
+        connections.push({ node, sharedPart: newLastPart })
+        minLayer = node.layer
+      }
+      continue
+    }
+    
+    // For regular nodes: check if node's last part matches new word's first part
+    if (node.parts.length === 0) {
+      // Simple word (start word): check if word itself matches new word's first part
+      const nodeWord = node.word.toLowerCase()
+      if (nodeWord === newFirstPart) {
+        connections.push({ node, sharedPart: newFirstPart })
+        const effectiveLayer = node.layer
+        if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
+          minLayer = effectiveLayer
+        }
+      }
+    } else {
+      // Compound word: check if last part matches new word's first part
+      const nodeLastPart = node.parts[node.parts.length - 1].toLowerCase()
+      if (nodeLastPart === newFirstPart) {
+        connections.push({ node, sharedPart: newFirstPart })
+        const effectiveLayer = node.layer
+        if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
+          minLayer = effectiveLayer
+        }
       }
     }
   }

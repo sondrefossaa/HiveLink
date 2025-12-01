@@ -3,10 +3,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
-// D3 force imports removed - no forces needed since positions come from layout
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
-import { computeGraphLayout, FIXED_HORIZONTAL_SPACING } from '@/lib/graph-layout'
-import { useMotionPreference } from '@/hooks/useMotionPreference'
+import { computeGraphLayout, FIXED_HORIZONTAL_SPACING, getAnimationManager } from '@/lib/graph-layout'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
@@ -17,14 +15,10 @@ const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ),
 })
 
-type BranchKind = 'origin' | 'forward' | 'side'
-
 interface ForceLayoutNode extends GraphNode {
   targetX: number
   targetY: number
   absoluteY: number
-  branchId: string
-  branchType: BranchKind
   parentId?: string
   computedLayer: number
   x?: number
@@ -36,7 +30,6 @@ interface ForceLayoutNode extends GraphNode {
 }
 
 interface ForceLayoutLink extends GraphEdge {
-  branchType: 'forward' | 'side'
   isWinning: boolean
   isPrimary: boolean
 }
@@ -85,8 +78,6 @@ const getNodeVisualRadius = (node: ForceLayoutNode, globalScale: number): number
   return size + strokeWidth / 2
 }
 
-const isSideBranchLineage = (node?: { branchId?: string }): boolean =>
-  !!node?.branchId && node.branchId.includes('-side-')
 
 function Graph({
   nodes,
@@ -114,7 +105,8 @@ function Graph({
   const isCompleteRef = useRef(isComplete)
   const startAnchorPositionRef = useRef<{ x: number; y: number } | null>(null)
   const orientationRef = useRef(orientation)
-  const { effectivePreference } = useMotionPreference()
+  const animationManagerRef = useRef(getAnimationManager())
+  const [animationFrame, setAnimationFrame] = useState(0) // Force re-render for animation
 
   // Keep refs in sync with props for stable callback dependencies
   useEffect(() => {
@@ -122,6 +114,7 @@ function Graph({
     isCompleteRef.current = isComplete
     orientationRef.current = orientation
   }, [selectedNodeId, isComplete, orientation])
+
 
   const refreshGraph = useCallback(() => {
     const api = graphRef.current as (ForceGraphMethods & { refresh?: () => void }) | null
@@ -171,17 +164,17 @@ function Graph({
     }
   }, [])
 
+
   // Compute layout with strict rules
-  const layout = useMemo(
-    () => computeGraphLayout(
+  const layout = useMemo(() => {
+    return computeGraphLayout(
       nodes, 
       edges, 
       orientation === 'horizontal' ? Math.max(dimensions.height, 480) : Math.max(dimensions.width, 350),
       orientation,
       graphSpacing
-    ),
-    [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion]
-  )
+    )
+  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion])
 
   // Calculate dynamic max zoom based on graph size
   // Smaller graphs can zoom in more for better detail viewing
@@ -275,27 +268,85 @@ function Graph({
     return connectedNodeIds
   }, [edges, nodes])
 
+
+  // Animation loop - continuously update positions while animations are active
+  useEffect(() => {
+    let rafId: number | null = null
+    let isRunning = true
+
+    const animate = () => {
+      if (!isRunning) return
+
+      const manager = animationManagerRef.current
+      if (manager.hasActiveAnimations()) {
+        // Force re-render by updating animation frame counter
+        setAnimationFrame((prev) => prev + 1)
+        // Continue animation loop
+        rafId = requestAnimationFrame(animate)
+      } else {
+        // No active animations - stop loop
+        rafId = null
+      }
+    }
+
+    // Start animation loop immediately
+    // It will run continuously checking for active animations
+    rafId = requestAnimationFrame(() => {
+      const manager = animationManagerRef.current
+      if (manager.hasActiveAnimations()) {
+        rafId = requestAnimationFrame(animate)
+      }
+      // If no animations yet, check periodically until layout updates complete
+      else {
+        let checkCount = 0
+        const maxChecks = 10 // Check for 10 frames (~166ms) before giving up
+        const checkLoop = () => {
+          if (!isRunning || checkCount >= maxChecks) return
+          checkCount++
+          if (manager.hasActiveAnimations()) {
+            rafId = requestAnimationFrame(animate)
+          } else {
+            rafId = requestAnimationFrame(checkLoop)
+          }
+        }
+        rafId = requestAnimationFrame(checkLoop)
+      }
+    })
+
+    return () => {
+      isRunning = false
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId)
+      }
+    }
+  }, [layout.nodes.length, layoutVersion])
+
   // Prepare graph data with layout positions
   const graphData = useMemo(() => {
+    const manager = animationManagerRef.current
+    const currentTime = performance.now()
+    const currentPositions = manager.getCurrentPositions(currentTime)
+
     const graphNodes: ForceLayoutNode[] = layout.nodes.map((node) => {
+      // Get current animated position, fallback to target
+      const currentPos = currentPositions.get(node.id)
+      const currentX = currentPos?.x ?? node.targetX
+      const currentY = currentPos?.y ?? node.targetY
+
       const base: ForceLayoutNode = {
         ...node,
-        x: node.x ?? node.targetX,
-        y: node.y ?? node.targetY,
+        x: currentX,
+        y: currentY,
         targetX: node.targetX,
         targetY: node.targetY,
         absoluteY: node.absoluteY,
-        branchType: node.branchType,
         computedLayer: node.computedLayer,
-        branchId: node.branchId,
         parentId: node.parentId,
       }
 
-      // Set exact positions - no forces, positions are from layout
-      base.x = node.targetX
-      base.y = node.targetY
-      base.fx = node.targetX
-      base.fy = node.targetY
+      // Pin positions at current animated position - no force simulation
+      base.fx = currentX
+      base.fy = currentY
       base.vx = 0
       base.vy = 0
 
@@ -311,7 +362,6 @@ function Graph({
         ...edge,
         source: sourceId ?? edge.source,
         target: targetId ?? edge.target,
-        branchType: targetMeta?.branchType === 'side' ? 'side' : 'forward',
         isWinning: winningEdgeIds.has(edge.id),
         isPrimary: targetMeta?.parentId === sourceId,
       }
@@ -418,54 +468,10 @@ function Graph({
       nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
       links: uniqueLinks,
     }
-  }, [layout, edges, winningEdgeIds])
+    // Include animationFrame in dependencies to trigger recomputation during animation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, edges, winningEdgeIds, animationFrame])
 
-  // Disable all forces - positions are determined by layout, no simulation needed
-  const configureForces = useCallback(() => {
-    const fg = graphRef.current as (ForceGraphMethods & {
-      d3AlphaTarget?: (alpha: number) => ForceGraphMethods
-      graphData?: () => { nodes: ForceLayoutNode[] }
-      d3Force?: (forceName: string, force?: unknown) => any
-    }) | null
-
-    if (!fg) return
-
-    // Remove all forces completely
-    fg.d3Force?.('link', null)
-    fg.d3Force?.('charge', null)
-    fg.d3Force?.('x', null)
-    fg.d3Force?.('y', null)
-    fg.d3Force?.('collide', null)
-    fg.d3Force?.('center', null)
-
-    // Set alpha to 0 immediately to stop simulation completely
-    if ('d3AlphaTarget' in fg) {
-      ;(fg as any).d3AlphaTarget(0)
-    }
-
-    // Pin all nodes to exact target positions immediately
-    const data = fg.graphData?.()
-    if (data?.nodes) {
-      data.nodes.forEach((node) => {
-        // Set exact position (not just fixed position)
-        node.x = node.targetX
-        node.y = node.targetY
-        node.fx = node.targetX
-        node.fy = node.targetY
-        // Clear velocity to prevent any movement
-        node.vx = 0
-        node.vy = 0
-      })
-    }
-  }, [])
-
-  // Configure forces once when graph data changes - nodes are already positioned in graphData
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      configureForces()
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [configureForces, graphData.nodes.length, graphData.links.length])
 
   // Pin nodes once when graph data changes - nodes are already pinned in graphData useMemo
   // No need for continuous interval since nodes are pinned at initialization and simulation settles quickly
@@ -850,12 +856,9 @@ function Graph({
       const nearlyPerpendicular = sameLayer || mainAxisDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
       const shouldRenderStaple = nearlyPerpendicular
       
-      const isSideLineageEdge =
-        link.branchType === 'side' ||
-        (isSideBranchLineage(source) && isSideBranchLineage(target))
       const isStapleEdge = shouldRenderStaple
 
-      const needsPaddedEndpoints = isSideLineageEdge || isStapleEdge
+      const needsPaddedEndpoints = isStapleEdge
       let sourceRadius = 0
       let targetRadius = 0
       if (needsPaddedEndpoints) {
@@ -913,22 +916,6 @@ function Graph({
 
         controlX = (startX + endX) / 2
         controlY = (startY + endY) / 2
-      } else if (isSideLineageEdge) {
-        // Calculate direction vector (normalized)
-        const dirX = dx / distance
-        const dirY = dy / distance
-
-        // Offset start/end points using node radii so the line leaves from the hexagon edge
-        startX = source.x + dirX * sourceRadius
-        startY = source.y + dirY * sourceRadius
-        endX = target.x - dirX * targetRadius
-        endY = target.y - dirY * targetRadius
-
-        ctx.moveTo(startX, startY)
-        ctx.lineTo(endX, endY)
-
-        controlX = (startX + endX) / 2
-        controlY = (startY + endY) / 2
       } else {
         ctx.moveTo(startX, startY)
         ctx.lineTo(endX, endY)
@@ -943,18 +930,18 @@ function Graph({
         ctx.setLineDash([])
       }
 
-      // Simplified edge colors - no gradients for better performance
+      // Simplified edge colors - all edges are identical (honey-yellow)
       if (link.isWinning && isCompleteRef.current) {
         ctx.strokeStyle = '#22c55e' // Solid green for winning path
-      } else if (isSideLineageEdge || isStapleEdge) {
-        ctx.strokeStyle = 'rgba(244, 180, 0, 0.5)' // Solid dimmer yellow
+      } else if (isStapleEdge) {
+        ctx.strokeStyle = 'rgba(244, 180, 0, 0.5)' // Solid dimmer yellow for stapled edges
       } else {
         ctx.strokeStyle = '#F4B400' // Solid bright yellow
       }
 
       ctx.lineWidth = link.isWinning
         ? 4 / globalScale // Fixed width, no pulse animation
-        : isSideLineageEdge || isStapleEdge
+        : isStapleEdge
         ? 1.8 / globalScale
         : 2.8 / globalScale
       ctx.stroke()
@@ -963,31 +950,48 @@ function Graph({
 
       // Draw shared part label on edge
       if (link.sharedPart && globalScale > 0.5) {
-        ctx.save()
-        // Scale font similar to node size scaling for consistency
-        const inverseScale = 1 / Math.max(globalScale, 0.001)
-        const zoomComp = getZoomCompensation({ isStart: false, isGoal: false } as ForceLayoutNode, globalScale)
-        const fontSize = Math.max(10 * inverseScale * zoomComp * 0.4, 6)
-        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        
         // Calculate the actual midpoint on the quadratic Bezier curve at t=0.5
         // Formula: B(0.5) = 0.25*start + 0.5*control + 0.25*end
         const labelX = 0.25 * startX + 0.5 * controlX + 0.25 * endX
         const labelY = 0.25 * startY + 0.5 * controlY + 0.25 * endY
+        
+        ctx.save()
+        
+        // Get current canvas transformation matrix
+        const transform = ctx.getTransform()
+        
+        // Reset transform to identity to draw text at fixed screen size
+        // This prevents text from being scaled by zoom transformations
+        ctx.setTransform(1, 0, 0, 1, 0, 0)
+        
+        // Convert graph coordinates to screen coordinates using the transform
+        // transform matrix: [a c e] = [scaleX skewY translateX]
+        //                  [b d f]   [skewX scaleY translateY]
+        const screenX = transform.a * labelX + transform.c * labelY + transform.e
+        const screenY = transform.b * labelX + transform.d * labelY + transform.f
+        
+        // Fixed font size in screen pixels (doesn't scale with zoom)
+        const fontSize = 24
+        
+        ctx.font = `400 ${fontSize}px Inter, system-ui, sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        
         const labelWidth = ctx.measureText(link.sharedPart).width
+        const padding = 4
+        const backgroundWidth = labelWidth + padding * 2
+        const backgroundHeight = fontSize + padding * 2
 
         ctx.fillStyle = 'rgba(7, 6, 4, 0.85)'
         ctx.fillRect(
-          labelX - labelWidth / 2 - 6,
-          labelY - fontSize / 2 - 3,
-          labelWidth + 12,
-          fontSize + 6
+          screenX - backgroundWidth / 2,
+          screenY - backgroundHeight / 2,
+          backgroundWidth,
+          backgroundHeight
         )
 
-        ctx.fillStyle = (isSideLineageEdge || isStapleEdge) ? '#F6E0A0' : '#F4B400'
-        ctx.fillText(link.sharedPart, labelX, labelY)
+        ctx.fillStyle = isStapleEdge ? '#F6E0A0' : '#F4B400'
+        ctx.fillText(link.sharedPart, screenX, screenY)
         ctx.restore()
       }
     },

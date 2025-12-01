@@ -1,25 +1,250 @@
 import type { GraphEdge, GraphNode } from '@/types'
 
-const BASE_LAYER_SPACING = 120
-const MIN_LAYER_SPACING_BETWEEN = 70
-const MAX_LAYER_SPACING_BETWEEN = 90
 export const FIXED_HORIZONTAL_SPACING = 100 // For backward compatibility with Graph.tsx
-const BASE_FORWARD_CONFLICT_SPACING = 150
 const BASE_CANVAS_SIZE = 640
 const MIN_VERTICAL_SCALE = 1
 const MAX_VERTICAL_SCALE = 1.8
-const MIN_GOAL_LAYER = 3
-const MAX_GOAL_LAYER = 12
-const MAX_OFFSET_STEPS = 10
-const MIN_LAYER_SPACING = 48
 
-type BranchKind = 'origin' | 'forward' | 'side'
+// Animation constants
+const ANIMATION_DURATION = 600 // milliseconds
+
+/**
+ * Easing function for smooth animation (ease-in-out cubic)
+ */
+export function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+}
+
+/**
+ * Interpolate between two positions based on progress (0-1)
+ */
+export function interpolatePosition(
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  progress: number
+): { x: number; y: number } {
+  const eased = easeInOutCubic(progress)
+  return {
+    x: startX + (endX - startX) * eased,
+    y: startY + (endY - startY) * eased,
+  }
+}
+
+interface Position {
+  x: number
+  y: number
+}
+
+interface AnimationState {
+  startPos: Position
+  endPos: Position
+  startTime: number
+}
+
+/**
+ * Animation manager for smooth node position transitions
+ * Lives in graph-layout to keep animation logic centralized
+ */
+class LayoutAnimationManager {
+  private previousPositions = new Map<string, Position>()
+  private activeAnimations = new Map<string, AnimationState>()
+  private prefersReducedMotion = false
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+      this.prefersReducedMotion = mediaQuery.matches
+      const handleChange = (e: MediaQueryListEvent) => {
+        this.prefersReducedMotion = e.matches
+      }
+      if (mediaQuery.addEventListener) {
+        mediaQuery.addEventListener('change', handleChange)
+      } else {
+        mediaQuery.addListener(handleChange)
+      }
+    }
+  }
+
+  /**
+   * Update target positions and start animations if positions changed
+   * Returns map of current positions (immediate if no animation, start pos if animating)
+   */
+  updateTargets(
+    nodes: Array<{ id: string; targetX: number; targetY: number; parentId?: string }>
+  ): Map<string, Position> {
+    const currentTime = performance.now()
+    const currentPositions = new Map<string, Position>()
+
+    // Build a map of all node target positions for parent lookups
+    const targetPositionsMap = new Map<string, Position>()
+    nodes.forEach((node) => {
+      targetPositionsMap.set(node.id, { x: node.targetX, y: node.targetY })
+    })
+
+    // Get all current positions (including animating ones) to use for parent lookups
+    // This ensures we can get parent positions even if they're currently animating
+    const allCurrentPositions = new Map<string, Position>()
+    this.previousPositions.forEach((pos, id) => {
+      allCurrentPositions.set(id, pos)
+    })
+    // Merge in any currently animating positions
+    const animatingPositions = this.getCurrentPositions(currentTime)
+    animatingPositions.forEach((pos, id) => {
+      allCurrentPositions.set(id, pos)
+    })
+
+    nodes.forEach((node) => {
+      const prevPos = this.previousPositions.get(node.id)
+      const targetPos: Position = { x: node.targetX, y: node.targetY }
+
+      if (this.prefersReducedMotion) {
+        // No animation - set immediately
+        currentPositions.set(node.id, targetPos)
+        this.previousPositions.set(node.id, targetPos)
+        this.activeAnimations.delete(node.id)
+      } else if (!prevPos) {
+        // New node - start from parent's position if available
+        let startPos: Position = targetPos
+
+        if (node.parentId) {
+          // First try to get parent's current animated position (if parent is animating)
+          let parentPos = allCurrentPositions.get(node.parentId)
+          
+          // If parent not in current positions, try to get from target positions (parent might also be new)
+          if (!parentPos) {
+            const parentTargetPos = targetPositionsMap.get(node.parentId)
+            if (parentTargetPos) {
+              // Parent exists in this batch - check if parent has previous position
+              const parentPrevPos = this.previousPositions.get(node.parentId)
+              // Use parent's previous position if available, otherwise use parent's target
+              parentPos = parentPrevPos ?? parentTargetPos
+            }
+          }
+          
+          if (parentPos) {
+            startPos = parentPos
+          }
+        }
+
+        // If starting position is different from target, animate
+        const distance = Math.sqrt(
+          Math.pow(targetPos.x - startPos.x, 2) + Math.pow(targetPos.y - startPos.y, 2)
+        )
+
+        if (distance > 1) {
+          // Start animation from parent's position (or fallback)
+          this.activeAnimations.set(node.id, {
+            startPos,
+            endPos: targetPos,
+            startTime: currentTime,
+          })
+          currentPositions.set(node.id, startPos)
+          // Don't update previousPositions yet - let animation update it
+        } else {
+          // Positions are the same, no animation needed
+          currentPositions.set(node.id, targetPos)
+          this.previousPositions.set(node.id, targetPos)
+        }
+      } else {
+        // Existing node - check if position changed
+        const distance = Math.sqrt(
+          Math.pow(targetPos.x - prevPos.x, 2) + Math.pow(targetPos.y - prevPos.y, 2)
+        )
+
+        if (distance < 1) {
+          // Position hasn't changed significantly
+          currentPositions.set(node.id, prevPos)
+        } else {
+          // Start animation - begin at previous position
+          this.activeAnimations.set(node.id, {
+            startPos: prevPos,
+            endPos: targetPos,
+            startTime: currentTime,
+          })
+          currentPositions.set(node.id, prevPos)
+        }
+      }
+    })
+
+    return currentPositions
+  }
+
+  /**
+   * Get current interpolated positions for all active animations at given time
+   */
+  getCurrentPositions(currentTime: number = performance.now()): Map<string, Position> {
+    const currentPositions = new Map<string, Position>()
+
+    this.activeAnimations.forEach((animation, nodeId) => {
+      const elapsed = currentTime - animation.startTime
+      const progress = Math.min(elapsed / ANIMATION_DURATION, 1)
+
+      if (progress >= 1) {
+        // Animation complete
+        currentPositions.set(nodeId, animation.endPos)
+        this.previousPositions.set(nodeId, animation.endPos)
+        this.activeAnimations.delete(nodeId)
+      } else {
+        // Interpolate current position
+        const currentPos = interpolatePosition(
+          animation.startPos.x,
+          animation.startPos.y,
+          animation.endPos.x,
+          animation.endPos.y,
+          progress
+        )
+        currentPositions.set(nodeId, currentPos)
+        this.previousPositions.set(nodeId, currentPos)
+      }
+    })
+
+    return currentPositions
+  }
+
+  /**
+   * Check if any animations are currently active
+   */
+  hasActiveAnimations(): boolean {
+    return this.activeAnimations.size > 0
+  }
+
+  /**
+   * Get position for a node (current if animating, previous otherwise, or fallback)
+   */
+  getPosition(nodeId: string, fallback: Position): Position {
+    const currentTime = performance.now()
+    const currentAnimations = this.getCurrentPositions(currentTime)
+    return (
+      currentAnimations.get(nodeId) ||
+      this.previousPositions.get(nodeId) ||
+      fallback
+    )
+  }
+
+  /**
+   * Clear all animations and positions
+   */
+  reset(): void {
+    this.previousPositions.clear()
+    this.activeAnimations.clear()
+  }
+}
+
+// Global animation manager instance
+const animationManager = new LayoutAnimationManager()
+
+/**
+ * Get the animation manager instance (for use in Graph.tsx)
+ */
+export function getAnimationManager(): LayoutAnimationManager {
+  return animationManager
+}
 
 interface BranchAssignment {
-  branchId: string
   crossAxisPos: number
   parentId?: string
-  kind: BranchKind
   layer: number
 }
 
@@ -27,9 +252,7 @@ export interface LayoutNodeMeta extends GraphNode {
   targetX: number
   targetY: number
   absoluteY: number
-  branchId: string
   parentId?: string
-  branchType: BranchKind
   computedLayer: number
 }
 
@@ -46,48 +269,10 @@ export interface GraphLayoutResult {
 const resolveNodeId = (endpoint: string | GraphNode): string =>
   typeof endpoint === 'string' ? endpoint : endpoint.id
 
-const clampGoalLayer = (layer: number): number =>
-  Math.max(MIN_GOAL_LAYER, Math.min(layer, MAX_GOAL_LAYER))
-
-function determineBranchKind(
-  edge: GraphEdge | undefined,
-  parentNode: GraphNode | undefined,
-  childNode: GraphNode
-): BranchKind {
-  if (!edge || !parentNode) {
-    return childNode.expandsForward === false ? 'side' : 'forward'
-  }
-
-  const sharedPart = edge.sharedPart?.toLowerCase() ?? ''
-  const parentParts = parentNode.parts.map((part) => part.toLowerCase())
-
-  if (parentParts.length === 0) {
-    return childNode.expandsForward === false ? 'side' : 'forward'
-  }
-
-  const lastPart = parentParts[parentParts.length - 1]
-  const firstPart = parentParts[0]
-
-  if (sharedPart && sharedPart === lastPart) {
-    return 'forward'
-  }
-
-  if (sharedPart && sharedPart === firstPart) {
-    return 'side'
-  }
-
-  if (childNode.expandsForward !== undefined) {
-    return childNode.expandsForward ? 'forward' : 'side'
-  }
-
-  return 'forward'
-}
-
 function buildLayerMap(
   startNodeId: string,
   adjacency: Map<string, string[]>,
   nodeMap: Map<string, GraphNode>,
-  edgeMap: Map<string, GraphEdge>,
   goalNodeId?: string
 ): Map<string, number> {
   const layerMap = new Map<string, number>()
@@ -99,23 +284,13 @@ function buildLayerMap(
   while (queue.length > 0) {
     const currentId = queue.shift()!
     const currentLayer = layerMap.get(currentId) ?? 0
-    const currentNode = nodeMap.get(currentId)
     const children = adjacency.get(currentId) ?? []
 
     for (const childId of children) {
       if (childId === goalNodeId) continue
       
-      const childNode = nodeMap.get(childId)
-      const edge = edgeMap.get(`${currentId}->${childId}`)
-      
-      // Determine if this is a forward or side expansion
-      const branchKind = determineBranchKind(edge, currentNode, childNode!)
-      
-      // First layer (from start): always increment to layer 1
-      // Forward expansion: increment layer
-      // Side expansion: same layer as parent
-      const isFromStart = currentId === startNodeId
-      const nextLayer = (isFromStart || branchKind === 'forward') ? currentLayer + 1 : currentLayer
+      // Each connection increments layer by 1 (simple tree layout)
+      const nextLayer = currentLayer + 1
       
       if (!layerMap.has(childId) || nextLayer < (layerMap.get(childId) ?? Infinity)) {
         layerMap.set(childId, nextLayer)
@@ -136,6 +311,8 @@ function selectPrimaryParent(
   const parents = incoming.get(nodeId) ?? []
   if (parents.length === 0) return undefined
 
+  // In suffix chaining, every node has exactly one parent (the immediate predecessor)
+  // Choose the parent with the highest layer (most recent in the chain)
   let chosen: string | undefined
   let bestLayer = -Infinity
 
@@ -155,17 +332,103 @@ const clampValue = (value: number, min: number, max: number): number =>
   Math.max(min, Math.min(max, value))
 
 /**
- * Rebalance layer positions for clean, centered layout
- * Uses iterative relaxation to minimize edge crossings and spread nodes evenly
- * Prioritizes nodes with forward paths (descendants) toward the center
+ * Helper function to move a parent node and all its children together
+ * This preserves parent-child relationships when resolving collisions
+ */
+function moveParentAndChildren(
+  parentId: string,
+  newPos: number,
+  branchAssignments: Map<string, BranchAssignment>,
+  childrenByParent: Map<string, string[]>,
+  canvasSize: number,
+  margin: number
+): void {
+  const parent = branchAssignments.get(parentId)
+  if (!parent) return
+  
+  const offset = newPos - parent.crossAxisPos
+  parent.crossAxisPos = clampValue(newPos, margin, canvasSize - margin)
+  
+  // Move all children by the same offset
+  const children = childrenByParent.get(parentId) ?? []
+  for (const childId of children) {
+    const child = branchAssignments.get(childId)
+    if (child) {
+      child.crossAxisPos = clampValue(
+        child.crossAxisPos + offset,
+        margin,
+        canvasSize - margin
+      )
+    }
+  }
+}
+
+/**
+ * Rebalance positions: enforce strict parent-child alignment
+ * - Single children MUST stay at parent's exact Y position (straight forward)
+ * - Multiple siblings are distributed evenly around parent's center
+ * - Collision detection with simple offset resolution
  */
 function rebalanceLayerPositions(
-  nodes: GraphNode[],
-  edges: GraphEdge[],
   branchAssignments: Map<string, BranchAssignment>,
-  centerCrossAxis: number,
-  layerMap: Map<string, number>
+  canvasSize: number
 ): void {
+  const VERTICAL_SPACING = 60
+  const MIN_NODE_SPACING = 50 // Minimum spacing between nodes to prevent collision
+  const margin = 40 // Margin from canvas edges
+  
+  // Build children map: parentId -> array of child node IDs
+  const childrenByParent = new Map<string, string[]>()
+  for (const [nodeId, assignment] of branchAssignments.entries()) {
+    if (assignment.parentId) {
+      if (!childrenByParent.has(assignment.parentId)) {
+        childrenByParent.set(assignment.parentId, [])
+      }
+      childrenByParent.get(assignment.parentId)!.push(nodeId)
+    }
+  }
+  
+  // Step 1: Initial alignment - Position ALL children at their parent's exact Y position
+  for (const [nodeId, assignment] of branchAssignments.entries()) {
+    if (assignment.parentId) {
+      const parentAssignment = branchAssignments.get(assignment.parentId)
+      if (parentAssignment) {
+        assignment.crossAxisPos = parentAssignment.crossAxisPos
+      }
+    }
+  }
+  
+  // Step 2: Distribute siblings evenly around parent's center
+  for (const [parentId, childIds] of childrenByParent.entries()) {
+    // Skip single children - they stay at parent position
+    if (childIds.length <= 1) continue
+    
+    const parentAssignment = branchAssignments.get(parentId)
+    if (!parentAssignment) continue
+    
+    const parentPos = parentAssignment.crossAxisPos
+    const childCount = childIds.length
+    const midpoint = (childCount - 1) / 2
+    
+    // Sort children by current position for stability
+    const sortedChildren = [...childIds].sort((a, b) => {
+      const posA = branchAssignments.get(a)?.crossAxisPos ?? parentPos
+      const posB = branchAssignments.get(b)?.crossAxisPos ?? parentPos
+      return posA - posB
+    })
+    
+    // Distribute evenly around parent's position
+    sortedChildren.forEach((childId, i) => {
+      const childAssignment = branchAssignments.get(childId)
+      if (childAssignment) {
+        const offset = (i - midpoint) * VERTICAL_SPACING
+        const idealPos = parentPos + offset
+        childAssignment.crossAxisPos = clampValue(idealPos, margin, canvasSize - margin)
+      }
+    })
+  }
+  
+  // Step 3: Collision detection and resolution
   // Group nodes by layer
   const nodesByLayer = new Map<number, string[]>()
   for (const [nodeId, assignment] of branchAssignments.entries()) {
@@ -176,221 +439,192 @@ function rebalanceLayerPositions(
     nodesByLayer.get(layer)!.push(nodeId)
   }
   
-  // Build adjacency for neighbor calculations (only forward edges between different layers)
-  const childrenMap = new Map<string, string[]>()
-  const parentsMap = new Map<string, string[]>()
-  for (const edge of edges) {
-    const sourceId = typeof edge.source === 'string' ? edge.source : (edge.source as GraphNode)?.id
-    const targetId = typeof edge.target === 'string' ? edge.target : (edge.target as GraphNode)?.id
-    if (!sourceId || !targetId) continue
-    
-    const sourceLayer = layerMap.get(sourceId)
-    const targetLayer = layerMap.get(targetId)
-    
-    // Skip same-layer edges - they shouldn't affect horizontal positioning
-    if (sourceLayer === targetLayer) continue
-    
-    if (!childrenMap.has(sourceId)) childrenMap.set(sourceId, [])
-    childrenMap.get(sourceId)!.push(targetId)
-    
-    if (!parentsMap.has(targetId)) parentsMap.set(targetId, [])
-    parentsMap.get(targetId)!.push(sourceId)
-  }
+  // Resolve collisions iteratively
+  let hasCollisions = true
+  let iterations = 0
+  const maxIterations = 10
   
-  // Count descendants for each node (nodes with more descendants = more important paths)
-  const descendantCount = new Map<string, number>()
-  
-  const countDescendants = (nodeId: string, visited: Set<string> = new Set()): number => {
-    if (visited.has(nodeId)) return 0
-    if (descendantCount.has(nodeId)) return descendantCount.get(nodeId)!
+  while (hasCollisions && iterations < maxIterations) {
+    iterations++
+    hasCollisions = false
     
-    visited.add(nodeId)
-    const children = childrenMap.get(nodeId) || []
-    let count = children.length
-    
-    for (const childId of children) {
-      count += countDescendants(childId, visited)
-    }
-    
-    descendantCount.set(nodeId, count)
-    return count
-  }
-  
-  // Calculate descendant counts for all nodes
-  for (const [nodeId] of branchAssignments.entries()) {
-    countDescendants(nodeId)
-  }
-  
-  // Iterative relaxation: adjust positions to minimize crossings and balance spacing
-  const iterations = 3
-  for (let iter = 0; iter < iterations; iter++) {
-    const layers = Array.from(nodesByLayer.keys()).sort((a, b) => a - b)
-    
-    // Forward pass: adjust based on parent positions
-    for (const layer of layers) {
-      const nodeIds = nodesByLayer.get(layer)!
+    // Check each layer for collisions
+    for (const [layer, nodeIds] of nodesByLayer.entries()) {
       if (nodeIds.length <= 1) continue
       
-      // Calculate barycenter (weighted average of parent/child positions)
-      // Weight children more heavily than parents since we want to point toward goal
-      const barycenters = nodeIds.map((nodeId) => {
-        const parents = parentsMap.get(nodeId) || []
-        const children = childrenMap.get(nodeId) || []
-        const hasDescendants = (descendantCount.get(nodeId) || 0) > 0
+      // Sort nodes by parent position first, then by their own position
+      // This ensures nodes maintain the relative order of their parents
+      const sortedNodes = [...nodeIds].sort((a, b) => {
+        const assignmentA = branchAssignments.get(a)
+        const assignmentB = branchAssignments.get(b)
         
-        let sum = 0
-        let count = 0
+        if (!assignmentA || !assignmentB) return 0
         
-        // Parents have lower weight
-        for (const parentId of parents) {
-          const parentAssignment = branchAssignments.get(parentId)
-          if (parentAssignment) {
-            sum += parentAssignment.crossAxisPos * 0.5
-            count += 0.5
+        // If both have parents, sort by parent position first
+        if (assignmentA.parentId && assignmentB.parentId) {
+          const parentA = branchAssignments.get(assignmentA.parentId)
+          const parentB = branchAssignments.get(assignmentB.parentId)
+          
+          if (parentA && parentB) {
+            const parentDiff = parentA.crossAxisPos - parentB.crossAxisPos
+            if (Math.abs(parentDiff) > 0.1) {
+              // Parents are in different positions - sort by parent position
+              return parentDiff
+            }
           }
         }
         
-        // Children have higher weight - they pull the node toward the path to goal
-        for (const childId of children) {
-          const childAssignment = branchAssignments.get(childId)
-          if (childAssignment) {
-            sum += childAssignment.crossAxisPos * 1.5
-            count += 1.5
+        // Fall back to sorting by node's own position
+        const posA = assignmentA.crossAxisPos
+        const posB = assignmentB.crossAxisPos
+        return posA - posB
+      })
+      
+      // Check all pairs for collisions
+      for (let i = 0; i < sortedNodes.length - 1; i++) {
+        const nodeAId = sortedNodes[i]
+        const nodeBId = sortedNodes[i + 1]
+        
+        const assignmentA = branchAssignments.get(nodeAId)
+        const assignmentB = branchAssignments.get(nodeBId)
+        
+        if (!assignmentA || !assignmentB) continue
+        
+        const posA = assignmentA.crossAxisPos
+        const posB = assignmentB.crossAxisPos
+        const distance = Math.abs(posB - posA)
+        
+        if (distance < MIN_NODE_SPACING) {
+          hasCollisions = true
+          
+          // Determine node types
+          const isASingleChild = assignmentA.parentId && 
+            (childrenByParent.get(assignmentA.parentId)?.length ?? 0) === 1
+          const isBSingleChild = assignmentB.parentId && 
+            (childrenByParent.get(assignmentB.parentId)?.length ?? 0) === 1
+          const parentAId = assignmentA.parentId
+          const parentBId = assignmentB.parentId
+          
+          // Priority 1: Never move single children (straight-forward nodes)
+          // Single children MUST stay at their parent's exact position - they are never moved directly
+          if (isASingleChild && !isBSingleChild) {
+            // A is a single child - it cannot be moved. Move B away from A.
+            const newPosB = posA + MIN_NODE_SPACING
+            if (parentBId) {
+              // Calculate offset needed to move B to newPosB
+              const offset = newPosB - posB
+              const parentB = branchAssignments.get(parentBId)
+              if (parentB) {
+                const newParentPos = parentB.crossAxisPos + offset
+                moveParentAndChildren(parentBId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+              }
+            } else {
+              // B has no parent, move it directly
+              assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
+            }
+          } else if (isBSingleChild && !isASingleChild) {
+            // B is a single child - it cannot be moved. Move A away from B.
+            const newPosA = posB - MIN_NODE_SPACING
+            if (parentAId) {
+              // Calculate offset needed to move A to newPosA
+              const offset = newPosA - posA
+              const parentA = branchAssignments.get(parentAId)
+              if (parentA) {
+                const newParentPos = parentA.crossAxisPos + offset
+                moveParentAndChildren(parentAId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+              }
+            } else {
+              // A has no parent, move it directly
+              assignmentA.crossAxisPos = clampValue(newPosA, margin, canvasSize - margin)
+            }
+          } else if (isASingleChild && isBSingleChild) {
+            // Both are single children - move one parent
+            const center = canvasSize / 2
+            const parentA = branchAssignments.get(parentAId!)
+            const parentB = branchAssignments.get(parentBId!)
+            const parentAPos = parentA?.crossAxisPos ?? center
+            const parentBPos = parentB?.crossAxisPos ?? center
+            
+            // Move the parent further from center
+            if (Math.abs(parentAPos - center) >= Math.abs(parentBPos - center)) {
+              const newPosA = posB - MIN_NODE_SPACING
+              const offset = newPosA - posA
+              const newParentPos = parentAPos + offset
+              moveParentAndChildren(parentAId!, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+            } else {
+              const newPosB = posA + MIN_NODE_SPACING
+              const offset = newPosB - posB
+              const newParentPos = parentBPos + offset
+              moveParentAndChildren(parentBId!, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+            }
+          } else {
+            // Neither is a single child - check parent positions to maintain order
+            // If A's parent is above B's parent, B should move down (stay below A)
+            let shouldMoveB = false
+            if (parentAId && parentBId) {
+              const parentA = branchAssignments.get(parentAId)
+              const parentB = branchAssignments.get(parentBId)
+              if (parentA && parentB) {
+                // A's parent is above B's parent, so A should stay above B
+                if (parentA.crossAxisPos < parentB.crossAxisPos) {
+                  shouldMoveB = true
+                } else if (parentA.crossAxisPos > parentB.crossAxisPos) {
+                  shouldMoveB = false // Move A down
+                }
+              }
+            }
+            
+            // If parent order doesn't determine, move the one further from center
+            if (shouldMoveB === false && (!parentAId || !parentBId)) {
+              const center = canvasSize / 2
+              const distA = Math.abs(posA - center)
+              const distB = Math.abs(posB - center)
+              shouldMoveB = distA > distB
+            }
+            
+            if (shouldMoveB) {
+              // Move B away (down)
+              const newPosB = posA + MIN_NODE_SPACING
+              if (parentBId) {
+                const offset = newPosB - posB
+                const parentB = branchAssignments.get(parentBId)
+                if (parentB) {
+                  const newParentPos = parentB.crossAxisPos + offset
+                  moveParentAndChildren(parentBId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+                }
+              } else {
+                assignmentB.crossAxisPos = clampValue(newPosB, margin, canvasSize - margin)
+              }
+            } else {
+              // Move A away (up)
+              const newPosA = posB - MIN_NODE_SPACING
+              if (parentAId) {
+                const offset = newPosA - posA
+                const parentA = branchAssignments.get(parentAId)
+                if (parentA) {
+                  const newParentPos = parentA.crossAxisPos + offset
+                  moveParentAndChildren(parentAId, newParentPos, branchAssignments, childrenByParent, canvasSize, margin)
+                }
+              } else {
+                assignmentA.crossAxisPos = clampValue(newPosA, margin, canvasSize - margin)
+              }
+            }
           }
         }
-        
-        // Nodes with descendants get pulled toward center
-        if (hasDescendants) {
-          const descendantWeight = Math.min((descendantCount.get(nodeId) || 0) * 0.3, 2)
-          sum += centerCrossAxis * descendantWeight
-          count += descendantWeight
-        }
-        
-        const barycenter = count > 0 ? sum / count : branchAssignments.get(nodeId)!.crossAxisPos
-        return { nodeId, barycenter, hasDescendants }
-      })
-      
-      // Sort by barycenter to reduce crossings, but keep nodes with descendants closer to center
-      // Nodes with descendants should be sorted toward the middle of the array
-      barycenters.sort((a, b) => {
-        // Both have descendants or both don't - sort by barycenter
-        if (a.hasDescendants === b.hasDescendants) {
-          return a.barycenter - b.barycenter
-        }
-        // Node with descendants should be closer to center
-        // If a has descendants, it should be closer to middle position
-        // Compare distance from center
-        const aDist = Math.abs(a.barycenter - centerCrossAxis)
-        const bDist = Math.abs(b.barycenter - centerCrossAxis)
-        if (a.hasDescendants && !b.hasDescendants) {
-          // a should be more centered - if a is already more centered, keep order
-          return aDist - bDist - 50 // bias a toward center
-        }
-        return bDist - aDist + 50 // bias b away from center
-      })
-      
-      // Redistribute with even spacing
-      const totalNodes = barycenters.length
-      const currentPositions = barycenters.map(b => branchAssignments.get(b.nodeId)!.crossAxisPos)
-      const minPos = Math.min(...currentPositions)
-      const maxPos = Math.max(...currentPositions)
-      const range = maxPos - minPos
-      
-      // Use larger of: current spread or minimum spacing requirements
-      const minSpacing = 60
-      const minRequiredSpread = minSpacing * (totalNodes - 1)
-      const actualSpread = Math.max(range, minRequiredSpread)
-      
-      // Calculate starting position to center the group
-      const startPos = centerCrossAxis - actualSpread / 2
-      
-      // Assign new positions with even spacing
-      barycenters.forEach((item, index) => {
-        const assignment = branchAssignments.get(item.nodeId)!
-        const idealPos = startPos + (index * actualSpread / Math.max(totalNodes - 1, 1))
-        
-        // Nodes with descendants get pulled more strongly toward their ideal (centered) position
-        const descendantBonus = item.hasDescendants ? 0.15 : 0
-        const blendFactor = (iter === iterations - 1 ? 0.8 : 0.5) + descendantBonus
-        assignment.crossAxisPos = assignment.crossAxisPos * (1 - blendFactor) + idealPos * blendFactor
-      })
+      }
     }
   }
   
-  // Final centering pass - apply progressive centering (stronger for layers closer to goal)
-  // Reorder nodes so those with descendants are closer to center, then center the whole layer
-  const maxLayerInGraph = Math.max(...Array.from(nodesByLayer.keys()))
-  
-  for (const [layer, nodeIds] of nodesByLayer.entries()) {
-    if (nodeIds.length <= 1) continue;
-
-    // Get node parts for sorting
-    const nodePartsMap = new Map<string, string[]>();
-    for (const nodeId of nodeIds) {
-      const node = nodes.find(n => n.id === nodeId);
-      nodePartsMap.set(nodeId, node?.parts ?? []);
-    }
-
-    // Group nodes by shared part
-    const groups: string[][] = [];
-    const used = new Set<string>();
-    for (const nodeId of nodeIds) {
-      if (used.has(nodeId)) continue;
-      const partsA = nodePartsMap.get(nodeId) ?? [];
-      const group = [nodeId];
-      used.add(nodeId);
-      for (const otherId of nodeIds) {
-        if (used.has(otherId) || otherId === nodeId) continue;
-        const partsB = nodePartsMap.get(otherId) ?? [];
-        if (partsA.some(part => partsB.includes(part))) {
-          group.push(otherId);
-          used.add(otherId);
-        }
-      }
-      groups.push(group);
-    }
-
-    // Calculate spread and center, but ensure minimum spacing
-    const minSpacing = 60;
-    const maxAllowedSpread = 220; // Limit max spread for layer
-    const requiredSpread = minSpacing * (nodeIds.length - 1);
-    const actualSpread = Math.max(Math.min(requiredSpread, maxAllowedSpread), requiredSpread);
-    const startPos = centerCrossAxis - actualSpread / 2;
-
-    // Place groups together, lone nodes near their parent, but always enforce minSpacing between all nodes
-    let index = 0;
-    for (const group of groups) {
-      if (group.length === 1) {
-        const nodeId = group[0];
-        const assignment = branchAssignments.get(nodeId)!;
-        const parentId = assignment.parentId;
-        const parentPos = parentId ? branchAssignments.get(parentId)?.crossAxisPos : centerCrossAxis;
-        // Clamp lone node within layer spread, but also ensure it doesn't overlap neighbors
-        let newPos = clampValue(parentPos ?? startPos, startPos, startPos + actualSpread);
-        // If not first, ensure spacing from previous
-        if (index > 0) {
-          const prevNodeId = nodeIds[index - 1];
-          const prevPos = branchAssignments.get(prevNodeId)!.crossAxisPos;
-          if (newPos - prevPos < minSpacing) {
-            newPos = prevPos + minSpacing;
-          }
-        }
-        assignment.crossAxisPos = newPos;
-        index++;
-      } else {
-        // Place grouped nodes together, enforcing minSpacing
-        for (const nodeId of group) {
-          let newPos = startPos + (index * minSpacing);
-          // If not first, ensure spacing from previous
-          if (index > 0) {
-            const prevNodeId = nodeIds[index - 1];
-            const prevPos = branchAssignments.get(prevNodeId)!.crossAxisPos;
-            if (newPos - prevPos < minSpacing) {
-              newPos = prevPos + minSpacing;
-            }
-          }
-          branchAssignments.get(nodeId)!.crossAxisPos = newPos;
-          index++;
+  // Step 4: Final enforcement pass - ensure all single children are at parent's exact position
+  // This guarantees the "straight forward" rule is never broken, even after collision resolution
+  for (const [nodeId, assignment] of branchAssignments.entries()) {
+    if (assignment.parentId) {
+      const parentAssignment = branchAssignments.get(assignment.parentId)
+      if (parentAssignment) {
+        const childCount = childrenByParent.get(assignment.parentId)?.length ?? 0
+        // Only enforce for single children - they MUST stay at parent's exact position
+        if (childCount === 1) {
+          assignment.crossAxisPos = parentAssignment.crossAxisPos
         }
       }
     }
@@ -399,6 +633,7 @@ function rebalanceLayerPositions(
 
 /**
  * MAIN LAYOUT FUNCTION - Enforces strict layout rules
+ * Optionally accepts existing node positions to preserve for animation
  */
 export function computeGraphLayout(
   nodes: GraphNode[],
@@ -406,7 +641,8 @@ export function computeGraphLayout(
   canvasCrossAxisSize: number,
   orientation: 'horizontal' | 'vertical' = 'horizontal',
   spacingMultiplier: number = 100,
-  autoBalance: boolean = true
+  autoBalance: boolean = true,
+  existingPositions?: Map<string, { x: number; y: number }>
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
   const goalNode = nodes.find((node) => node.id === 'goal') || nodes.find((node) => node.isGoal)
@@ -420,8 +656,6 @@ export function computeGraphLayout(
     MIN_VERTICAL_SCALE,
     Math.min(MAX_VERTICAL_SCALE, safeCanvasSize / BASE_CANVAS_SIZE)
   )
-  const forwardConflictUnit = BASE_FORWARD_CONFLICT_SPACING * scale
-  const crossAxisMargin = Math.max(MIN_LAYER_SPACING, forwardConflictUnit * 0.5)
   
   const nodeMap = new Map(nodes.map(n => [n.id, n]))
   
@@ -444,9 +678,8 @@ export function computeGraphLayout(
     edgeMap.set(`${sourceId}->${targetId}`, edge)
   })
   
-  // Calculate layers for all nodes (Rule #1)
-  // Forward expansion increments layer, side expansion stays on same layer
-  const layerMap = buildLayerMap(startNode.id, adjacency, nodeMap, edgeMap, goalNode?.id)
+  // Calculate layers for all nodes - each connection increments layer by 1
+  const layerMap = buildLayerMap(startNode.id, adjacency, nodeMap, goalNode?.id)
 
   nodes.forEach((node) => {
     if (!layerMap.has(node.id)) {
@@ -479,101 +712,10 @@ export function computeGraphLayout(
   const centerCrossAxis = safeCanvasSize / 2
   
   const branchAssignments = new Map<string, BranchAssignment>()
-  const layerOccupancy = new Map<string, number[]>()
-  const globalLayerOccupancy = new Map<number, number[]>()
-  const getLayerKey = (layer: number, parentId?: string) => `${layer}:${parentId ?? 'root'}`
 
-  const registerLayerPosition = (layer: number, position: number, parentId?: string) => {
-    const clamped = clampValue(position, crossAxisMargin, safeCanvasSize - crossAxisMargin)
-    const key = getLayerKey(layer, parentId)
-    const entries = layerOccupancy.get(key) ?? []
-    entries.push(clamped)
-    layerOccupancy.set(key, entries)
-
-    const globalEntries = globalLayerOccupancy.get(layer) ?? []
-    globalEntries.push(clamped)
-    globalLayerOccupancy.set(layer, globalEntries)
-    return clamped
-  }
-
-  const selectLayerPosition = (
-    layer: number,
-    preferredPos: number,
-    parentId?: string,
-    parentPos?: number
-  ): number => {
-    const key = getLayerKey(layer, parentId)
-    const takenPerEdge = layerOccupancy.get(key) ?? []
-    const takenGlobal = globalLayerOccupancy.get(layer) ?? []
-
-    // Always bias new nodes toward the goal's Y position (centerCrossAxis)
-    // This creates a "pointing toward goal" effect
-    const layerProgress = Math.min(layer / Math.max(goalLayer, 1), 1) // 0 at start, 1 at goal
-    const goalBias = 0.3 + 0.4 * layerProgress // 30-70% bias toward goal center
-    const goalBiasedPreferred = preferredPos + (centerCrossAxis - preferredPos) * goalBias
-
-    // When we need to offset due to collisions, ALWAYS prefer the direction toward goal (center)
-    // This ensures new nodes are placed on the side of their parent that points toward goal
-    const goalDirection = centerCrossAxis > goalBiasedPreferred ? 1 : -1
-    
-    const offsets: number[] = [0]
-    for (let step = 1; step <= MAX_OFFSET_STEPS; step++) {
-      const delta = step * forwardConflictUnit * 0.35 + MIN_LAYER_SPACING
-      // ALWAYS try goal-side offset first, then opposite side
-      offsets.push(delta * goalDirection, -delta * goalDirection)
-    }
-
-    let bestCandidate: number | undefined
-    let bestScore = -Infinity
-
-    for (const offset of offsets) {
-      const candidate = clampValue(goalBiasedPreferred + offset, crossAxisMargin, safeCanvasSize - crossAxisMargin)
-      const minEdgeDistance = takenPerEdge.reduce(
-        (acc, value) => Math.min(acc, Math.abs(value - candidate)),
-        Number.POSITIVE_INFINITY
-      )
-      const minGlobalDistance = takenGlobal.reduce(
-        (acc, value) => Math.min(acc, Math.abs(value - candidate)),
-        Number.POSITIVE_INFINITY
-      )
-
-      // Skip outright if candidate would collide with existing node
-      if (Number.isFinite(minGlobalDistance) && minGlobalDistance < MIN_LAYER_SPACING * 0.65) {
-        continue
-      }
-
-      const edgeSpacingScore = Number.isFinite(minEdgeDistance)
-        ? Math.min(minEdgeDistance, MIN_LAYER_SPACING) / MIN_LAYER_SPACING
-        : 1
-      const globalSpacingScore = Number.isFinite(minGlobalDistance)
-        ? Math.min(minGlobalDistance, MIN_LAYER_SPACING * 1.2) / (MIN_LAYER_SPACING * 1.2)
-        : 1
-      const closenessScore = parentPos === undefined
-        ? 1
-        : Math.max(0, 1 - Math.abs(candidate - parentPos) / (forwardConflictUnit * 4))
-      
-      // Add goal proximity score - reward positions closer to goal's Y (center)
-      const distanceToGoalCenter = Math.abs(candidate - centerCrossAxis)
-      const maxDistance = safeCanvasSize / 2
-      const goalProximityScore = 1 - (distanceToGoalCenter / maxDistance)
-      
-      // Weight scores: parent closeness, edge spacing, global spacing, goal proximity
-      const score = closenessScore * 0.25 + edgeSpacingScore * 0.35 + globalSpacingScore * 0.25 + goalProximityScore * 0.15
-
-      if (score > bestScore) {
-        bestScore = score
-        bestCandidate = candidate
-      }
-    }
-
-    const fallbackCandidate = bestCandidate ?? clampValue(goalBiasedPreferred, crossAxisMargin, safeCanvasSize - crossAxisMargin)
-    return registerLayerPosition(layer, fallbackCandidate, parentId)
-  }
-
+  // Start node is centered
   branchAssignments.set(startNode.id, {
-    branchId: 'branch-main',
-    crossAxisPos: registerLayerPosition(0, centerCrossAxis),
-    kind: 'origin',
+    crossAxisPos: centerCrossAxis,
     layer: 0,
   })
 
@@ -586,40 +728,17 @@ export function computeGraphLayout(
       return 0
     })
 
+  // First pass: position all nodes directly forward from their parent
   for (const node of sortedNodes) {
     const nodeLayer = layerMap.get(node.id) ?? 0
     const parentId = selectPrimaryParent(node.id, incoming, layerMap, goalNode?.id)
     const parentAssignment = parentId ? branchAssignments.get(parentId) : undefined
-    const baseAssignment = parentAssignment ?? branchAssignments.get(startNode.id)!
-    const edgeKey = parentId ? `${parentId}->${node.id}` : undefined
-    const connectingEdge = edgeKey ? edgeMap.get(edgeKey) : undefined
-    const parentNode = parentId ? nodeMap.get(parentId) : undefined
-    const branchKind = determineBranchKind(connectingEdge, parentNode, node)
 
-    const branchId = baseAssignment.branchId
-    const branchType: BranchKind = branchKind
-
-    const preferredPos = parentAssignment?.crossAxisPos ?? centerCrossAxis
-    const alignmentTarget = parentAssignment?.crossAxisPos
-
-    // Check if node is a dead-end (no forward edge toward goal)
-    let crossAxisPos: number
-    const hasForwardEdge = edges.some(e => resolveNodeId(e.source) === node.id && layerMap.get(resolveNodeId(e.target))! > nodeLayer)
-    if (!hasForwardEdge) {
-      // Place dead-end node directly between parent and goal
-      if (parentAssignment) {
-        crossAxisPos = parentAssignment.crossAxisPos + (centerCrossAxis - parentAssignment.crossAxisPos) * 0.7
-      } else {
-        crossAxisPos = centerCrossAxis
-      }
-    } else {
-      crossAxisPos = selectLayerPosition(nodeLayer, preferredPos, parentId, alignmentTarget)
-    }
+    // Initially position directly forward from parent (same cross-axis position)
+    const crossAxisPos = parentAssignment?.crossAxisPos ?? centerCrossAxis
 
     branchAssignments.set(node.id, {
-      branchId,
       crossAxisPos,
-      kind: branchType,
       layer: nodeLayer,
       parentId,
     })
@@ -628,16 +747,14 @@ export function computeGraphLayout(
   // Goal node is pinned at goal layer, centered in cross axis
   if (goalNode) {
     branchAssignments.set(goalNode.id, {
-      branchId: 'branch-goal',
-      crossAxisPos: registerLayerPosition(goalLayer, centerCrossAxis),
-      kind: 'origin',
+      crossAxisPos: centerCrossAxis,
       layer: goalLayer,
     })
   }
   
-  // Rebalance vertical positions to center deeper branches (if enabled)
+  // Rebalance positions: distribute siblings evenly around parent (if enabled)
   if (autoBalance) {
-    rebalanceLayerPositions(nodes, edges, branchAssignments, centerCrossAxis, layerMap)
+    rebalanceLayerPositions(branchAssignments, safeCanvasSize)
   }
   
   // Build layout nodes
@@ -661,9 +778,7 @@ export function computeGraphLayout(
     const assignment =
       branchAssignments.get(node.id) ??
       ({
-        branchId: 'branch-main',
         crossAxisPos: centerCrossAxis,
-        kind: node.isStart ? 'origin' : 'forward',
         layer: computedLayer,
       } as BranchAssignment)
     
@@ -685,21 +800,32 @@ export function computeGraphLayout(
       targetY = layerPos
     }
     
-    return {
+    const layoutNode: LayoutNodeMeta = {
       ...node,
       layer: computedLayer,
       computedLayer,
       targetX,
       targetY,
       absoluteY: crossAxisPos,
-      branchId: assignment.branchId,
       parentId: assignment.parentId,
-      branchType: assignment.kind,
     }
+
+    return layoutNode
   })
-  
+
+  // Update animation targets - this sets up animations but doesn't return current positions
+  // Graph.tsx will call getCurrentPositions() on each frame to get interpolated values
+  animationManager.updateTargets(
+    layoutNodes.map((node) => ({
+      id: node.id,
+      targetX: node.targetX,
+      targetY: node.targetY,
+      parentId: node.parentId,
+    }))
+  )
+
   const nodeMeta = new Map(layoutNodes.map((node) => [node.id, node]))
-  
+
   return {
     nodes: layoutNodes,
     nodeMeta,
@@ -709,4 +835,11 @@ export function computeGraphLayout(
     goalNodeId: goalNode?.id,
     farthestNodeId,
   }
+}
+
+/**
+ * Reset animation state (useful when graph is completely reset)
+ */
+export function resetLayoutAnimation(): void {
+  animationManager.reset()
 }

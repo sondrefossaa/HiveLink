@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import type { GraphNode, GraphEdge, GameState, ValidationResult, PuzzleInstance } from '@/types'
 import {
   parseCompoundWord,
-  findAllConnections,
+  findSuffixConnections,
   isGoalWord,
   generateNodeId,
   generateEdgeId,
@@ -176,8 +176,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     }
 
     // Initialize with start and goal nodes
-    const startParts = parseCompoundWord(puzzle.startWord)
-    const goalParts = parseCompoundWord(puzzle.goalWord)
+    // Start and goal are ALWAYS simple words (single part = the word itself)
+    const startParts = [puzzle.startWord]
+    const goalParts = [puzzle.goalWord]
 
     const startNode: GraphNode = {
       id: 'start',
@@ -286,46 +287,53 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         return { success: false, error: validation.error }
       }
 
-      // Find ALL nodes this word can connect to automatically
-      const connectionResult = findAllConnections(normalized, validation.parts, nodes)
+      // Find ALL nodes this word can connect to via suffix chaining
+      // Rule: new word's FIRST part must match previous word's LAST part
+      const connectionResult = findSuffixConnections(normalized, validation.parts, nodes)
 
       if (!connectionResult.canConnect || connectionResult.connections.length === 0) {
-        const err = 'Word must share a part with an existing word'
+        const err = 'Word must extend from the last part of an existing word'
         setError(err)
         return { success: false, error: err }
       }
 
       // Separate connections to goal vs non-goal nodes
       const nonGoalConnections = connectionResult.connections.filter(c => !c.node.isGoal)
-      const goalConnections = connectionResult.connections.filter(c => c.node.isGoal)
       
       // Check if this is the goal word itself
       const isTheGoalWord = isGoalWord(normalized, puzzle.goalWord)
       
-      // To win by connecting to goal, the word must ALSO connect to at least one non-goal node
-      // This ensures there's a path from start -> ... -> this word -> goal
-      const connectsToGoal = goalConnections.length > 0 && nonGoalConnections.length > 0
+      // For goal connection: the new word's last part must match the goal word
+      // Check if we can connect to goal (new word's last part matches goal word)
+      const newLastPart = validation.parts.length > 0 
+        ? validation.parts[validation.parts.length - 1].toLowerCase()
+        : normalized.toLowerCase()
+      const goalWordLower = puzzle.goalWord.toLowerCase()
+      const canConnectToGoal = newLastPart === goalWordLower && !isTheGoalWord
       
+      // Find goal node
+      const goalNode = nodes.find(n => n.isGoal)
+      
+      // To win, the word must:
+      // 1. Be the goal word itself, OR
+      // 2. Have its last part match goal word AND connect to at least one non-goal node
+      const connectsToGoal = canConnectToGoal && nonGoalConnections.length > 0
+      const isWinningWord = isTheGoalWord || connectsToGoal
+      
+      // Add goal connection if valid
+      if (canConnectToGoal && goalNode) {
+        connectionResult.connections.push({ 
+          node: goalNode, 
+          sharedPart: goalWordLower 
+        })
+      }
+
       // Must have at least one non-goal connection (unless it's the goal word itself)
       if (!isTheGoalWord && nonGoalConnections.length === 0) {
         const err = 'Words must create a series of connections from start toward the goal'
         setError(err)
         return { success: false, error: err }
       }
-      
-      const isWinningWord = isTheGoalWord || connectsToGoal
-
-      // Determine direction based on which part of the primary parent is shared
-      // Use the highest-layer non-goal connection as primary parent
-      const primaryConnection = nonGoalConnections.length > 0
-        ? nonGoalConnections.reduce((a, b) => a.node.layer > b.node.layer ? a : b)
-        : connectionResult.connections[0]
-      
-      // Check if shared part is the LAST part of the parent (extends forward toward goal)
-      const parentParts = primaryConnection.node.parts
-      const sharedPart = primaryConnection.sharedPart.toLowerCase()
-      const expandsForward = parentParts.length > 0 && 
-        parentParts[parentParts.length - 1].toLowerCase() === sharedPart
 
       // Create new node - layer is one more than the minimum connected layer
       const newLayer = connectionResult.minLayer + 1
@@ -337,7 +345,6 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         isStart: false,
         isGoal: isWinningWord,
         isCompleted: isWinningWord,
-        expandsForward,
       }
 
       // Create edges to ALL connected nodes

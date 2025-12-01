@@ -63,14 +63,18 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                 <ul className="space-y-3 text-gray-300">
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">1</span>
-                    <span>Each word must be a real <strong className="text-white">compound word</strong> (e.g., butterfly, sunflower).</span>
+                    <span>The <span className="text-hive-yellow font-medium">START</span> and <span className="text-green-400 font-medium">GOAL</span> are simple words (not compound).</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                    <span>Your new word must share <strong className="text-white">exactly one part</strong> with the previous word.</span>
+                    <span>Each word you add must be a real <strong className="text-white">compound word</strong> (e.g., butterfly, flywheel).</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
+                    <span>Your new word's <strong className="text-white">FIRST part</strong> must match the <strong className="text-white">LAST part</strong> of the previous word.</span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
                     <span>Click on a node to select it, then enter a word that connects to it.</span>
                   </li>
                 </ul>
@@ -81,16 +85,21 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                 <h3 className="text-lg font-semibold text-hive-yellow mb-2">Example Chain</h3>
                 <div className="bg-hive-dark/50 rounded-xl p-4">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="px-2 py-1 rounded bg-hive-yellow text-hive-dark font-medium">butterfly</span>
+                    <span className="px-2 py-1 rounded bg-hive-yellow text-hive-dark font-medium">butter</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">flytrap</span>
+                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">butterfly</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">trapdoor</span>
+                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">flywheel</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">doorbell</span>
+                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">wheelchair</span>
+                    <span className="text-hive-yellow">→</span>
+                    <span className="px-2 py-1 rounded bg-green-400/20 text-green-400 font-medium border border-green-400">chair</span>
                   </div>
                   <p className="mt-3 text-xs text-gray-500">
-                    butter<span className="text-hive-yellow">fly</span> → <span className="text-hive-yellow">fly</span>trap → trap<span className="text-hive-yellow">door</span> → <span className="text-hive-yellow">door</span>bell
+                    <span className="text-hive-yellow">butter</span> → butter<span className="text-hive-yellow">fly</span> → <span className="text-hive-yellow">fly</span>wheel → wheel<span className="text-hive-yellow">chair</span> → <span className="text-hive-yellow">chair</span>
+                  </p>
+                  <p className="mt-2 text-xs text-gray-400 italic">
+                    Notice: The last part of each word becomes the first part of the next!
                   </p>
                 </div>
               </div>
@@ -128,11 +137,7 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-0.5 bg-hive-yellow" />
-                    <span>Forward branch</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-0.5 border-t-2 border-dashed border-hive-yellow" />
-                    <span>Side branches</span>
+                    <span>Connection edge</span>
                   </div>
                   <div className="flex items-center gap-3 sm:col-span-2">
                     <div className="w-8 h-0.5 bg-green-500" />

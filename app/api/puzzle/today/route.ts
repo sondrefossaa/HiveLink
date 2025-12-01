@@ -80,8 +80,12 @@ async function loadWordParts(words: string[]): Promise<{
     wordParts[entry.word.toLowerCase()] = entry.parts
   }
 
-  const startParts = wordParts[normalizedWords[0]]
-  const goalParts = wordParts[normalizedWords[1]]
+  // Start and goal are simple words (single part = the word itself)
+  // If not found in compound words table, treat as simple word
+  const startWord = normalizedWords[0]
+  const goalWord = normalizedWords[1]
+  const startParts = wordParts[startWord] || [startWord]
+  const goalParts = wordParts[goalWord] || [goalWord]
 
   return { startParts, goalParts, wordParts }
 }
@@ -159,24 +163,11 @@ export async function GET(request: NextRequest) {
     const timestampNow = Date.now()
 
     if (cached && (timestampNow - cached.timestamp) < CACHE_DURATION) {
-      const cachedWords = [cached.data.startWord.toLowerCase(), cached.data.goalWord.toLowerCase()]
-      const knownWords = await prisma.compoundWord.findMany({
-        where: {
-          word: {
-            in: cachedWords,
-          },
-        },
-        select: { word: true },
+      // Cache is valid - start/goal are simple words, no need to validate in compound words table
+      return NextResponse.json({
+        success: true,
+        data: cached.data,
       })
-
-      if (knownWords.length === 2) {
-        return NextResponse.json({
-          success: true,
-          data: cached.data,
-        })
-      }
-
-      puzzleCache.delete(targetDateKey)
     }
 
     // Check cache
@@ -231,7 +222,7 @@ export async function GET(request: NextRequest) {
         })
         
         if (!puzzle) {
-          // Return a fallback puzzle
+          // Return a fallback puzzle with simple words for start/goal
           const puzzleNumber = calculatePuzzleNumber(targetDate)
           return NextResponse.json({
             success: true,
@@ -239,56 +230,23 @@ export async function GET(request: NextRequest) {
               id: 0,
               puzzleNumber,
               date: targetDateKey,
-              startWord: 'butterfly',
-              goalWord: 'moonshine',
-              optimalSteps: 6,
+              startWord: 'butter',
+              goalWord: 'chair',
+              optimalSteps: 4,
               isDaily: true,
               mode: 'daily',
-              startParts: ['butter', 'fly'],
-              goalParts: ['moon', 'shine'],
-              wordParts: {
-                butterfly: ['butter', 'fly'],
-                moonshine: ['moon', 'shine'],
-              },
+              startParts: ['butter'],
+              goalParts: ['chair'],
+              wordParts: {},
             },
           })
         }
       }
     }
 
-    // If not forcing, validate words exist; otherwise we just regenerated
-    if (puzzle && !force) {
-      const wordsToCheck = [puzzle.startWord.toLowerCase(), puzzle.goalWord.toLowerCase()]
-      const knownWords = await prisma.compoundWord.findMany({
-        where: {
-          word: {
-            in: wordsToCheck,
-          },
-        },
-        select: { word: true },
-      })
-
-      if (knownWords.length < 2) {
-        console.warn(`Daily puzzle ${targetDateKey} uses words missing from database, regenerating...`)
-
-        const wordEntries = await loadWordEntries()
-
-        if (wordEntries.length === 0) {
-          throw new Error('Compound word table is empty; cannot regenerate daily puzzle')
-        }
-
-        const regenerated = await generateDailyPuzzle(targetDate, { wordEntries, minSteps: 3 })
-
-        puzzle = await prisma.dailyPuzzle.update({
-          where: { date: targetDate },
-          data: {
-            startWord: regenerated.startWord,
-            goalWord: regenerated.goalWord,
-            optimalSteps: regenerated.optimalSteps,
-          },
-        })
-      }
-    }
+    // Note: Start and goal are now simple words, not compound words
+    // No need to validate they exist in compound words table since they're simple words
+    // The puzzle generator will create valid chains between them
 
     const puzzleNumber = calculatePuzzleNumber(targetDate)
 
@@ -325,7 +283,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching today\'s puzzle:', error)
 
-    // Return a fallback puzzle on error
+    // Return a fallback puzzle on error with simple words for start/goal
     const today = new Date()
     today.setUTCHours(0, 0, 0, 0)
     const todayStr = today.toISOString().split('T')[0]
@@ -337,17 +295,14 @@ export async function GET(request: NextRequest) {
         id: 0,
         puzzleNumber,
         date: todayStr,
-        startWord: 'butterfly',
-        goalWord: 'moonshine',
-        optimalSteps: 6,
+        startWord: 'butter',
+        goalWord: 'chair',
+        optimalSteps: 4,
         isDaily: true,
         mode: 'daily',
-        startParts: ['butter', 'fly'],
-        goalParts: ['moon', 'shine'],
-        wordParts: {
-          butterfly: ['butter', 'fly'],
-          moonshine: ['moon', 'shine'],
-        },
+        startParts: ['butter'],
+        goalParts: ['chair'],
+        wordParts: {},
       },
     })
   }

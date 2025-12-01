@@ -7,7 +7,6 @@ export interface GraphNode {
   isStart: boolean;
   isGoal: boolean;
   isCompleted: boolean;
-  expandsForward?: boolean; // true = extends from END part (toward goal), false = extends from START part
   x?: number;
   y?: number;
   fx?: number | null;
