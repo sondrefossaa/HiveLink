@@ -3,7 +3,6 @@ import type { GraphEdge, GraphNode } from '@/types'
 const BASE_LAYER_SPACING = 120
 const MIN_LAYER_SPACING_BETWEEN = 70
 const MAX_LAYER_SPACING_BETWEEN = 90
-export const FIXED_HORIZONTAL_SPACING = 100 // For backward compatibility with Graph.tsx
 const BASE_FORWARD_CONFLICT_SPACING = 150
 const BASE_CANVAS_SIZE = 640
 const MIN_VERTICAL_SCALE = 1

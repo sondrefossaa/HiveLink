@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 // D3 force imports removed - no forces needed since positions come from layout
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
-import { computeGraphLayout, FIXED_HORIZONTAL_SPACING } from '@/lib/graph-layout'
+import { computeGraphLayout} from '@/lib/graph-layout'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
@@ -54,7 +54,6 @@ const resolveId = (value: string | GraphNode | undefined): string | undefined =>
   return typeof value === 'string' ? value : value.id
 }
 
-// getDynamicCollideRadius removed - no collision forces needed
 
 const getPointerHitRadius = (node: ForceLayoutNode, globalScale: number): number => {
   const base = node.isGoal || node.isStart ? POINTER_RADIUS_ANCHORED : POINTER_RADIUS_DEFAULT
@@ -114,7 +113,6 @@ function Graph({
   const isCompleteRef = useRef(isComplete)
   const startAnchorPositionRef = useRef<{ x: number; y: number } | null>(null)
   const orientationRef = useRef(orientation)
-  const { effectivePreference } = useMotionPreference()
 
   // Keep refs in sync with props for stable callback dependencies
   useEffect(() => {
@@ -137,39 +135,37 @@ function Graph({
     return () => document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
+  // Get graph dimatiuons
   useEffect(() => {
-    let resizeTimer: number | null = null
-    
     const updateDimensions = () => {
       if (!containerRef.current) return
+      
       const rect = containerRef.current.getBoundingClientRect()
-      setDimensions({
-        width: rect.width || 800,
-        height: rect.height || 520,
-      })
-      setOrientation(rect.width < 768 ? 'vertical' : 'horizontal')
-    }
-
-    const throttledUpdateDimensions = () => {
-      // Throttle resize events to avoid excessive layout recalculations
-      if (resizeTimer) {
-        cancelAnimationFrame(resizeTimer)
-      }
-      resizeTimer = requestAnimationFrame(() => {
-        updateDimensions()
-        resizeTimer = null
+      const newWidth = Math.max(rect.width, 100)  // Minimum width
+      const newHeight = Math.max(rect.height, 100) // Minimum height
+      
+      // Only update if dimensions actually changed (performance optimization)
+      setDimensions(prev => {
+        if (Math.abs(prev.width - newWidth) > 1 || Math.abs(prev.height - newHeight) > 1) {
+          return { width: newWidth, height: newHeight }
+        }
+        return prev
       })
     }
 
-    updateDimensions() // Initial update
-    window.addEventListener('resize', throttledUpdateDimensions)
+    // Initial update
+    updateDimensions()
+
+    // Use ResizeObserver for better performance
+    const resizeObserver = new ResizeObserver(updateDimensions)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
     return () => {
-      window.removeEventListener('resize', throttledUpdateDimensions)
-      if (resizeTimer) {
-        cancelAnimationFrame(resizeTimer)
-      }
+      resizeObserver.disconnect()
     }
-  }, [])
+  }, []) // Empty dependency array - only run once
 
   // Compute layout with strict rules
   const layout = useMemo(
@@ -194,24 +190,11 @@ function Graph({
     return 3                           // Large graphs: 3x zoom (default)
   }, [nodes.length])
 
-  const startAnchor = useMemo(() => {
-    if (!layout.startNodeId) return null
-    return layout.nodeMeta.get(layout.startNodeId) ?? null
-  }, [layout])
-
-  const startAnchorPosition = useMemo(() => {
-    if (!startAnchor) {
-      startAnchorPositionRef.current = null
-      return null
-    }
-    const pos = { x: startAnchor.targetX, y: startAnchor.targetY }
-    startAnchorPositionRef.current = pos
-    return pos
-  }, [startAnchor])
 
   // Calculate winning edge IDs for highlighting
   // Track edges on the winning path both before and after completion
   const winningEdgeIds = useMemo(() => {
+    // If path is only start and end
     if (winningPath.length < 2) {
       return new Set<string>()
     }
@@ -420,199 +403,14 @@ function Graph({
     }
   }, [layout, edges, winningEdgeIds])
 
-  // Disable all forces - positions are determined by layout, no simulation needed
-  const configureForces = useCallback(() => {
-    const fg = graphRef.current as (ForceGraphMethods & {
-      d3AlphaTarget?: (alpha: number) => ForceGraphMethods
-      graphData?: () => { nodes: ForceLayoutNode[] }
-      d3Force?: (forceName: string, force?: unknown) => any
-    }) | null
 
-    if (!fg) return
-
-    // Remove all forces completely
-    fg.d3Force?.('link', null)
-    fg.d3Force?.('charge', null)
-    fg.d3Force?.('x', null)
-    fg.d3Force?.('y', null)
-    fg.d3Force?.('collide', null)
-    fg.d3Force?.('center', null)
-
-    // Set alpha to 0 immediately to stop simulation completely
-    if ('d3AlphaTarget' in fg) {
-      ;(fg as any).d3AlphaTarget(0)
-    }
-
-    // Pin all nodes to exact target positions immediately
-    const data = fg.graphData?.()
-    if (data?.nodes) {
-      data.nodes.forEach((node) => {
-        // Set exact position (not just fixed position)
-        node.x = node.targetX
-        node.y = node.targetY
-        node.fx = node.targetX
-        node.fy = node.targetY
-        // Clear velocity to prevent any movement
-        node.vx = 0
-        node.vy = 0
-      })
-    }
-  }, [])
-
-  // Configure forces once when graph data changes - nodes are already positioned in graphData
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      configureForces()
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [configureForces, graphData.nodes.length, graphData.links.length])
-
-  // Pin nodes once when graph data changes - nodes are already pinned in graphData useMemo
-  // No need for continuous interval since nodes are pinned at initialization and simulation settles quickly
-
-  // Cleanup timers
-  useEffect(() => {
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
-      }
-      if (snapBackTimerRef.current) {
-        clearTimeout(snapBackTimerRef.current)
-        snapBackTimerRef.current = null
-      }
-    }
-  }, [])
-
-  // Winning pulse animation removed - was causing constant redraws on mobile
 
   // Track if initial centering has happened
   const hasInitializedRef = useRef(false)
   const hasInitialZoomRef = useRef(false)
 
-  // Handle initial camera positioning - position to show start node on left
-  useEffect(() => {
-    if (hasInitializedRef.current) return
-    if (!graphRef.current) return
-    if (nodes.length === 0) return
-    
-    // Mark as initialized
-    hasInitializedRef.current = true
-    hasInitialZoomRef.current = true
-    
-    // Small delay to ensure graph is rendered
-    setTimeout(() => {
-      if (!graphRef.current) return
-      
-      // Get the graph's bounding box to understand the layout
-      const startNode = layout.nodeMeta.get(layout.startNodeId ?? '')
-      const goalNode = layout.nodeMeta.get(layout.goalNodeId ?? '')
-      
-      if (!startNode) return
-      
-      // Calculate the center point of the graph
-      const graphWidth = (goalNode?.targetX ?? layout.maxLayer * 150) - (startNode.targetX)
-      
-      // We want to position the camera so the start is on the left
-      // Center the camera at a point that puts the start node at ~20% from left edge
-      const targetCenterX = startNode.targetX + graphWidth * 0.3
-      
-      graphRef.current.centerAt(targetCenterX, 0, 1000)
-      
-      // Zoom out to show more of the graph (lower zoom = more visible area)
-      graphRef.current.zoom(0.6, 1000)
-    }, 100)
-  }, [nodes.length, dimensions.width, layout])
 
-  // Handle initial graph render
-  const handleRenderFrame = useCallback(() => {
-    // Just track pointer scale, don't manipulate camera here
-    if (!graphRef.current) return
-    const ctx = (graphRef.current as any).canvas?.().getContext('2d')
-    if (ctx) {
-      const transform = ctx.getTransform()
-      pointerScaleRef.current = transform.a
-    }
-  }, [])
 
-  // Prevent browser zoom when graph is at zoom limits
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const MIN_ZOOM = 0.25
-    const MAX_ZOOM = maxZoom
-    const ZOOM_TOLERANCE = 0.01 // Small tolerance to account for floating point precision
-
-    const handleWheel = (e: WheelEvent) => {
-      const currentZoom = pointerScaleRef.current
-      const isZoomingIn = e.deltaY < 0
-      const isZoomingOut = e.deltaY > 0
-
-      // Prevent browser zoom if graph is at limits
-      if (
-        (isZoomingIn && currentZoom >= MAX_ZOOM - ZOOM_TOLERANCE) ||
-        (isZoomingOut && currentZoom <= MIN_ZOOM + ZOOM_TOLERANCE)
-      ) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
-    }
-
-    const handleTouchStart = (e: TouchEvent) => {
-      // Only prevent if we have two touches (pinch gesture)
-      if (e.touches.length === 2) {
-        const currentZoom = pointerScaleRef.current
-        // Store initial touches to determine zoom direction
-        const touch1 = e.touches[0]
-        const touch2 = e.touches[1]
-        const initialDistance = Math.hypot(
-          touch2.clientX - touch1.clientX,
-          touch2.clientY - touch1.clientY
-        )
-        
-        // Store for use in touchmove
-        ;(container as any).__initialPinchDistance = initialDistance
-        ;(container as any).__initialZoom = currentZoom
-      }
-    }
-
-    const handleTouchMove = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
-        const currentZoom = (container as any).__initialZoom ?? pointerScaleRef.current
-        const touch1 = e.touches[0]
-        const touch2 = e.touches[1]
-        const currentDistance = Math.hypot(
-          touch2.clientX - touch1.clientX,
-          touch2.clientY - touch1.clientY
-        )
-        const initialDistance = (container as any).__initialPinchDistance ?? currentDistance
-        
-        // Determine if zooming in or out
-        const isZoomingIn = currentDistance > initialDistance
-        const isZoomingOut = currentDistance < initialDistance
-
-        // Prevent browser zoom if graph is at limits
-        if (
-          (isZoomingIn && currentZoom >= MAX_ZOOM - ZOOM_TOLERANCE) ||
-          (isZoomingOut && currentZoom <= MIN_ZOOM + ZOOM_TOLERANCE)
-        ) {
-          e.preventDefault()
-          e.stopPropagation()
-        }
-      }
-    }
-
-    container.addEventListener('wheel', handleWheel, { passive: false })
-    container.addEventListener('touchstart', handleTouchStart, { passive: true })
-    container.addEventListener('touchmove', handleTouchMove, { passive: false })
-
-    return () => {
-      container.removeEventListener('wheel', handleWheel)
-      container.removeEventListener('touchstart', handleTouchStart)
-      container.removeEventListener('touchmove', handleTouchMove)
-    }
-  }, [maxZoom])
 
   // Center on selected node only (not on frontier changes)
   useEffect(() => {
@@ -700,22 +498,17 @@ function Graph({
     refreshGraph()
   }, [refreshGraph])
 
-  // Custom node rendering with hexagon shape
   const drawNode = useCallback(
     (nodeObj: object, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const node = nodeObj as ForceLayoutNode
-      pointerScaleRef.current = globalScale
       const x = node.x ?? node.targetX
       const y = node.y ?? node.targetY
-      const isSelected = node.id === selectedNodeIdRef.current
+      const isSelected = node.id === selectedNodeId // Direct prop, no ref
       const isGoalCompleted = node.isGoal && node.isCompleted
-      const connectsToGoal = nodesConnectedToGoalRef.current.has(node.id) && node.id !== 'goal'
+      const connectsToGoal = nodesConnectedToGoal.has(node.id) && node.id !== 'goal' // Direct value, no ref
       const size = getRenderedNodeSize(node, globalScale)
       
-      // Simplified: Skip viewport culling - it was adding overhead
-      // react-force-graph handles culling internally
-
-      // Simplified glow - removed expensive gradients for better mobile performance
+      // Simplified glow
       ctx.save()
       if (connectsToGoal) {
         ctx.fillStyle = 'rgba(34, 197, 94, 0.2)'
@@ -751,18 +544,15 @@ function Graph({
         : isGoalCompleted
         ? '#22c55e'
         : connectsToGoal
-        ? '#0A1F0A' // Very dark green background for nodes connected to goal
+        ? '#0A1F0A'
         : '#0F0D09'
-      // Removed expensive shadow effects for mobile performance
       ctx.fill()
 
-      // Draw border - thicker and double for nodes connected to goal
+      // Draw border
       if (connectsToGoal) {
-        // Outer border - bright green
         ctx.lineWidth = 4 / globalScale
         ctx.strokeStyle = '#22c55e'
         ctx.stroke()
-        // Inner border - lighter green
         ctx.lineWidth = 2 / globalScale
         ctx.strokeStyle = '#4ade80'
         ctx.stroke()
@@ -779,7 +569,7 @@ function Graph({
       }
       ctx.restore()
 
-      // Simplified text rendering for better performance
+      // Text rendering
       const label = node.word.length > 14 ? `${node.word.slice(0, 12)}…` : node.word
       const fontSize = size * 0.4
 
@@ -787,7 +577,6 @@ function Graph({
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillStyle = '#FFFFFF'
-      // Simplified: Single text fill without expensive stroke for performance
       ctx.fillText(label, x, y)
 
       // Draw parts when selected
@@ -806,7 +595,7 @@ function Graph({
         ctx.restore()
       }
     },
-    [] // Dependencies accessed via refs for stability
+    [selectedNodeId, nodesConnectedToGoal] // Add actual dependencies
   )
 
   // Custom link rendering with curved bezier edges
@@ -873,30 +662,6 @@ function Graph({
       ctx.save()
       ctx.beginPath()
 
-      const computeCurveStrength = (baseStrength: number) => {
-        const anchorPos = startAnchorPositionRef.current
-        if (!anchorPos) return baseStrength
-        const anchorValue = currentOrientation === 'horizontal' ? anchorPos.x : anchorPos.y
-        const sourcePos = currentOrientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorValue) : (source.targetY ?? source.y ?? anchorValue)
-        const distanceFromStart = Math.abs(sourcePos - anchorValue)
-        const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
-        const attenuation = Math.max(0.3, 1 - normalized * 0.7)
-        return baseStrength * attenuation
-      }
-
-      const getCurveMode = () => {
-        const anchorPos = startAnchorPositionRef.current
-        if (!anchorPos) return { direction: 1, isFlat: false }
-        const anchorCross = currentOrientation === 'horizontal' ? anchorPos.y : anchorPos.x
-        const sourceCross = currentOrientation === 'horizontal' ? (source.targetY ?? source.y ?? anchorCross) : (source.targetX ?? source.x ?? anchorCross)
-        const delta = sourceCross - anchorCross
-        if (Math.abs(delta) <= START_HEIGHT_TOLERANCE) {
-          return { direction: 0, isFlat: true }
-        }
-        return { direction: delta < 0 ? -1 : 1, isFlat: false }
-      }
-      const { direction: curveDirection, isFlat: isFlatToStart } = getCurveMode()
-
       if (isStapleEdge) {
         if (currentOrientation === 'horizontal') {
           const verticalDir = dy >= 0 ? 1 : -1
@@ -961,35 +726,41 @@ function Graph({
       ctx.setLineDash([])
       ctx.restore()
 
-      // Draw shared part label on edge
-      if (link.sharedPart && globalScale > 0.5) {
-        ctx.save()
-        // Scale font similar to node size scaling for consistency
-        const inverseScale = 1 / Math.max(globalScale, 0.001)
-        const zoomComp = getZoomCompensation({ isStart: false, isGoal: false } as ForceLayoutNode, globalScale)
-        const fontSize = Math.max(10 * inverseScale * zoomComp * 0.4, 6)
-        ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        
-        // Calculate the actual midpoint on the quadratic Bezier curve at t=0.5
-        // Formula: B(0.5) = 0.25*start + 0.5*control + 0.25*end
-        const labelX = 0.25 * startX + 0.5 * controlX + 0.25 * endX
-        const labelY = 0.25 * startY + 0.5 * controlY + 0.25 * endY
-        const labelWidth = ctx.measureText(link.sharedPart).width
+    // Draw shared part label on edge
+    if (link.sharedPart && globalScale > 0.5) {
+      ctx.save()
+      const inverseScale = 1 / Math.max(globalScale, 0.001)
+      const zoomComp = getZoomCompensation({ isStart: false, isGoal: false } as ForceLayoutNode, globalScale)
+      
+      // Smaller font size for full zoom
+      const fontSize = Math.max(8 * inverseScale * zoomComp * 0.35, 4)  // Reduced from 10/0.4 to 8/0.35
+      
+      ctx.font = `600 ${fontSize}px Inter, system-ui, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      
+      // Calculate the actual midpoint on the quadratic Bezier curve at t=0.5
+      // Formula: B(0.5) = 0.25*start + 0.5*control + 0.25*end
+      const labelX = 0.25 * startX + 0.5 * controlX + 0.25 * endX
+      const labelY = 0.25 * startY + 0.5 * controlY + 0.25 * endY
+      const labelWidth = ctx.measureText(link.sharedPart).width
 
-        ctx.fillStyle = 'rgba(7, 6, 4, 0.85)'
-        ctx.fillRect(
-          labelX - labelWidth / 2 - 6,
-          labelY - fontSize / 2 - 3,
-          labelWidth + 12,
-          fontSize + 6
-        )
+      // Tighter padding that scales with the smaller font size
+      const horizontalPadding = fontSize * 0.4  // Reduced from ~0.5 equivalent
+      const verticalPadding = fontSize * 0.2    // Reduced from ~0.25 equivalent
+      
+      ctx.fillStyle = 'rgba(7, 6, 4, 0.85)'
+      ctx.fillRect(
+        labelX - labelWidth / 2 - horizontalPadding,
+        labelY - fontSize / 2 - verticalPadding,
+        labelWidth + (horizontalPadding * 2),
+        fontSize + (verticalPadding * 2)
+      )
 
-        ctx.fillStyle = (isSideLineageEdge || isStapleEdge) ? '#F6E0A0' : '#F4B400'
-        ctx.fillText(link.sharedPart, labelX, labelY)
-        ctx.restore()
-      }
+      ctx.fillStyle = (isSideLineageEdge || isStapleEdge) ? '#F6E0A0' : '#F4B400'
+      ctx.fillText(link.sharedPart, labelX, labelY)
+      ctx.restore()
+    }
     },
     [] // Dependencies accessed via refs for stability
   )
@@ -1013,7 +784,6 @@ function Graph({
           onNodeClick={handleNodeClick}
           onNodeDrag={handleNodeDrag}
           onNodeDragEnd={handleNodeDragEnd}
-          onRenderFramePost={handleRenderFrame}
           nodePointerAreaPaint={(nodeObj, color, ctx) => {
             const node = nodeObj as ForceLayoutNode
             // Prevent dragging start/goal nodes by setting pointer area to 0

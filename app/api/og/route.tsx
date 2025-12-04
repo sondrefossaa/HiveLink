@@ -242,32 +242,6 @@ export async function GET(request: NextRequest) {
                   Layers
                 </span>
               </div>
-
-              {/* Time stat */}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  padding: '14px 24px',
-                  background: 'rgba(13, 13, 13, 0.5)',
-                  borderRadius: '14px',
-                  flex: 1,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: '30px',
-                    fontWeight: 'bold',
-                    color: '#F4B400',
-                  }}
-                >
-                  {time}
-                </span>
-                <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Time
-                </span>
-              </div>
             </div>
           </div>
         </div>
