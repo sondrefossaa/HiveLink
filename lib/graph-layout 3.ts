@@ -687,7 +687,7 @@ export function computeGraphLayout(
     // Now process this node
     const nodePos = positions.get(nodeId)!
     const childrenList = children.map(id => positions.get(id)!)
-    
+
     if (childrenList.length > 0) {
       // Adjust spacing based on branch type
       // Side branches get more spacing to separate them visually

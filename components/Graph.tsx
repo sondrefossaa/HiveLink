@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
-import { computeGraphLayout, FIXED_HORIZONTAL_SPACING, getAnimationManager } from '@/lib/graph-layout 2'
+import { computeGraphLayout, FIXED_HORIZONTAL_SPACING, getAnimationManager } from '@/lib/graph-layout 3'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
