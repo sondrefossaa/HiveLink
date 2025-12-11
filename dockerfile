@@ -10,8 +10,11 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# 2. Copy prisma folder (MUST BE BEFORE npm install!)
+COPY prisma ./prisma/
+
 # Install exact dependencies (matches your package-lock.json)
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the application
 COPY . .
