@@ -1,0 +1,2 @@
+docker-compose up --build // Run local with live changes
+docker run -d -p 3000:3000 --name prod hivelink // prod container
