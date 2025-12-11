@@ -43,3 +43,6 @@ scripts/*.json
 scripts/*.csv
 scripts/*.tsv
 
+# docker
+.docker/
+docker-data/

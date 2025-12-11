@@ -11,7 +11,14 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "import:words": "tsx scripts/import-compound-words.ts"
+    "import:words": "tsx scripts/import-compound-words.ts",
+    "docker:dev": "docker-compose up",
+    "docker:build": "docker-compose build",
+    "docker:prod": "docker-compose -f docker-compose.prod.yml up -d",
+    "docker:stop": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "docker:clean": "docker-compose down -v --remove-orphans",
+    "docker:rebuild": "docker-compose up --build"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
