@@ -213,5 +213,5 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-Made with 🍯 by [Your Name]
+Made with 🍯 by [Sondre Fosså]
 

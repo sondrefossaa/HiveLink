@@ -1,0 +1,8 @@
+add favicon
+Make start and end words not compound words and fetch from databse with new rule
+- Easy words are words that share a part with many other words in database
+- Find out what constitutes as "many"
+- Then define medium easy and hard thresholds
+  Hard diffuctulty will be hard to hard
+  medium will be medium to medium
+  and easy will be easy to easy
