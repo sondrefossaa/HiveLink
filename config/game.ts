@@ -1,1 +1,1 @@
-export const reqireAds = false
+export const requireAds = false
