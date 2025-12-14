@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAdRewards } from '@/hooks/useAdRewards'
 import RewardedVideoAd from './RewardedVideoAd'
-import requireAds from '@config/game'
+import requireAds from '@/config/game'
 
 interface HintButtonProps {
   onHintReceived: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
