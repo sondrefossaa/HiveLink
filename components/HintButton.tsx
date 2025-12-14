@@ -28,7 +28,7 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
       await requestHint()
       return
     }
-   if (!requireAd){
+   if (!requireAds){
       await unlockReward('hint')
     } 
     else {
