@@ -25,11 +25,13 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
   const handleGetHint = async () => {
     if (hasHint) {
       // Use existing hint
+      await unlockReward('hint')
       await requestHint()
       return
     }
    if (!requireAds){
       await unlockReward('hint')
+      await requestHint()
     } 
     else {
       // Show ad modal to unlock hint

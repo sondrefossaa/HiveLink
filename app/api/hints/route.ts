@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { findAllConnections, parseCompoundWord } from '@/lib/compound-utils'
 import type { GraphNode } from '@/types'
-
+import { getHintSourceNode } from '@/lib/hints'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Find the source node for the hint
-    const selectedNode = selectedNodeId
-      ? (nodes as GraphNode[]).find(n => n.id === selectedNodeId)
-      : null
-    
+    //const selectedNode = selectedNodeId
+     // ? (nodes as GraphNode[]).find(n => n.id === selectedNodeId)
+      //: null
+    const selectedNode = getHintSourceNode(nodes as GraphNode[], selectedNodeId)
     const sourceNode = selectedNode || 
       (nodes as GraphNode[])
         .filter(n => !n.isGoal && !n.isStart)
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
               
               // Calculate score (higher is better)
               let score = 0
-              if (extendsForward) score += 1000 // Highest priority
+              //if (extendsForward) score += 1000 // Highest priority
               if (hasGoalPart) score += 100
               score += sourceNode.layer * 10 // Prefer words from higher layers
               
