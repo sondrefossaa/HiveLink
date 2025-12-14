@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAdRewards } from '@/hooks/useAdRewards'
 import RewardedVideoAd from './RewardedVideoAd'
+import requireAds from '@config/game'
 
 interface HintButtonProps {
   onHintReceived: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
@@ -25,7 +26,12 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
     if (hasHint) {
       // Use existing hint
       await requestHint()
-    } else {
+      return
+    }
+   if (!requireAd){
+      await unlockReward('hint')
+    } 
+    else {
       // Show ad modal to unlock hint
       setShowAdModal(true)
     }
@@ -40,7 +46,7 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
 
       // Get game state from sessionStorage or pass as props
       // For now, we'll need to get this from the parent component
-      // This is a placeholder - the actual implementation should pass nodes/goalWord/selectedNodeId
+      // This isd10a977065d84fe8dfc5960a864f735131c537cf a placeholder - the actual implementation should pass nodes/goalWord/selectedNodeId
       const response = await fetch('/api/hints', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
