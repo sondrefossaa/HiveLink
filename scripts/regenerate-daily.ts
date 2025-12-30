@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client'
-import { generateDailyPuzzle } from '../lib/puzzle-generator'
+import { generateDailyPuzzle } from '@lib/puzzle-generator'
 
 const prisma = new PrismaClient()
 

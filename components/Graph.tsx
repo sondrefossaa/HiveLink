@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
-import { computeGraphLayout, FIXED_HORIZONTAL_SPACING, getAnimationManager } from '@/lib/graph-layout'
+import { computeGraphLayout, getAnimationManager } from '@/lib/graph-layout egen'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
@@ -964,17 +964,6 @@ function Graph({
 
       ctx.save()
       ctx.beginPath()
-
-      const computeCurveStrength = (baseStrength: number) => {
-        const anchorPos = startAnchorPositionRef.current
-        if (!anchorPos) return baseStrength
-        const anchorValue = currentOrientation === 'horizontal' ? anchorPos.x : anchorPos.y
-        const sourcePos = currentOrientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorValue) : (source.targetY ?? source.y ?? anchorValue)
-        const distanceFromStart = Math.abs(sourcePos - anchorValue)
-        const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
-        const attenuation = Math.max(0.3, 1 - normalized * 0.7)
-        return baseStrength * attenuation
-      }
 
       const getCurveMode = () => {
         const anchorPos = startAnchorPositionRef.current

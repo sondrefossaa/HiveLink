@@ -7,6 +7,7 @@ export interface GraphNode {
   isStart: boolean;
   isGoal: boolean;
   isCompleted: boolean;
+  parentId?: string;
   x?: number;
   y?: number;
   fx?: number | null;

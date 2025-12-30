@@ -712,8 +712,8 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
       continue
     }
 
-    // Enforce minimum steps for daily (5, same as medium practice)
-    const minSteps = Math.max(5, options.minSteps ?? 5)
+    // Enforce minimum steps for daily; allow override from options
+    const minSteps = options.minSteps ?? 5
     const candidateOptimalSteps = Math.max(1, candidate.length - 1)
     if (candidateOptimalSteps < minSteps) {
       continue

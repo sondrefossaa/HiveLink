@@ -11,7 +11,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "import:words": "tsx scripts/import-compound-words.ts"
+    "import:words": "tsx scripts/import-compound-words.ts",
+    "regen:daily": "tsx scripts/regenerate-daily.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
