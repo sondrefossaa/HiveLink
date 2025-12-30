@@ -126,7 +126,7 @@ export default function InputBar({
       e.stopPropagation()
       return
     }
-    
+
     // Allow only letters
     if (
       e.key.length === 1 &&
@@ -205,12 +205,12 @@ export default function InputBar({
               {/* Hint button - only show when not disabled and hint handler is available */}
               {!isDisabled && onHintReceived && (
                 <HintButton
-          onHintReceived={onHintReceived}
-          className="hidden sm:flex"
-          nodes={nodes}
-          goalWord={goalWord}
-          selectedNodeId={selectedNode?.id || null}
-        />
+                  onHintReceived={onHintReceived}
+                  className="hidden sm:flex"
+                  nodes={nodes}
+                  goalWord={goalWord}
+                  selectedNodeId={selectedNode?.id || null}
+                />
               )}
               <input
                 ref={inputRef}
@@ -239,11 +239,10 @@ export default function InputBar({
                 whileTap={{ scale: 0.98 }}
                 className={`px-3 sm:px-6 py-2.5 rounded-xl font-medium transition-all duration-200
                          flex items-center gap-2
-                         ${
-                           isDisabled || !input.trim()
-                             ? 'bg-hive-graphite text-gray-500 cursor-not-allowed'
-                             : 'bg-hive-yellow hover:bg-hive-gold text-hive-dark shadow-hive-glow'
-                         }`}
+                         ${isDisabled || !input.trim()
+                    ? 'bg-hive-graphite text-gray-500 cursor-not-allowed'
+                    : 'bg-hive-yellow hover:bg-hive-gold text-hive-dark shadow-hive-glow'
+                  }`}
                 aria-label="Submit word"
               >
                 {isLoading ? (
@@ -305,10 +304,10 @@ export default function InputBar({
                 aria-label="Rebalance graph layout"
                 title="Rebalance graph layout"
               >
-                <svg 
-                  className="w-5 h-5 text-hive-yellow/70 group-hover:text-hive-yellow transition-colors" 
-                  fill="none" 
-                  stroke="currentColor" 
+                <svg
+                  className="w-5 h-5 text-hive-yellow/70 group-hover:text-hive-yellow transition-colors"
+                  fill="none"
+                  stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
                   <path

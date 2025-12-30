@@ -4,7 +4,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import dynamic from 'next/dynamic'
 import type { ForceGraphMethods } from 'react-force-graph-2d'
 import type { GraphEdge, GraphNode, GraphProps } from '@/types'
-import { computeGraphLayout, FIXED_HORIZONTAL_SPACING, getAnimationManager } from '@/lib/graph-layout 3'
+import { computeGraphLayout, getAnimationManager } from '@/lib/graph-layout egen'
 
 const ForceGraph2D = dynamic(() => import('react-force-graph-2d'), {
   ssr: false,
@@ -94,6 +94,7 @@ function Graph({
   winningPath,
   graphSpacing,
   layoutVersion = 0,
+  currentPuzzle
 }: GraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const graphRef = useRef<any>(null)
@@ -102,7 +103,7 @@ function Graph({
   const snapBackTimerRef = useRef<number | null>(null)
   const [dimensions, setDimensions] = useState({ width: 800, height: 520 })
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
-  
+
   const pointerScaleRef = useRef(1)
   const pageVisibilityRef = useRef(true)
   const selectedNodeIdRef = useRef(selectedNodeId)
@@ -137,7 +138,7 @@ function Graph({
 
   useEffect(() => {
     let resizeTimer: number | null = null
-    
+
     const updateDimensions = () => {
       if (!containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
@@ -173,16 +174,16 @@ function Graph({
   // Compute layout with strict rules
   const layout = useMemo(() => {
     return computeGraphLayout(
-      nodes, 
-      edges, 
+      nodes,
+      edges,
       orientation === 'horizontal' ? Math.max(dimensions.height, 480) : Math.max(dimensions.width, 350),
       orientation,
-      graphSpacing
+      graphSpacing,
     )
-  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing, layoutVersion])
+  }, [nodes, edges, dimensions.height, dimensions.width, orientation, graphSpacing])
 
   // Calculate dynamic max zoom based on graph size
-  // Smaller graphs can zoom in more for better detail viewing
+  // TODO: wrong should be graph width not nodes length maybe ??
   const maxZoom = useMemo(() => {
     const nodeCount = nodes.length
     if (nodeCount <= 5) return 8      // Very small graphs: 8x zoom
@@ -197,19 +198,11 @@ function Graph({
     return layout.nodeMeta.get(layout.startNodeId) ?? null
   }, [layout])
 
-  const startAnchorPosition = useMemo(() => {
-    if (!startAnchor) {
-      startAnchorPositionRef.current = null
-      return null
-    }
-    const pos = { x: startAnchor.targetX, y: startAnchor.targetY }
-    startAnchorPositionRef.current = pos
-    return pos
-  }, [startAnchor])
-
   // Calculate winning edge IDs for highlighting
   // Track edges on the winning path both before and after completion
+  
   const winningEdgeIds = useMemo(() => {
+    console.log(edges, nodes)
     if (winningPath.length < 2) {
       return new Set<string>()
     }
@@ -221,14 +214,14 @@ function Graph({
       const fromId = wordToNode.get(winningPath[i].toLowerCase())
       const toId = wordToNode.get(winningPath[i + 1].toLowerCase())
       if (!fromId || !toId) continue
-      
+
       // Check both directions since edges can go either way
       const connectingEdge = edges.find(
         (edge) => {
           const sourceId = resolveId(edge.source)
           const targetId = resolveId(edge.target)
-          return (sourceId === fromId && targetId === toId) || 
-                 (sourceId === toId && targetId === fromId)
+          return (sourceId === fromId && targetId === toId) ||
+            (sourceId === toId && targetId === fromId)
         }
       )
       if (connectingEdge) {
@@ -242,10 +235,10 @@ function Graph({
   // Identify nodes that connect to the goal (but aren't the goal itself)
   const nodesConnectedToGoal = useMemo(() => {
     const connectedNodeIds = new Set<string>()
-    
+
     // Find the original goal node (id='goal')
     const goalNodeId = nodes.find(n => n.id === 'goal')?.id
-    
+
     edges.forEach((edge) => {
       const sourceId = resolveId(edge.source)
       const targetId = resolveId(edge.target)
@@ -258,7 +251,7 @@ function Graph({
         connectedNodeIds.add(targetId)
       }
     })
-    
+
     // Also include nodes that are marked as goal but aren't the original goal node
     // These are winning word nodes that connect to the goal
     nodes.forEach((node) => {
@@ -266,10 +259,10 @@ function Graph({
         connectedNodeIds.add(node.id)
       }
     })
-    
+
     // Update ref for stable callback dependencies
     nodesConnectedToGoalRef.current = connectedNodeIds
-    
+
     return connectedNodeIds
   }, [edges, nodes])
 
@@ -377,24 +370,24 @@ function Graph({
     const seenEdges = new Set<string>()
     const edgeSet = new Set<string>()
     const nodeById = new Map(graphNodes.map((n) => [n.id, n]))
-    
+
     // Pre-build edge adjacency maps for faster lookups
     const sourceToTargets = new Map<string, Set<string>>()
     const targetToSources = new Map<string, Set<string>>()
-    
+
     // First pass: collect all edges and build adjacency maps
     graphLinks.forEach((link) => {
       const sourceId = typeof link.source === 'string' ? link.source : link.source
       const targetId = typeof link.target === 'string' ? link.target : link.target
       const key = `${sourceId}->${targetId}`
       edgeSet.add(key)
-      
+
       if (!sourceToTargets.has(sourceId)) sourceToTargets.set(sourceId, new Set())
       if (!targetToSources.has(targetId)) targetToSources.set(targetId, new Set())
       sourceToTargets.get(sourceId)!.add(targetId)
       targetToSources.get(targetId)!.add(sourceId)
     })
-    
+
     // Pre-build nodes by layer position (rounded to nearest 50px) for same-layer checks
     const nodesByLayerPos = new Map<number, ForceLayoutNode[]>()
     graphNodes.forEach((node) => {
@@ -404,71 +397,71 @@ function Graph({
       }
       nodesByLayerPos.get(layerPos)!.push(node)
     })
-    
+
     // Helper to check if path exists through intermediate node
     const hasPathThrough = (sourceId: string, targetId: string, intermediateId: string): boolean => {
-      const sourceToIntermediate = sourceToTargets.get(sourceId)?.has(intermediateId) || 
-                                    targetToSources.get(intermediateId)?.has(sourceId) ||
-                                    edgeSet.has(`${sourceId}->${intermediateId}`) ||
-                                    edgeSet.has(`${intermediateId}->${sourceId}`)
+      const sourceToIntermediate = sourceToTargets.get(sourceId)?.has(intermediateId) ||
+        targetToSources.get(intermediateId)?.has(sourceId) ||
+        edgeSet.has(`${sourceId}->${intermediateId}`) ||
+        edgeSet.has(`${intermediateId}->${sourceId}`)
       const intermediateToTarget = sourceToTargets.get(intermediateId)?.has(targetId) ||
-                                    targetToSources.get(targetId)?.has(intermediateId) ||
-                                    edgeSet.has(`${intermediateId}->${targetId}`) ||
-                                    edgeSet.has(`${targetId}->${intermediateId}`)
+        targetToSources.get(targetId)?.has(intermediateId) ||
+        edgeSet.has(`${intermediateId}->${targetId}`) ||
+        edgeSet.has(`${targetId}->${intermediateId}`)
       return Boolean(sourceToIntermediate && intermediateToTarget)
     }
-    
+
     const uniqueLinks = graphLinks.filter((link) => {
       const sourceId = typeof link.source === 'string' ? link.source : link.source
       const targetId = typeof link.target === 'string' ? link.target : link.target
       const key = `${sourceId}->${targetId}`
       const reverseKey = `${targetId}->${sourceId}`
-      
+
       // Skip exact duplicates
       if (seenEdges.has(key) || seenEdges.has(reverseKey)) {
         return false
       }
-      
+
       const sourceNode = nodeById.get(sourceId)
       const targetNode = nodeById.get(targetId)
-      
+
       if (!sourceNode || !targetNode) {
         seenEdges.add(key)
         return true
       }
-      
+
       // Check if source and target are on the same layer (vertical edge)
       const sameLayer = Math.abs(sourceNode.targetX - targetNode.targetX) < 50
-      
+
       if (sameLayer) {
         // Only check intermediate nodes on the same layer (pre-filtered)
         const layerPos = Math.round(sourceNode.targetX / 50) * 50
         const sameLayerNodes = nodesByLayerPos.get(layerPos) || []
-        
+
         const minY = Math.min(sourceNode.targetY, targetNode.targetY)
         const maxY = Math.max(sourceNode.targetY, targetNode.targetY)
-        
+
         // Check for intermediate node with optimized lookup
         const hasIntermediateNode = sameLayerNodes.some((node) => {
           if (node.id === sourceId || node.id === targetId) return false
-          
+
           // Check if this node is vertically between source and target
           if (node.targetY <= minY || node.targetY >= maxY) return false
-          
+
           // Check if edges exist through this intermediate node (optimized lookup)
           return hasPathThrough(sourceId, targetId, node.id)
         })
-        
+
         if (hasIntermediateNode) {
           // This edge spans over an intermediate connected node - remove it
           return false
         }
       }
-      
+
       seenEdges.add(key)
       return true
     })
-
+    // TODO: THis is wrong because we dont use ForceLayoutNode but graphLayout?
     return {
       nodes: graphNodes as any, // Type assertion needed for react-force-graph compatibility
       links: uniqueLinks,
@@ -495,113 +488,6 @@ function Graph({
     }
   }, [])
 
-  // Winning pulse animation removed - was causing constant redraws on mobile
-
-  // Auto-center and auto-zoom to fit entire graph whenever layout changes
-  // Centers on the start node (which is at or near 0,0 after layout centering)
-  useEffect(() => {
-    if (!graphRef.current) return
-    if (nodes.length === 0) return
-    
-    // Wait for graph to be fully initialized and rendered
-    const timeoutId = setTimeout(() => {
-      if (!graphRef.current) return
-      
-      const { boundingBox } = layout
-      
-      // Get start node - the layout centers the graph around 0,0, so start node should be near center
-      const startNode = layout.startNodeId ? layout.nodeMeta.get(layout.startNodeId) : null
-      
-      // Always center on the start node position (which is near 0,0 after layout centering)
-      // This ensures nodes start at center of screen on both desktop and mobile
-      let centerX: number
-      let centerY: number
-      
-      if (startNode) {
-        // Center on start node - this ensures it's at the center of the screen
-        centerX = startNode.targetX
-        centerY = startNode.targetY
-      } else {
-        // Fallback to 0,0 (layout center) or bounding box center
-        centerX = boundingBox.centerX
-        centerY = boundingBox.centerY
-      }
-      
-      // Calculate zoom level to fit entire graph
-      const viewportWidth = dimensions.width
-      const viewportHeight = dimensions.height
-      
-      // For single node or very small graphs, use a reasonable minimum view size
-      // This prevents excessive zoom when there's only one node
-      // Use a percentage of viewport size to ensure reasonable zoom
-      const MIN_VIEW_WIDTH = viewportWidth * 0.5
-      const MIN_VIEW_HEIGHT = viewportHeight * 0.5
-      
-      // Use actual bounding box dimensions, but ensure minimums for zoom calculation
-      // This ensures we don't zoom in too much on a single node
-      const effectiveWidth = Math.max(boundingBox.width, MIN_VIEW_WIDTH)
-      const effectiveHeight = Math.max(boundingBox.height, MIN_VIEW_HEIGHT)
-      
-      // Add padding (15% margin) around the bounding box
-      const padding = 0.15
-      const paddedWidth = effectiveWidth * (1 + padding * 2)
-      const paddedHeight = effectiveHeight * (1 + padding * 2)
-      
-      // For horizontal orientation: X is main axis, Y is cross axis
-      // For vertical orientation: Y is main axis, X is cross axis
-      let zoomX: number
-      let zoomY: number
-      
-      if (orientation === 'horizontal') {
-        zoomX = paddedWidth > 0 ? (viewportWidth / paddedWidth) * 0.9 : 1
-        zoomY = paddedHeight > 0 ? (viewportHeight / paddedHeight) * 0.9 : 1
-      } else {
-        // Vertical orientation: swap axes
-        zoomX = paddedHeight > 0 ? (viewportWidth / paddedHeight) * 0.9 : 1
-        zoomY = paddedWidth > 0 ? (viewportHeight / paddedWidth) * 0.9 : 1
-      }
-      
-      // Use the smaller zoom to ensure entire graph fits
-      let calculatedZoom = Math.min(zoomX, zoomY)
-      
-      // Handle edge case: if zoom calculation fails, use default
-      if (!isFinite(calculatedZoom) || calculatedZoom <= 0) {
-        calculatedZoom = 1
-      }
-      
-      // Respect min/max zoom limits
-      const MIN_ZOOM = 0.25
-      calculatedZoom = Math.max(MIN_ZOOM, Math.min(calculatedZoom, maxZoom))
-      
-      // Ensure center coordinates are valid
-      const finalCenterX = isFinite(centerX) ? centerX : 0
-      const finalCenterY = isFinite(centerY) ? centerY : 0
-      
-      // Center on start node and zoom to fit entire graph
-      // Apply immediately first to ensure mobile sees centered view right away
-      setTimeout(() => {
-        if (!graphRef.current) return
-        
-        // Apply both zoom and center immediately (no animation) to establish the view
-        // This ensures mobile devices see the centered view immediately
-        graphRef.current.zoom(calculatedZoom, 0)
-        graphRef.current.centerAt(finalCenterX, finalCenterY, 0)
-        
-        // Then optionally animate smoothly to the same position (for consistency)
-        // This is a no-op but ensures the view is stable
-        setTimeout(() => {
-          if (graphRef.current) {
-            // Re-apply to ensure it's centered (some mobile browsers need this)
-            graphRef.current.zoom(calculatedZoom, 0)
-            graphRef.current.centerAt(finalCenterX, finalCenterY, 0)
-          }
-        }, 50)
-      }, 200) // Delay to ensure graph is fully initialized
-    }, 100) // Initial delay to ensure graph is ready
-    
-    return () => clearTimeout(timeoutId)
-  }, [layout, dimensions.width, dimensions.height, orientation, maxZoom, nodes.length])
-
   // Handle initial graph render
   const handleRenderFrame = useCallback(() => {
     // Just track pointer scale, don't manipulate camera here
@@ -613,7 +499,7 @@ function Graph({
     }
   }, [])
 
-  // Prevent browser zoom when graph is at zoom limits
+  // Handle zoom
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
@@ -648,10 +534,10 @@ function Graph({
           touch2.clientX - touch1.clientX,
           touch2.clientY - touch1.clientY
         )
-        
-        // Store for use in touchmove
-        ;(container as any).__initialPinchDistance = initialDistance
-        ;(container as any).__initialZoom = currentZoom
+
+          // Store for use in touchmove
+          ; (container as any).__initialPinchDistance = initialDistance
+          ; (container as any).__initialZoom = currentZoom
       }
     }
 
@@ -665,7 +551,7 @@ function Graph({
           touch2.clientY - touch1.clientY
         )
         const initialDistance = (container as any).__initialPinchDistance ?? currentDistance
-        
+
         // Determine if zooming in or out
         const isZoomingIn = currentDistance > initialDistance
         const isZoomingOut = currentDistance < initialDistance
@@ -714,7 +600,7 @@ function Graph({
   const handleNodeDrag = useCallback((nodeObj: any) => {
     const node = nodeObj as ForceLayoutNode
     if (!node) return
-    
+
     // Don't allow dragging start/goal nodes
     if (node.isStart || (node.isGoal && !node.isCompleted)) {
       // Re-pin immediately
@@ -722,12 +608,12 @@ function Graph({
       node.fy = node.targetY
       return
     }
-    
+
     // Track that we're dragging this node
     if (!draggedNodeRef.current) {
       draggedNodeRef.current = node.id
     }
-    
+
     if (orientationRef.current === 'horizontal') {
       // Lock X position - node cannot move horizontally
       node.fx = node.targetX
@@ -741,14 +627,14 @@ function Graph({
       // Allow X to move during drag
       node.fx = null
     }
-    
+
     // No simulation to reheat - positions set directly
   }, [])
 
   // Force graph redraw when selectedNodeId changes to update visual styling
   useEffect(() => {
     if (!graphRef.current) return
-    
+
     // Use requestAnimationFrame to ensure the refresh happens after React has updated
     requestAnimationFrame(() => {
       if (graphRef.current) {
@@ -771,18 +657,18 @@ function Graph({
   const handleNodeDragEnd = useCallback((nodeObj: any) => {
     const node = nodeObj as ForceLayoutNode
     if (!node) return
-    
+
     const wasDragging = draggedNodeRef.current === node.id
     draggedNodeRef.current = null
-    
+
     if (!wasDragging) return
-    
+
     // Clear any existing snap-back timer
     if (snapBackTimerRef.current) {
       clearTimeout(snapBackTimerRef.current)
       snapBackTimerRef.current = null
     }
-    
+
     // Immediately snap back to target position (no animation, no simulation)
     node.x = node.targetX
     node.y = node.targetY
@@ -790,7 +676,7 @@ function Graph({
     node.fy = node.targetY
     node.vx = 0
     node.vy = 0
-    
+
     refreshGraph()
   }, [refreshGraph])
 
@@ -806,7 +692,7 @@ function Graph({
       const isGoalCompleted = node.isGoal && node.isCompleted
       const connectsToGoal = nodesConnectedToGoalRef.current.has(node.id) && node.id !== 'goal'
       const size = getRenderedNodeSize(node, globalScale)
-      
+
       // Simplified: Skip viewport culling - it was adding overhead
       // react-force-graph handles culling internally
 
@@ -842,12 +728,12 @@ function Graph({
       ctx.fillStyle = node.isGoal
         ? '#1C170F'
         : node.isStart
-        ? '#F4B400'
-        : isGoalCompleted
-        ? '#22c55e'
-        : connectsToGoal
-        ? '#0A1F0A' // Very dark green background for nodes connected to goal
-        : '#0F0D09'
+          ? '#F4B400'
+          : isGoalCompleted
+            ? '#22c55e'
+            : connectsToGoal
+              ? '#0A1F0A' // Very dark green background for nodes connected to goal
+              : '#0F0D09'
       // Removed expensive shadow effects for mobile performance
       ctx.fill()
 
@@ -866,10 +752,10 @@ function Graph({
         ctx.strokeStyle = node.isGoal
           ? '#F4B400'
           : node.isStart
-          ? '#1A1406'
-          : isSelected
-          ? '#FFD369'
-          : '#3C3223'
+            ? '#1A1406'
+            : isSelected
+              ? '#FFD369'
+              : '#3C3223'
         ctx.stroke()
       }
       ctx.restore()
@@ -935,7 +821,7 @@ function Graph({
       const targetTargetX = target.targetX ?? target.x
       const sourceTargetY = source.targetY ?? source.y
       const targetTargetY = target.targetY ?? target.y
-      
+
       const currentOrientation = orientationRef.current
       const sameLayer = currentOrientation === 'horizontal'
         ? Math.abs(sourceTargetX - targetTargetX) < SAME_LAYER_X_EPSILON
@@ -944,7 +830,7 @@ function Graph({
       const mainAxisDrift = currentOrientation === 'horizontal' ? Math.abs(dx) : Math.abs(dy)
       const nearlyPerpendicular = sameLayer || mainAxisDrift < NEAR_VERTICAL_HORIZONTAL_DRIFT
       const shouldRenderStaple = nearlyPerpendicular
-      
+
       const isStapleEdge = shouldRenderStaple
 
       const needsPaddedEndpoints = isStapleEdge
@@ -964,17 +850,6 @@ function Graph({
 
       ctx.save()
       ctx.beginPath()
-
-      const computeCurveStrength = (baseStrength: number) => {
-        const anchorPos = startAnchorPositionRef.current
-        if (!anchorPos) return baseStrength
-        const anchorValue = currentOrientation === 'horizontal' ? anchorPos.x : anchorPos.y
-        const sourcePos = currentOrientation === 'horizontal' ? (source.targetX ?? source.x ?? anchorValue) : (source.targetY ?? source.y ?? anchorValue)
-        const distanceFromStart = Math.abs(sourcePos - anchorValue)
-        const normalized = Math.min(distanceFromStart / (FIXED_HORIZONTAL_SPACING * 6), 1)
-        const attenuation = Math.max(0.3, 1 - normalized * 0.7)
-        return baseStrength * attenuation
-      }
 
       const getCurveMode = () => {
         const anchorPos = startAnchorPositionRef.current
@@ -1031,8 +906,8 @@ function Graph({
       ctx.lineWidth = link.isWinning
         ? 4 / globalScale // Fixed width, no pulse animation
         : isStapleEdge
-        ? 1.8 / globalScale
-        : 2.8 / globalScale
+          ? 1.8 / globalScale
+          : 2.8 / globalScale
       ctx.stroke()
       ctx.setLineDash([])
       ctx.restore()
@@ -1043,29 +918,29 @@ function Graph({
         // Formula: B(0.5) = 0.25*start + 0.5*control + 0.25*end
         const labelX = 0.25 * startX + 0.5 * controlX + 0.25 * endX
         const labelY = 0.25 * startY + 0.5 * controlY + 0.25 * endY
-        
+
         ctx.save()
-        
+
         // Get current canvas transformation matrix
         const transform = ctx.getTransform()
-        
+
         // Reset transform to identity to draw text at fixed screen size
         // This prevents text from being scaled by zoom transformations
         ctx.setTransform(1, 0, 0, 1, 0, 0)
-        
+
         // Convert graph coordinates to screen coordinates using the transform
         // transform matrix: [a c e] = [scaleX skewY translateX]
         //                  [b d f]   [skewX scaleY translateY]
         const screenX = transform.a * labelX + transform.c * labelY + transform.e
         const screenY = transform.b * labelX + transform.d * labelY + transform.f
-        
+
         // Fixed font size in screen pixels (doesn't scale with zoom)
         const fontSize = 24
-        
+
         ctx.font = `400 ${fontSize}px Inter, system-ui, sans-serif`
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        
+
         const labelWidth = ctx.measureText(link.sharedPart).width
         const padding = 4
         const backgroundWidth = labelWidth + padding * 2
@@ -1086,7 +961,28 @@ function Graph({
     },
     [] // Dependencies accessed via refs for stability
   )
+  const prevPuzzleRef = useRef(currentPuzzle)
 
+  useEffect(() => {
+    if (currentPuzzle && prevPuzzleRef.current) {
+      const oldPuzzle = prevPuzzleRef.current
+      const newPuzzle = currentPuzzle
+
+      if (
+        oldPuzzle.startWord !== newPuzzle.startWord ||
+        oldPuzzle.goalWord !== newPuzzle.goalWord
+      ) {
+        // Force graph reset when puzzle changes
+        refreshGraph()
+        // Clear any drag state
+        draggedNodeRef.current = null
+        // Clear animations
+        //animationManagerRef.current.clearAnimations()
+      }
+    }
+
+    prevPuzzleRef.current = currentPuzzle
+  }, [currentPuzzle, refreshGraph])
   return (
     <div
       ref={containerRef}

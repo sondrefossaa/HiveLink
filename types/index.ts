@@ -36,6 +36,11 @@ export interface GraphProps {
   winningPath: string[];
   graphSpacing: number;
   layoutVersion?: number;
+  currentPuzzle?: {
+    startWord: string
+    goalWord: string
+    date?: string
+  }
 }
 
 // Share Types

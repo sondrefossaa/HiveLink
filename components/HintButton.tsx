@@ -1,5 +1,3 @@
-'use client'
-
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useAdRewards } from '@/hooks/useAdRewards'
@@ -29,10 +27,10 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
       await requestHint()
       return
     }
-   if (!requireAds){
+    if (!requireAds) {
       await unlockReward('hint')
       await requestHint()
-    } 
+    }
     else {
       // Show ad modal to unlock hint
       setShowAdModal(true)
@@ -42,7 +40,7 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
   const requestHint = async () => {
     setLoading(true)
     try {
-      const playerId = typeof window !== 'undefined' 
+      const playerId = typeof window !== 'undefined'
         ? (await import('@/lib/player-id')).getPlayerId()
         : ''
 
@@ -94,11 +92,10 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
             e.stopPropagation()
           }
         }}
-        className={`px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 ${
-          hasHint
-            ? 'bg-hive-yellow hover:bg-hive-gold text-hive-dark'
-            : 'bg-hive-graphite hover:bg-hive-slate text-gray-400'
-        } disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+        className={`px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 ${hasHint
+          ? 'bg-hive-yellow hover:bg-hive-gold text-hive-dark'
+          : 'bg-hive-graphite hover:bg-hive-slate text-gray-400'
+          } disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
         title={hasHint ? 'Get a hint' : 'Watch ad to unlock hints'}
       >
         {loading ? (

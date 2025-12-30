@@ -32,39 +32,11 @@ body {
   min-height: 100dvh;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--hive-charcoal);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--hive-graphite);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--hive-yellow);
-}
 
 /* Focus styles for accessibility */
 *:focus-visible {
   outline: 2px solid var(--hive-yellow);
   outline-offset: 2px;
-}
-
-/* Input autofill styling */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus {
-  -webkit-text-fill-color: white;
-  -webkit-box-shadow: 0 0 0px 1000px var(--hive-graphite) inset;
-  transition: background-color 5000s ease-in-out 0s;
 }
 
 /* Particle container */
