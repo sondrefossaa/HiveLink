@@ -1,0 +1,8 @@
+.mainContainer {
+  width: 100vw;
+  height: 10vh;
+  background: linear-gradient(to bottom, var(--hive-yellow), var(--hive-charcoal));
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
