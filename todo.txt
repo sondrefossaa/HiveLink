@@ -1,1 +1,2 @@
 remove vertical edges
+path lenghth logic is wrong, said path  length of 8 when it was 5
