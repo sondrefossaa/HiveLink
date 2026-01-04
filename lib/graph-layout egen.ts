@@ -545,8 +545,8 @@ export function computeGraphLayout(
 
 
   const nodesByLayer = nodes.reduce(
-  (map, node) => map.set(node.layer, [...(map.get(node.layer) || []), node]),
-  new Map()
+    (map, node) => map.set(node.layer, [...(map.get(node.layer) || []), node]),
+    new Map()
   );
 
   nodesByLayer.delete(-1) // Hacky soulution to remove duplicated goal node on wrong index
@@ -562,24 +562,24 @@ export function computeGraphLayout(
       console.log('setting parentId for node', node.id, 'to', parentId);
     });
   });
-  
+
 
   // sort nodes by length of parts within each layer
   const pathlengths = findPathLenghts(nodes, edges)
   nodesByLayer.forEach((layerNodes, layer) => {
     layerNodes.sort((a: GraphNode, b: GraphNode) => (pathlengths.get(a.id) || 0) - (pathlengths.get(b.id) || 0))
-  layerNodes.sort((a: GraphNode, b: GraphNode) => {
-    const pathLengthA: number = pathlengths.get(a.id) || 0;
-    const pathLengthB: number = pathlengths.get(b.id) || 0;
-    return pathLengthA - pathLengthB;
-  });
+    layerNodes.sort((a: GraphNode, b: GraphNode) => {
+      const pathLengthA: number = pathlengths.get(a.id) || 0;
+      const pathLengthB: number = pathlengths.get(b.id) || 0;
+      return pathLengthA - pathLengthB;
+    });
   });
   // Sort and put biggest values in the midde
   nodesByLayer.forEach((layerNodes, layer) => {
     layerNodes.sort((a: GraphNode, b: GraphNode) => {
       const valA: number = pathlengths.get(a.id) || 0;
       const valB: number = pathlengths.get(b.id) || 0;
-      
+
       // Sort by distance from middle (largest values should be near center)
       const length: number = layerNodes.length;
       // This creates a "valley" shape where largest are in middle
@@ -592,14 +592,14 @@ export function computeGraphLayout(
       return nodesByLayer.get(layer - 1)?.find((n: GraphNode) => n.parts[1] === part)
     }
     layernodes.sort((a: GraphNode, b: GraphNode): number => {
-      const parentA: GraphNode | undefined = getParent(a.parentId || '')
-      const parentB: GraphNode | undefined = getParent(b.parentId || '')
+      const parentA: GraphNode | undefined = getParent(a.parts[0] || '')
+      const parentB: GraphNode | undefined = getParent(b.parts[0] || '')
       const partA: string | undefined = parentA?.parts[1]
       const partB: string | undefined = parentB?.parts[1]
       console.log('parentid partA, partB:', a.parentId, parentA, parentB)
       // Group by the same part value
       if (partA === partB) {
-      return 0 // Keep relative order when same
+        return 0 // Keep relative order when same
       }
 
       // Otherwise sort alphabetically to group similar values
@@ -618,7 +618,7 @@ export function computeGraphLayout(
   const layoutNodes: LayoutNodeMeta[] = []
   nodesByLayer.forEach((layerNodes, layer) => {
     const layerSize = layerNodes.length
-    layerNodes.sort((a: GraphNode, b: GraphNode) => a.parts[0].localeCompare(b.parts[0])) // Stable sort for consistent layout
+    // layerNodes.sort((a: GraphNode, b: GraphNode) => a.parts[0].localeCompare(b.parts[0])) // Stable sort for consistent layout
     layerNodes.forEach((node: GraphNode, index: number) => {
       const layerHeight = layerSize * LAYER_HORIZONTAL_SPACING
       let targetX = START_X + layer * LAYER_HORIZONTAL_SPACING
@@ -631,11 +631,14 @@ export function computeGraphLayout(
       const midNode = (layerSize - 1) / 2
       let targetY = (canvasCrossAxisSize / 2) + (index - midNode) * CHILD_VERTICAL_SPACING
       //let targetY = (canvasCrossAxisSize / (layerSize + 1)) * (index + 1)
-      
+
       // Swap directions for mobile layout
       orientation === 'vertical' ? [targetX, targetY] = [targetY, targetX] : null
       // TODO: adjust min and max correctly
       minX = Math.min(minX, targetX)
+      maxX = Math.max(maxX, targetX)
+      minY = Math.min(minY, targetY)
+      maxY = Math.max(maxY, targetY)
       const layoutNode: LayoutNodeMeta = {
         ...node,
         targetX,
@@ -653,8 +656,62 @@ export function computeGraphLayout(
   console.log('pathlengths', pathlengths)
   const width = maxX - minX
   const height = maxY - minY
-  let centerX = 0
-  let centerY = 0
+  let centerX = (minX + maxX) / 2
+  let centerY = (minY + maxY) / 2
+
+  // Recenter coordinates so the graph is around the origin to avoid off-screen starts
+  const offsetX = isFinite(centerX) ? -centerX : 0
+  const offsetY = isFinite(centerY) ? -centerY : 0
+  if (offsetX !== 0 || offsetY !== 0) {
+    layoutNodes.forEach((node) => {
+      const updated = nodeMeta.get(node.id)
+      node.targetX += offsetX
+      node.targetY += offsetY
+      node.absoluteY += offsetY
+      if (updated) {
+        updated.targetX = node.targetX
+        updated.targetY = node.targetY
+        updated.absoluteY = node.absoluteY
+      }
+    })
+
+    minX += offsetX
+    maxX += offsetX
+    minY += offsetY
+    maxY += offsetY
+    centerX += offsetX
+    centerY += offsetY
+  }
+
+  // Mobile/vertical: additionally anchor the start node to the origin to keep it in view
+  if (orientation === 'vertical' && startNode) {
+    const startMeta = nodeMeta.get(startNode.id)
+    if (startMeta) {
+      const startOffsetX = -startMeta.targetX
+      const startOffsetY = -startMeta.targetY
+
+      if (startOffsetX !== 0 || startOffsetY !== 0) {
+        layoutNodes.forEach((node) => {
+          const updated = nodeMeta.get(node.id)
+          node.targetX += startOffsetX
+          node.targetY += startOffsetY
+          node.absoluteY += startOffsetY
+          if (updated) {
+            updated.targetX = node.targetX
+            updated.targetY = node.targetY
+            updated.absoluteY = node.absoluteY
+          }
+        })
+
+        minX += startOffsetX
+        maxX += startOffsetX
+        minY += startOffsetY
+        maxY += startOffsetY
+        centerX += startOffsetX
+        centerY += startOffsetY
+      }
+    }
+  }
   //console.log('layers', layers)
   animationManager.updateTargets(
     layoutNodes.map((node) => ({
@@ -665,23 +722,23 @@ export function computeGraphLayout(
     }))
   )
   const GraphLayoutResult: GraphLayoutResult = {
-  nodes: layoutNodes,
-  nodeMeta,
-  maxLayer,
-  goalLayer,
-  // Make so it cant be undefined
-  startNodeId: startNode?.id,
-  goalNodeId: goalNode?.id,
-  boundingBox: {
-    minX: isFinite(minX) ? minX : -100,
-    maxX: isFinite(maxX) ? maxX : 100,
-    minY: isFinite(minY) ? minY : -100,
-    maxY: isFinite(maxY) ? maxY : 100,
-    centerX: isFinite(centerX) ? centerX : 0,
-    centerY: isFinite(centerY) ? centerY : 0,
-    width: Math.max(width, 0), // Ensure non-negative
-    height: Math.max(height, 0), // Ensure non-negative
-  },
+    nodes: layoutNodes,
+    nodeMeta,
+    maxLayer,
+    goalLayer,
+    // Make so it cant be undefined
+    startNodeId: startNode?.id,
+    goalNodeId: goalNode?.id,
+    boundingBox: {
+      minX: isFinite(minX) ? minX : -100,
+      maxX: isFinite(maxX) ? maxX : 100,
+      minY: isFinite(minY) ? minY : -100,
+      maxY: isFinite(maxY) ? maxY : 100,
+      centerX: isFinite(centerX) ? centerX : 0,
+      centerY: isFinite(centerY) ? centerY : 0,
+      width: Math.max(width, 0), // Ensure non-negative
+      height: Math.max(height, 0), // Ensure non-negative
+    },
   }
   console.log('Final layout result:', GraphLayoutResult)
   return {

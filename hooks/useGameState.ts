@@ -85,12 +85,26 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       return false
     }
     
-    // Compare paths by their exact sequence (all words must match in order)
-    const newPathNormalized = newPath.map(w => w.toLowerCase()).join('|')
-    return !existingPaths.some(p => {
-      const existingPathNormalized = p.map(w => w.toLowerCase()).join('|')
-      return existingPathNormalized === newPathNormalized
-    })
+    // Get intermediate nodes (exclude start and goal)
+    const newPathIntermediate = new Set(
+      newPath.slice(1, -1).map(w => w.toLowerCase())
+    )
+    
+    // Check if any existing path shares intermediate nodes with the new path
+    for (const existingPath of existingPaths) {
+      const existingIntermediate = new Set(
+        existingPath.slice(1, -1).map(w => w.toLowerCase())
+      )
+      
+      // If paths share any intermediate nodes, they're not completely unique
+      for (const node of newPathIntermediate) {
+        if (existingIntermediate.has(node)) {
+          return false
+        }
+      }
+    }
+    
+    return true
   }, [hasUniqueWords])
 
   // Initialize game with start and goal nodes
