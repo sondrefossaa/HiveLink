@@ -2,7 +2,7 @@
   width: 100vw;
   height: 5vh;
   min-height: 60px;
-  background: linear-gradient(to bottom, black, var(--hive-charcoal));
+  /* background: linear-gradient(to bottom, black, var(--hive-charcoal)); */
   display: grid; /*Using grid so space itemsn evenly in 3 chunks: left middle and right*/
   grid-template-columns: 1fr auto 1fr; 
   align-items: center;
@@ -44,52 +44,56 @@
 /* Center - aligns center */
 .statsContainer {
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: 20px;
   text-align: center;
 }
 
 .statValue{
-  color: gray;
+  color:white;
   font-size: 1.5rem;
 }
 .statTitle{
-  color: var(--hive-yellow);
+  color:gray;
+  font-size: 0.8rem;
 }
 .verticalDevider{
   width: 1px;
   height: 2rem;
   background-color: var(--hive-graphite);
 }
-/* Right group - aligns right */
 .leaderboardAndShareContainer {
   display: inline-flex;
   align-items: center;
-  justify-content: center; /* Aligns its content to right */
+  justify-content: center;
 }
 .modeSelectContainer{
   display: inline-flex;
   flex-direction: row;
   gap: 10px;
   /* border: 1px var(--hive-yellow) solid; */
-  border-radius: 8px;
+  /* border-radius: 8px; */
   /* background-color: var(--hive-graphite); */
   padding: 2px;
   height: 100%;
 }
 .modeButton{
+  min-height: 40px;
   min-width: 70px;
-  transition: all 0.3s ease;
+  border-radius: 8px;
+  transition: all 0.8s ease;
 }
 
 .leaderboardButton{
+  min-height: 40px;
+
   display: inline-flex;
   justify-content: center;
   background-color: color-mix(in srgb, var(--hive-yellow) 70%, transparent 30%);
   border-radius: 5px;
   padding: 5px;
-  color: var(--hive-yellow)
+  color: var(--hive-yellow);
+  align-items: center;
 }
 .leaderboardButton:hover{
 background-color: red;

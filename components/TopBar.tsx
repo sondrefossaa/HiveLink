@@ -4,16 +4,47 @@ import styles from "./TopBar.module.css"
 import Image from 'next/image';
 import logo from '@/public/logo.svg';
 import { PuzzleMode } from "@/types";
-import { useState } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 
 
 
 export default function TopBar() {
 
   const [currentPuzzleMode, setCurrentPuzzleMode] = useState<PuzzleMode>("daily");
-  function handleSelectMode(option: PuzzleMode) {
-    setCurrentPuzzleMode(option)
+  const [beeTargetPos, setBeeTargetPos] = useState({ x: 0, y: 0 });
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  function setBeeTargetPosFromElement(element: HTMLButtonElement) {
+    const rect = element.getBoundingClientRect();
+    setBeeTargetPos({
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+    })
+
   }
+
+  function handleSelectMode(option: PuzzleMode, index: number) {
+    setCurrentPuzzleMode(option)
+    const pressedButton: HTMLButtonElement | null = buttonRefs.current[index];
+    setBeeTargetPosFromElement(pressedButton)
+  }
+  // TODO: make a useEffect that updates the bee pos when window rezises
+  //
+  // Effect to get the initial bee pos on daily button, need to delay to make sure the buttonRefs are ready
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const initialButton = buttonRefs.current[0];
+      if (initialButton) {
+        const rect = initialButton.getBoundingClientRect();
+        setBeeTargetPos({
+          x: rect.left + rect.width / 2,
+          y: rect.top,
+        });
+      }
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, []);
   return (
     <header className={styles.mainContainer}
     >
@@ -30,10 +61,10 @@ export default function TopBar() {
         >HiveLink</h1>
         <div className={styles.nameStreakContainer}>
           <div className={styles.nameContainer}>
-            Hello: <span style={{ color: "var(--hive-yellow)" }}>Sondre</span>
+            Hello <span style={{ color: "var(--hive-yellow)" }}>Sondre</span> <span style={{ fontSize: "1.2rem", }}>🐝</span>
           </div>
           <div className={styles.streakContainer}>
-            Streak: 0 <span style={{ fontSize: "1.5rem", }}>🐝</span>
+            Streak: 0
           </div>
         </div>
 
@@ -57,16 +88,15 @@ export default function TopBar() {
       <section className={styles.leaderboardAndShareContainer}>
         {/* mode select */}
         <div className={styles.modeSelectContainer}>
-          {(["daily", "practice"] as PuzzleMode[]).map((option) => (
+          {(["daily", "practice"] as PuzzleMode[]).map((option, index) => (
             < button
               key={option}
-              onClick={() => handleSelectMode(option)}
+              ref={(el) => buttonRefs.current[index] = el}
+              onClick={() => handleSelectMode(option, index)}
               className={styles.modeButton}
               style={{
                 backgroundColor: currentPuzzleMode == option ? "var(--hive-yellow)" : "var(--hive-charcoal)",
                 color: currentPuzzleMode == option ? "black" : "white",
-                borderRadius: "8px",
-                padding: "2px",
               }}
             >
               {option}
@@ -86,6 +116,19 @@ export default function TopBar() {
           </svg>
         </button>
       </section>
+
+
+      {/* floating bee */}
+      <span style={{
+        fontSize: "1.2rem",
+        position: "absolute",
+        left: `${beeTargetPos.x}px`,
+        top: `${beeTargetPos.y}px`,
+        transform: 'translate(-50%, -50%)', // Center on the point
+        transition: 'all 0.5s ease', // Smooth movement
+        pointerEvents: 'none', // Click through
+        zIndex: 1000,
+      }}>🐝</span>
     </header >
 
 
