@@ -1,1 +1,3 @@
 Make favicon a bee?
+Make the compound_words.json better
+  Make an ai trained on wordvec to distinguish a random subset of two words from a compound word

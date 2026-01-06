@@ -1,0 +1,9 @@
+.inputAndHintContainer{
+  display: flex;
+  border: 1px solid var(--hive-yellow);
+  height: 50%;
+  width: 50%;
+  align-items: center;
+  justify-content:center;
+  border-radius: 8px;
+}

@@ -5,6 +5,7 @@ import Background from "@/components/ParticleBackground";
 import TopBar from "@/components/TopBar";
 import { Suspense } from 'react';
 import LoadingScreen from "./loading";
+import BottomBar from "@/components/BottomBar";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -61,6 +62,8 @@ export default function RootLayout({
           <TopBar />
           {children}
           <Background />
+          <BottomBar />
+
         </Suspense >
 
       </body>
