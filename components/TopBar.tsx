@@ -32,6 +32,7 @@ export default function TopBar() {
   //
   // Effect to get the initial bee pos on daily button, need to delay to make sure the buttonRefs are ready
   useEffect(() => {
+    // TODO: use mutation observer instead of timer
     const timer = setTimeout(() => {
       const initialButton = buttonRefs.current[0];
       if (initialButton) {
@@ -97,6 +98,7 @@ export default function TopBar() {
               style={{
                 backgroundColor: currentPuzzleMode == option ? "var(--hive-yellow)" : "var(--hive-charcoal)",
                 color: currentPuzzleMode == option ? "black" : "white",
+                cursor: 'pointer',
               }}
             >
               {option}
@@ -124,10 +126,11 @@ export default function TopBar() {
         position: "absolute",
         left: `${beeTargetPos.x}px`,
         top: `${beeTargetPos.y}px`,
-        transform: 'translate(-50%, -50%)', // Center on the point
+        // transform: 'translate(-50%, -50%)', // Center on point
         transition: 'all 0.5s ease', // Smooth movement
-        pointerEvents: 'none', // Click through
+        pointerEvents: 'none', // Can click through
         zIndex: 1000,
+        transform: `translate(-50%, -50%) ${currentPuzzleMode === "practice" ? 'scaleX(-1)' : ''}`,
       }}>🐝</span>
     </header >
 

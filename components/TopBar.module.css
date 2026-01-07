@@ -7,6 +7,7 @@
   grid-template-columns: 1fr auto 1fr; 
   align-items: center;
   overflow: hidden;
+  position: absolute;
 }
 
 /* Left group - aligns left */
