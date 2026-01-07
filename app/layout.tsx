@@ -59,8 +59,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <Suspense fallback={<LoadingScreen />}>
-          <TopBar />
           {children}
+          <TopBar />
           <Background />
           <BottomBar />
 
