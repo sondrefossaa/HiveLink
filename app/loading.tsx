@@ -48,7 +48,7 @@ export default function LoadingScreen() {
 
       </div>
 
-      {/* Add the keyframes to your global CSS or as a style tag */}
+      {/* Keyframes for logo "breathing" */}
       <style jsx global>{`
         @keyframes pulseZoom {
           0%, 100% { 

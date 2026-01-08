@@ -3,9 +3,12 @@ import { hiveYellow } from "./colors";
 export function createGraphNode(
   word: string,
   parts: { left: string; right: string },
-  currPos: { x: number; y: number },
+  isStart: boolean = false,
+  isGoal: boolean = false,
+  currPos: { x: number; y: number } = { x: 0, y: 0 },
   goalPos?: { x: number; y: number },
-  connectedToGoal: boolean = false
+  connectedToGoal: boolean = false,
+
 ): GraphNode {
   return {
     word,
@@ -13,6 +16,9 @@ export function createGraphNode(
     currPos,
     goalPos: goalPos ?? currPos, // Default to current position
     connectedToGoal,
+    clicked: false,
+    isStart,
+    isGoal
   };
 }
 export function drawLink(
