@@ -1,132 +1,145 @@
 import { GraphNode, GraphLayoutResult } from "@/types"
-import { createGraphNode } from "./graphHelpers";
 import { GameState } from "./gameState";
 
 const nodeRadius: number = 80;
 const edgePadding: number = 10;
-//TODO: fix :)
-function buildNodesByLayer(nodes: GraphNode[]): Map<number, GraphNode[]> {
-  const nodesByLayer = new Map<number, GraphNode[]>();
 
-  // Find start and goal nodes
-  const startNode = nodes.find(node => node.isStart === true);
-  const goalNode = nodes.find(node => node.isGoal === true);
-
-  if (!startNode || !goalNode) {
-    throw new Error("Start or goal node not found");
-  }
-
-  // Layer 0: Start node
-  nodesByLayer.set(0, [startNode]);
-
-  // Remove start and goal nodes from processing
-  const middleNodes = nodes.filter(node => !node.isStart && !node.isGoal);
-
-  // BFS to find layers
-  const visited = new Set<string>([startNode.word]);
-  let currentLayer = [startNode];
-  let layerIndex = 1;
-
-  while (currentLayer.length > 0) {
-    const nextLayer: GraphNode[] = [];
-
-    for (const currentNode of currentLayer) {
-      // Find nodes where left part matches current node's right part
-      const connectedNodes = middleNodes.filter(node =>
-        !visited.has(node.word) && node.parts.left === currentNode.parts.right
-      );
-
-      for (const connectedNode of connectedNodes) {
-        visited.add(connectedNode.word);
-        nextLayer.push(connectedNode);
-      }
-    }
-
-    if (nextLayer.length > 0) {
-      nodesByLayer.set(layerIndex, nextLayer);
-      currentLayer = nextLayer;
-      layerIndex++;
-    } else {
-      break;
-    }
-  }
-
-  // Add goal node as last layer
-  nodesByLayer.set(layerIndex, [goalNode]);
-
-  return nodesByLayer;
-}
-
+/**
+ * Calculate node positions for a layered graph stored in a Map
+ * Special handling: layer -1 (goal) is always the rightmost column
+ */
 function calculateNodePositions(
   nodesByLayer: Map<number, GraphNode[]>,
   screenWidth: number,
   screenHeight: number
 ): GraphNode[] {
-  const layers = Array.from(nodesByLayer.keys()).sort((a, b) => a - b);
-  const totalLayers = layers.length;
+  // Get all layers
+  const layers = Array.from(nodesByLayer.keys());
+
+  // Separate regular layers (>= 0) from goal layer (-1)
+  const regularLayers = layers.filter(layer => layer >= 0).sort((a, b) => a - b);
+  const hasGoalLayer = layers.includes(-1);
+
+  // Calculate number of columns: regular layers + goal (if exists)
+  const numColumns = regularLayers.length + (hasGoalLayer ? 1 : 0);
+
+  if (numColumns === 0) {
+    return [];
+  }
 
   // Calculate horizontal spacing
   const startX = edgePadding + nodeRadius;
   const endX = screenWidth - edgePadding - nodeRadius;
   const totalHorizontalSpace = endX - startX;
-  const layerSpacing = totalHorizontalSpace / (totalLayers - 1);
+  const columnSpacing = totalHorizontalSpace / Math.max(numColumns - 1, 1);
 
-  const updatedNodes: GraphNode[] = [];
+  const positionedNodes: GraphNode[] = [];
 
-  layers.forEach((layerIndex, index) => {
-    const layerNodes = nodesByLayer.get(layerIndex) || [];
-    const layerX = startX + (index * layerSpacing);
+  // Position regular layers (0, 1, 2, ...) from left to right
+  regularLayers.forEach((layer, columnIndex) => {
+    const layerNodes = nodesByLayer.get(layer) || [];
+    const layerX = startX + (columnIndex * columnSpacing);
 
-    // Calculate vertical positions within layer
-    const totalLayerHeight = screenHeight - (2 * edgePadding);
-    const verticalSpacing = layerNodes.length > 1
-      ? totalLayerHeight / (layerNodes.length - 1)
-      : totalLayerHeight / 2;
-
-    layerNodes.forEach((node, nodeIndex) => {
-      let nodeY;
-
-      if (layerNodes.length === 1) {
-        // Single node in layer: center it
-        nodeY = screenHeight / 2;
-      } else {
-        // Multiple nodes: distribute evenly
-        nodeY = edgePadding + (nodeIndex * verticalSpacing);
-      }
-
-      // Create updated node with new position
-      const updatedNode: GraphNode = {
-        ...node,
-        currPos: { x: layerX, y: nodeY }
-      };
-
-      updatedNodes.push(updatedNode);
-    });
+    positionNodesInColumn(layerNodes, layerX, positionedNodes, screenHeight);
   });
 
-  return updatedNodes;
+  // Position goal layer (-1) at the far right
+  if (hasGoalLayer) {
+    const goalNodes = nodesByLayer.get(-1) || [];
+    const goalX = endX; // Goal is at the far right
+
+    positionNodesInColumn(goalNodes, goalX, positionedNodes, screenHeight);
+  }
+
+  return positionedNodes;
 }
 
+/**
+ * Helper function to position nodes in a vertical column
+ */
+function positionNodesInColumn(
+  nodes: GraphNode[],
+  columnX: number,
+  outputArray: GraphNode[],
+  screenHeight: number
+): void {
+  if (nodes.length === 0) return;
+
+  const totalColumnHeight = screenHeight - (2 * edgePadding);
+
+  nodes.forEach((node, nodeIndex) => {
+    let nodeY;
+
+    if (nodes.length === 1) {
+      // Single node in column: center it
+      nodeY = screenHeight / 2;
+    } else {
+      // Multiple nodes: distribute evenly
+      const verticalSpacing = totalColumnHeight / (nodes.length - 1);
+      nodeY = edgePadding + (nodeIndex * verticalSpacing);
+    }
+
+    outputArray.push({
+      ...node,
+      currPos: { x: columnX, y: nodeY }
+    });
+  });
+}
+
+/**
+ * Get graph layout for current game mode
+ */
 export function GetGraphLayout(width: number, height: number): GraphLayoutResult {
   const screenWidth: number = width;
   const screenHeight: number = height;
 
   try {
-    // Get nodes for current game mode
-    const nodesArray = GameState.paths[GameState.gameMode];
+    // Get nodes organized by layer for current game mode
+    const nodesByLayer = GameState.paths[GameState.gameMode];
 
-    if (!nodesArray || nodesArray.length === 0) {
+    // Debug log
+    console.log("GetGraphLayout structure:", {
+      gameMode: GameState.gameMode,
+      layerCount: nodesByLayer?.size,
+      layers: nodesByLayer ? Array.from(nodesByLayer.keys()).sort((a, b) => a - b) : [],
+      hasGoal: nodesByLayer?.has(-1)
+    });
+
+    if (!nodesByLayer || nodesByLayer.size === 0) {
+      console.warn("No nodes found for current game mode");
       return { graphNodes: [] };
     }
 
-    // Build layers
-    const nodesByLayer = buildNodesByLayer(nodesArray);
+    // Validate we have a start node
+    if (!nodesByLayer.has(0)) {
+      console.error("Missing start layer (0)");
+      return { graphNodes: [] };
+    }
+
+    // Log layer details for debugging
+    console.log("Layer details:");
+    nodesByLayer.forEach((nodes, layer) => {
+      console.log(`  Layer ${layer}: ${nodes.length} nodes`);
+      if (layer === -1) {
+        console.log(`    Goal node: ${nodes[0]?.word}`);
+      } else if (layer === 0) {
+        console.log(`    Start node: ${nodes[0]?.word}`);
+      }
+    });
 
     // Calculate positions
-    const positionedNodes = calculateNodePositions(nodesByLayer, screenWidth, screenHeight);
+    const graphNodes = calculateNodePositions(nodesByLayer, screenWidth, screenHeight);
+
+    // Log positioned nodes for debugging
+    console.log("Positioned nodes:", graphNodes.map(node => ({
+      word: node.word,
+      pos: node.currPos,
+      isGoal: node.isGoal,
+      isStart: node.isStart
+    })));
 
     return {
-      graphNodes: positionedNodes
+      graphNodes
     };
 
   } catch (error) {
@@ -135,3 +148,65 @@ export function GetGraphLayout(width: number, height: number): GraphLayoutResult
   }
 }
 
+/**
+ * Alternative layout: Goal in middle-right, start in middle-left
+ */
+export function GetGraphLayoutBalanced(width: number, height: number): GraphLayoutResult {
+  const screenWidth: number = width;
+  const screenHeight: number = height;
+
+  try {
+    const nodesByLayer = GameState.paths[GameState.gameMode];
+
+    if (!nodesByLayer || nodesByLayer.size === 0) {
+      return { graphNodes: [] };
+    }
+
+    // Get all layers
+    const layers = Array.from(nodesByLayer.keys());
+    const regularLayers = layers.filter(layer => layer >= 0).sort((a, b) => a - b);
+    const hasGoalLayer = layers.includes(-1);
+
+    const positionedNodes: GraphNode[] = [];
+    const startX = edgePadding + nodeRadius;
+    const endX = screenWidth - edgePadding - nodeRadius;
+
+    // If we only have start and goal
+    if (regularLayers.length === 1 && hasGoalLayer) {
+      // Start on left, goal on right
+      const startNodes = nodesByLayer.get(0) || [];
+      const goalNodes = nodesByLayer.get(-1) || [];
+
+      positionNodesInColumn(startNodes, startX, positionedNodes, screenHeight);
+      positionNodesInColumn(goalNodes, endX, positionedNodes, screenHeight);
+
+      return { graphNodes: positionedNodes };
+    }
+
+    // For more complex graphs, use the regular positioning
+    return GetGraphLayout(width, height);
+
+  } catch (error) {
+    console.error("Error in GetGraphLayoutBalanced:", error);
+    return { graphNodes: [] };
+  }
+}
+
+/**
+ * Debug function to visualize the layout
+ */
+export function visualizeLayout(width: number, height: number): void {
+  const result = GetGraphLayout(width, height);
+
+  console.group("Graph Layout Visualization");
+  console.log(`Canvas: ${width}x${height}`);
+  console.log(`Node radius: ${nodeRadius}`);
+  console.log(`Edge padding: ${edgePadding}`);
+
+  result.graphNodes.forEach(node => {
+    const type = node.isGoal ? "GOAL" : node.isStart ? "START" : "MIDDLE";
+    console.log(`${type} "${node.word}": (${node.currPos?.x?.toFixed(1)}, ${node.currPos?.y?.toFixed(1)})`);
+  });
+
+  console.groupEnd();
+}
