@@ -1,4 +1,4 @@
-import { getDaily } from "@/lib/get_Daily";
+import { getDaily } from "@/lib/getDaily";
 
 import { NextResponse } from 'next/server';
 export async function GET() {

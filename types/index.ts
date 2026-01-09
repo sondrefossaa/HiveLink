@@ -1,4 +1,9 @@
-export type PuzzleMode = "daily" | "pracice"
+
+
+
+
+export type PuzzleMode = "daily" | "practiceEasy" | "practiceMedium" | "practiceHard";
+
 export interface GraphNode {
   word: string;
   parts: { left: string, right: string };
@@ -10,6 +15,7 @@ export interface GraphNode {
   isGoal?: boolean;
 }
 
+export type graphNodesByLayer = Map<number, GraphNode[]>
 
 export interface GraphLayoutResult {
   graphNodes: GraphNode[],

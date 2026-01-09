@@ -1,0 +1,1024 @@
+[
+  {
+    "word": "butterfly",
+    "parts": [
+      "butter",
+      "fly"
+    ]
+  },
+  {
+    "word": "honeymoon",
+    "parts": [
+      "honey",
+      "moon"
+    ]
+  },
+  {
+    "word": "sunflower",
+    "parts": [
+      "sun",
+      "flower"
+    ]
+  },
+  {
+    "word": "moonshine",
+    "parts": [
+      "moon",
+      "shine"
+    ]
+  },
+  {
+    "word": "sunshine",
+    "parts": [
+      "sun",
+      "shine"
+    ]
+  },
+  {
+    "word": "moonlight",
+    "parts": [
+      "moon",
+      "light"
+    ]
+  },
+  {
+    "word": "sunlight",
+    "parts": [
+      "sun",
+      "light"
+    ]
+  },
+  {
+    "word": "starlight",
+    "parts": [
+      "star",
+      "light"
+    ]
+  },
+  {
+    "word": "firefly",
+    "parts": [
+      "fire",
+      "fly"
+    ]
+  },
+  {
+    "word": "dragonfly",
+    "parts": [
+      "dragon",
+      "fly"
+    ]
+  },
+  {
+    "word": "horsefly",
+    "parts": [
+      "horse",
+      "fly"
+    ]
+  },
+  {
+    "word": "housefly",
+    "parts": [
+      "house",
+      "fly"
+    ]
+  },
+  {
+    "word": "mayfly",
+    "parts": [
+      "may",
+      "fly"
+    ]
+  },
+  {
+    "word": "sawfly",
+    "parts": [
+      "saw",
+      "fly"
+    ]
+  },
+  {
+    "word": "blackfly",
+    "parts": [
+      "black",
+      "fly"
+    ]
+  },
+  {
+    "word": "bluebird",
+    "parts": [
+      "blue",
+      "bird"
+    ]
+  },
+  {
+    "word": "blackbird",
+    "parts": [
+      "black",
+      "bird"
+    ]
+  },
+  {
+    "word": "redbird",
+    "parts": [
+      "red",
+      "bird"
+    ]
+  },
+  {
+    "word": "snowbird",
+    "parts": [
+      "snow",
+      "bird"
+    ]
+  },
+  {
+    "word": "firebird",
+    "parts": [
+      "fire",
+      "bird"
+    ]
+  },
+  {
+    "word": "mockingbird",
+    "parts": [
+      "mocking",
+      "bird"
+    ]
+  },
+  {
+    "word": "hummingbird",
+    "parts": [
+      "humming",
+      "bird"
+    ]
+  },
+  {
+    "word": "thunderbird",
+    "parts": [
+      "thunder",
+      "bird"
+    ]
+  },
+  {
+    "word": "ladybug",
+    "parts": [
+      "lady",
+      "bug"
+    ]
+  },
+  {
+    "word": "bedbug",
+    "parts": [
+      "bed",
+      "bug"
+    ]
+  },
+  {
+    "word": "firebug",
+    "parts": [
+      "fire",
+      "bug"
+    ]
+  },
+  {
+    "word": "goldfish",
+    "parts": [
+      "gold",
+      "fish"
+    ]
+  },
+  {
+    "word": "starfish",
+    "parts": [
+      "star",
+      "fish"
+    ]
+  },
+  {
+    "word": "jellyfish",
+    "parts": [
+      "jelly",
+      "fish"
+    ]
+  },
+  {
+    "word": "swordfish",
+    "parts": [
+      "sword",
+      "fish"
+    ]
+  },
+  {
+    "word": "catfish",
+    "parts": [
+      "cat",
+      "fish"
+    ]
+  },
+  {
+    "word": "crawfish",
+    "parts": [
+      "craw",
+      "fish"
+    ]
+  },
+  {
+    "word": "crayfish",
+    "parts": [
+      "cray",
+      "fish"
+    ]
+  },
+  {
+    "word": "sunfish",
+    "parts": [
+      "sun",
+      "fish"
+    ]
+  },
+  {
+    "word": "football",
+    "parts": [
+      "foot",
+      "ball"
+    ]
+  },
+  {
+    "word": "baseball",
+    "parts": [
+      "base",
+      "ball"
+    ]
+  },
+  {
+    "word": "basketball",
+    "parts": [
+      "basket",
+      "ball"
+    ]
+  },
+  {
+    "word": "volleyball",
+    "parts": [
+      "volley",
+      "ball"
+    ]
+  },
+  {
+    "word": "snowball",
+    "parts": [
+      "snow",
+      "ball"
+    ]
+  },
+  {
+    "word": "fireball",
+    "parts": [
+      "fire",
+      "ball"
+    ]
+  },
+  {
+    "word": "eyeball",
+    "parts": [
+      "eye",
+      "ball"
+    ]
+  },
+  {
+    "word": "meatball",
+    "parts": [
+      "meat",
+      "ball"
+    ]
+  },
+  {
+    "word": "hairball",
+    "parts": [
+      "hair",
+      "ball"
+    ]
+  },
+  {
+    "word": "bedroom",
+    "parts": [
+      "bed",
+      "room"
+    ]
+  },
+  {
+    "word": "bathroom",
+    "parts": [
+      "bath",
+      "room"
+    ]
+  },
+  {
+    "word": "classroom",
+    "parts": [
+      "class",
+      "room"
+    ]
+  },
+  {
+    "word": "ballroom",
+    "parts": [
+      "ball",
+      "room"
+    ]
+  },
+  {
+    "word": "mushroom",
+    "parts": [
+      "mush",
+      "room"
+    ]
+  },
+  {
+    "word": "showroom",
+    "parts": [
+      "show",
+      "room"
+    ]
+  },
+  {
+    "word": "storeroom",
+    "parts": [
+      "store",
+      "room"
+    ]
+  },
+  {
+    "word": "newsroom",
+    "parts": [
+      "news",
+      "room"
+    ]
+  },
+  {
+    "word": "darkroom",
+    "parts": [
+      "dark",
+      "room"
+    ]
+  },
+  {
+    "word": "sunroom",
+    "parts": [
+      "sun",
+      "room"
+    ]
+  },
+  {
+    "word": "rainbow",
+    "parts": [
+      "rain",
+      "bow"
+    ]
+  },
+  {
+    "word": "crossbow",
+    "parts": [
+      "cross",
+      "bow"
+    ]
+  },
+  {
+    "word": "elbow",
+    "parts": [
+      "el",
+      "bow"
+    ]
+  },
+  {
+    "word": "snowfall",
+    "parts": [
+      "snow",
+      "fall"
+    ]
+  },
+  {
+    "word": "rainfall",
+    "parts": [
+      "rain",
+      "fall"
+    ]
+  },
+  {
+    "word": "waterfall",
+    "parts": [
+      "water",
+      "fall"
+    ]
+  },
+  {
+    "word": "nightfall",
+    "parts": [
+      "night",
+      "fall"
+    ]
+  },
+  {
+    "word": "downfall",
+    "parts": [
+      "down",
+      "fall"
+    ]
+  },
+  {
+    "word": "pitfall",
+    "parts": [
+      "pit",
+      "fall"
+    ]
+  },
+  {
+    "word": "windfall",
+    "parts": [
+      "wind",
+      "fall"
+    ]
+  },
+  {
+    "word": "footfall",
+    "parts": [
+      "foot",
+      "fall"
+    ]
+  },
+  {
+    "word": "landfall",
+    "parts": [
+      "land",
+      "fall"
+    ]
+  },
+  {
+    "word": "firework",
+    "parts": [
+      "fire",
+      "work"
+    ]
+  },
+  {
+    "word": "homework",
+    "parts": [
+      "home",
+      "work"
+    ]
+  },
+  {
+    "word": "network",
+    "parts": [
+      "net",
+      "work"
+    ]
+  },
+  {
+    "word": "framework",
+    "parts": [
+      "frame",
+      "work"
+    ]
+  },
+  {
+    "word": "teamwork",
+    "parts": [
+      "team",
+      "work"
+    ]
+  },
+  {
+    "word": "artwork",
+    "parts": [
+      "art",
+      "work"
+    ]
+  },
+  {
+    "word": "woodwork",
+    "parts": [
+      "wood",
+      "work"
+    ]
+  },
+  {
+    "word": "clockwork",
+    "parts": [
+      "clock",
+      "work"
+    ]
+  },
+  {
+    "word": "groundwork",
+    "parts": [
+      "ground",
+      "work"
+    ]
+  },
+  {
+    "word": "patchwork",
+    "parts": [
+      "patch",
+      "work"
+    ]
+  },
+  {
+    "word": "goldmine",
+    "parts": [
+      "gold",
+      "mine"
+    ]
+  },
+  {
+    "word": "landmine",
+    "parts": [
+      "land",
+      "mine"
+    ]
+  },
+  {
+    "word": "coalmine",
+    "parts": [
+      "coal",
+      "mine"
+    ]
+  },
+  {
+    "word": "doorbell",
+    "parts": [
+      "door",
+      "bell"
+    ]
+  },
+  {
+    "word": "doorknob",
+    "parts": [
+      "door",
+      "knob"
+    ]
+  },
+  {
+    "word": "doorstep",
+    "parts": [
+      "door",
+      "step"
+    ]
+  },
+  {
+    "word": "doorway",
+    "parts": [
+      "door",
+      "way"
+    ]
+  },
+  {
+    "word": "trapdoor",
+    "parts": [
+      "trap",
+      "door"
+    ]
+  },
+  {
+    "word": "backdoor",
+    "parts": [
+      "back",
+      "door"
+    ]
+  },
+  {
+    "word": "flytrap",
+    "parts": [
+      "fly",
+      "trap"
+    ]
+  },
+  {
+    "word": "mousetrap",
+    "parts": [
+      "mouse",
+      "trap"
+    ]
+  },
+  {
+    "word": "rattrap",
+    "parts": [
+      "rat",
+      "trap"
+    ]
+  },
+  {
+    "word": "firetrap",
+    "parts": [
+      "fire",
+      "trap"
+    ]
+  },
+  {
+    "word": "deathtrap",
+    "parts": [
+      "death",
+      "trap"
+    ]
+  },
+  {
+    "word": "hillside",
+    "parts": [
+      "hill",
+      "side"
+    ]
+  },
+  {
+    "word": "hillbilly",
+    "parts": [
+      "hill",
+      "billy"
+    ]
+  },
+  {
+    "word": "hilltop",
+    "parts": [
+      "hill",
+      "top"
+    ]
+  },
+  {
+    "word": "anthill",
+    "parts": [
+      "ant",
+      "hill"
+    ]
+  },
+  {
+    "word": "foothill",
+    "parts": [
+      "foot",
+      "hill"
+    ]
+  },
+  {
+    "word": "downhill",
+    "parts": [
+      "down",
+      "hill"
+    ]
+  },
+  {
+    "word": "uphill",
+    "parts": [
+      "up",
+      "hill"
+    ]
+  },
+  {
+    "word": "molehill",
+    "parts": [
+      "mole",
+      "hill"
+    ]
+  },
+  {
+    "word": "pancake",
+    "parts": [
+      "pan",
+      "cake"
+    ]
+  },
+  {
+    "word": "cupcake",
+    "parts": [
+      "cup",
+      "cake"
+    ]
+  },
+  {
+    "word": "cheesecake",
+    "parts": [
+      "cheese",
+      "cake"
+    ]
+  },
+  {
+    "word": "fruitcake",
+    "parts": [
+      "fruit",
+      "cake"
+    ]
+  },
+  {
+    "word": "shortcake",
+    "parts": [
+      "short",
+      "cake"
+    ]
+  },
+  {
+    "word": "beefcake",
+    "parts": [
+      "beef",
+      "cake"
+    ]
+  },
+  {
+    "word": "hoecake",
+    "parts": [
+      "hoe",
+      "cake"
+    ]
+  },
+  {
+    "word": "hotcake",
+    "parts": [
+      "hot",
+      "cake"
+    ]
+  },
+  {
+    "word": "seedcake",
+    "parts": [
+      "seed",
+      "cake"
+    ]
+  },
+  {
+    "word": "teacake",
+    "parts": [
+      "tea",
+      "cake"
+    ]
+  },
+  {
+    "word": "airport",
+    "parts": [
+      "air",
+      "port"
+    ]
+  },
+  {
+    "word": "seaport",
+    "parts": [
+      "sea",
+      "port"
+    ]
+  },
+  {
+    "word": "passport",
+    "parts": [
+      "pass",
+      "port"
+    ]
+  },
+  {
+    "word": "carport",
+    "parts": [
+      "car",
+      "port"
+    ]
+  },
+  {
+    "word": "heliport",
+    "parts": [
+      "heli",
+      "port"
+    ]
+  },
+  {
+    "word": "freeport",
+    "parts": [
+      "free",
+      "port"
+    ]
+  },
+  {
+    "word": "airplane",
+    "parts": [
+      "air",
+      "plane"
+    ]
+  },
+  {
+    "word": "seaplane",
+    "parts": [
+      "sea",
+      "plane"
+    ]
+  },
+  {
+    "word": "biplane",
+    "parts": [
+      "bi",
+      "plane"
+    ]
+  },
+  {
+    "word": "warplane",
+    "parts": [
+      "war",
+      "plane"
+    ]
+  },
+  {
+    "word": "sailboat",
+    "parts": [
+      "sail",
+      "boat"
+    ]
+  },
+  {
+    "word": "rowboat",
+    "parts": [
+      "row",
+      "boat"
+    ]
+  },
+  {
+    "word": "lifeboat",
+    "parts": [
+      "life",
+      "boat"
+    ]
+  },
+  {
+    "word": "steamboat",
+    "parts": [
+      "steam",
+      "boat"
+    ]
+  },
+  {
+    "word": "speedboat",
+    "parts": [
+      "speed",
+      "boat"
+    ]
+  },
+  {
+    "word": "tugboat",
+    "parts": [
+      "tug",
+      "boat"
+    ]
+  },
+  {
+    "word": "houseboat",
+    "parts": [
+      "house",
+      "boat"
+    ]
+  },
+  {
+    "word": "motorboat",
+    "parts": [
+      "motor",
+      "boat"
+    ]
+  },
+  {
+    "word": "showboat",
+    "parts": [
+      "show",
+      "boat"
+    ]
+  },
+  {
+    "word": "dreamboat",
+    "parts": [
+      "dream",
+      "boat"
+    ]
+  },
+  {
+    "word": "newspaper",
+    "parts": [
+      "news",
+      "paper"
+    ]
+  },
+  {
+    "word": "sandpaper",
+    "parts": [
+      "sand",
+      "paper"
+    ]
+  },
+  {
+    "word": "wallpaper",
+    "parts": [
+      "wall",
+      "paper"
+    ]
+  },
+  {
+    "word": "notepaper",
+    "parts": [
+      "note",
+      "paper"
+    ]
+  },
+  {
+    "word": "blueprint",
+    "parts": [
+      "blue",
+      "print"
+    ]
+  },
+  {
+    "word": "footprint",
+    "parts": [
+      "foot",
+      "print"
+    ]
+  },
+  {
+    "word": "fingerprint",
+    "parts": [
+      "finger",
+      "print"
+    ]
+  },
+  {
+    "word": "newsprint",
+    "parts": [
+      "news",
+      "print"
+    ]
+  },
+  {
+    "word": "handprint",
+    "parts": [
+      "hand",
+      "print"
+    ]
+  },
+  {
+    "word": "hoofprint",
+    "parts": [
+      "hoof",
+      "print"
+    ]
+  },
+  {
+    "word": "thumbprint",
+    "parts": [
+      "thumb",
+      "print"
+    ]
+  },
+  {
+    "word": "voiceprint",
+    "parts": [
+      "voice",
+      "print"
+    ]
+  },
+  {
+    "word": "overprint",
+    "parts": [
+      "over",
+      "print"
+    ]
+  },
+  {
+    "word": "misprint",
+    "parts": [
+      "mis",
+      "print"
+    ]
+  },
+  {
+    "word": "reprint",
+    "parts": [
+      "re",
+      "print"
+    ]
+  },
+  {
+    "word": "offprint",
+    "parts": [
+      "off",
+      "print"
+    ]
+  },
+  {
+    "word": "pineapple",
+    "parts": [
+      "pine",
+      "apple"
+    ]
+  },
+  {
+    "word": "crabapple",
+    "parts": [
+      "crab",
+      "apple"
+    ]
+  },
+  {
+    "word": "applesauce",
+    "parts": [
+      "apple",
+      "sauce"
+    ]
+  }
+]
