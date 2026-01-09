@@ -5,8 +5,7 @@ import { hiveYellow, hiveCharcoal } from "@/lib/colors";
 import { createGraphNode, drawLinkBetweenNodes } from "@/lib/graphHelpers";
 import { GameState } from "@/lib/gameState";
 import { GetGraphLayout } from "@/lib/GraphLayout";
-import { log } from "console";
-
+import { onGameEvent, offGameEvent } from "@/lib/gameState";
 const nodeSpacing = 200;
 const nodeRadius = 80;
 function drawHexagon(
@@ -52,12 +51,26 @@ function drawHexagon(
   }
 }
 
-
+//FIX: resize canvas button doesnt resize to new screen dimensions
 export default function Graph() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const resetCanvasBtnRef = useRef<HTMLButtonElement>(null)
   const clickedNodeRef = useRef<(GraphNode | null)>(null);
   const [clickedNode, setClickedNode] = useState<(GraphNode | null)>(null);
+  const [updateTrigger, setUpdateTrigger] = useState(0);
+
+  useEffect(() => {
+    const handleGraphUpdate = () => {
+      setUpdateTrigger(t => t + 1);
+    };
+
+    // Subscribe to updates
+    onGameEvent('graph-updated', handleGraphUpdate);
+
+    return () => {
+      offGameEvent('graph-updated', handleGraphUpdate);
+    };
+  }, []);
   // Transform state
   const transformRef = useRef({
     scale: 1,
@@ -418,7 +431,7 @@ export default function Graph() {
 
     // Prevent context menu on long press (mobile)
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    resetCanvasBtnRef.current.addEventListener("click", resetTransform);
+    resetCanvasBtnRef.current.addEventListener("click", resizeCanvas);
     return () => {
       // Remove all event listeners to prevent mem leak when component dismounts
       canvas.removeEventListener('mousedown', handleMouseDown);
@@ -436,10 +449,10 @@ export default function Graph() {
 
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', resizeCanvas);
-      resetCanvasBtnRef.current.removeEventListener("click", resetTransform);
+      resetCanvasBtnRef.current.removeEventListener("click", resizeCanvas);
 
     };
-  }, [redraw]);
+  }, [redraw, updateTrigger]);
 
   return (
     <>
