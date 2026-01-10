@@ -30,8 +30,8 @@ export function handleWordSubmit(word: string) {
         console.log(node.parts);
         console.log(parts)
         if (node.parts.right === parts.left) {
-          console.log("yo letso")
           const newNode = createGraphNode(word, parts)
+          newNode.parent = node;
           insertNode("daily", key + 1, newNode)
         }
       })

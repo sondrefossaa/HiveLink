@@ -13,6 +13,7 @@ export interface GraphNode {
   clicked?: boolean;
   isStart?: boolean;
   isGoal?: boolean;
+  parent?: GraphNode;
 }
 
 export type graphNodesByLayer = Map<number, GraphNode[]>
