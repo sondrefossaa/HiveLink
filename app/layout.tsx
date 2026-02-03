@@ -61,7 +61,7 @@ export default function RootLayout({
         <Suspense fallback={<LoadingScreen />}>
           {children}
           <TopBar />
-          <Background />
+          {/* <Background /> */}
           <BottomBar />
 
         </Suspense >

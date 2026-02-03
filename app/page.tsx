@@ -7,7 +7,7 @@ import ParticleBackground from "@/components/ParticleBackground";
 export default function Home() {
   return (
     <Fragment>
-      <ParticleBackground />
+      {/* <ParticleBackground /> */}
       <Graph />
       {/* <LoadingScreen /> */}
     </Fragment>
