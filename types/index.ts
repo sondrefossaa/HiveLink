@@ -31,10 +31,8 @@ export interface GraphProps {
   edges: GraphEdge[];
   selectedNodeId: string | null;
   onNodeSelect: (nodeId: string) => void;
-  goalWord: string;
   isComplete: boolean;
   winningPath: string[];
-  graphSpacing: number;
   layoutVersion?: number;
 }
 

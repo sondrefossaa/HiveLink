@@ -10,6 +10,25 @@ import {
   registerCompoundParts,
 } from '@/lib/compound-utils'
 
+const DOUBLABLE_CONSONANTS = new Set(['b','d','f','g','l','m','n','p','r','s','t','z'])
+
+/**
+ * Compute variant first-parts that a word could chain FROM, accounting for
+ * doubled-consonant boundaries (clubb+able ↔ club+bable).
+ * E.g. "clubb" → ["clubb", "club"]
+ */
+function firstPartVariants(firstPart: string): string[] {
+  const variants = new Set<string>([firstPart])
+  if (firstPart.length >= 4) {
+    const last = firstPart[firstPart.length - 1]
+    const prev = firstPart[firstPart.length - 2]
+    if (last === prev && DOUBLABLE_CONSONANTS.has(last)) {
+      variants.add(firstPart.slice(0, -1))  // clubb → club
+    }
+  }
+  return Array.from(variants)
+}
+
 export interface WordEntry {
   word: string
   parts: string[]
@@ -51,24 +70,36 @@ export function toWordEntry(
 
 export function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
   const index = new Map<string, WordEntry[]>()
+
+  function addKey(key: string, entry: WordEntry) {
+    const list = index.get(key) ?? []
+    if (!list.includes(entry)) {
+      list.push(entry)
+    }
+    index.set(key, list)
+  }
+
   for (const entry of words) {
-    // For suffix chaining, index by FIRST part (to find candidates that start with a given part)
+    const indexedKeys = new Set<string>()
+
+    // For suffix chaining, index by FIRST part and its doubled-consonant variants
+    // so that e.g. "clubbable" (parts=[clubb,able]) is findable under both
+    // "clubb" and "club".
     if (entry.parts.length > 0) {
       const firstPart = entry.parts[0].toLowerCase()
-      const list = index.get(firstPart) ?? []
-      list.push(entry)
-      index.set(firstPart, list)
+      for (const key of firstPartVariants(firstPart)) {
+        addKey(key, entry)
+        indexedKeys.add(key)
+      }
     }
+
     // Also index by all parts for other uses
     const uniqueParts = Array.from(new Set(entry.parts))
     for (const part of uniqueParts) {
       const partLower = part.toLowerCase()
-      if (partLower === entry.parts[0].toLowerCase()) continue // Already added above
-      const list = index.get(partLower) ?? []
-      if (!list.includes(entry)) {
-        list.push(entry)
+      if (!indexedKeys.has(partLower)) {
+        addKey(partLower, entry)
       }
-      index.set(partLower, list)
     }
   }
   return index

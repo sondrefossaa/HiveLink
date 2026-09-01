@@ -1,5 +1,6 @@
 import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
-import { parseCompoundWord } from '@/lib/compound-utils'
+import { parseCompoundWord, RUNTIME_SPLIT_CONTEXT } from '@/lib/compound-utils'
+import { canChain as canChainSplit } from '@/lib/word-splitting'
 import {
   createEnvironment,
   DEFAULT_ENVIRONMENT,
@@ -99,9 +100,8 @@ function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEn
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
 
-    // Verify suffix chaining: candidate's first part must match current's last part
-    const candidateFirstPart = candidate.parts.length > 0 ? candidate.parts[0].toLowerCase() : null
-    if (!candidateFirstPart || candidateFirstPart !== currentLastPart) continue
+    // Verify suffix chaining via doubled-consonant boundary variants
+    if (!canChainSplit(current.parts, candidate.parts, RUNTIME_SPLIT_CONTEXT)) continue
 
     used.add(candidate.word)
     return candidate
@@ -420,9 +420,8 @@ function pickSeededNextWord(
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
 
-    // Verify suffix chaining: candidate's first part must match current's last part
-    const candidateFirstPart = candidate.parts.length > 0 ? candidate.parts[0].toLowerCase() : null
-    if (!candidateFirstPart || candidateFirstPart !== currentLastPart) continue
+    // Verify suffix chaining via doubled-consonant boundary variants
+    if (!canChainSplit(current.parts, candidate.parts, RUNTIME_SPLIT_CONTEXT)) continue
 
     used.add(candidate.word)
     return candidate

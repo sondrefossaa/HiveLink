@@ -1,5 +1,6 @@
 import type { GraphNode, ConnectionResult, MultiConnectionResult, NodeConnection, CompoundWord } from '@/types'
 import compoundWords from '@/data/compound-words.json'
+import { canChain as canChainSplit, findBestSplit, type SplitContext } from '@/lib/word-splitting'
 
 /**
  * Common compound word part patterns
@@ -75,6 +76,13 @@ for (const entry of compoundWords as CompoundWord[]) {
     CANONICAL_PARTS.set(normalizedWord, normalizedParts)
     markKnownParts(normalizedParts)
   }
+}
+
+// Runtime split context: uses KNOWN_COMPOUND_PARTS (built from bundled data
+// + runtime additions) so canChain can compute boundary variants at runtime.
+export const RUNTIME_SPLIT_CONTEXT: SplitContext = {
+  isWord: (word) => KNOWN_COMPOUND_PARTS.has(word.toLowerCase()),
+  isAllowedShortPart: (word) => COMMON_PARTS.has(word.toLowerCase()),
 }
 
 const RUNTIME_PART_OVERRIDES = new Map<string, string[]>()
@@ -179,67 +187,20 @@ export function isCanonicalCompound(word: string): boolean {
   return CANONICAL_PARTS.has(normalizeWord(word))
 }
 
-const MAX_HEURISTIC_PART_LENGTH = 10
-
 function splitHeuristically(normalized: string): string[] {
   if (normalized.length < 4) {
     return [normalized]
   }
 
-  const parts: string[] = []
-  let remaining = normalized
-
-  while (remaining.length > 0) {
-    let found = false
-
-    for (let len = Math.min(remaining.length, MAX_HEURISTIC_PART_LENGTH); len >= 3; len--) {
-      const candidate = remaining.substring(0, len)
-      const rest = remaining.substring(len)
-
-      if (COMMON_PARTS.has(candidate) && (rest.length === 0 || rest.length >= 3)) {
-        parts.push(candidate)
-        remaining = rest
-        found = true
-        break
-      }
-    }
-
-    if (!found) {
-      if (parts.length > 0) {
-        parts.push(remaining)
-        break
-      }
-
-      let bestSplit = -1
-      let bestScore = 0
-
-      for (let i = 3; i <= remaining.length - 3; i++) {
-        const left = remaining.substring(0, i)
-        const right = remaining.substring(i)
-        let score = 0
-
-        if (COMMON_PARTS.has(left)) score += 2
-        if (COMMON_PARTS.has(right)) score += 2
-        if (left.length >= 4 && left.length <= 7) score += 1
-        if (right.length >= 4 && right.length <= 7) score += 1
-
-        if (score > bestScore) {
-          bestScore = score
-          bestSplit = i
-        }
-      }
-
-      if (bestSplit > 0 && bestScore > 0) {
-        parts.push(remaining.substring(0, bestSplit))
-        remaining = remaining.substring(bestSplit)
-      } else {
-        parts.push(remaining)
-        break
-      }
-    }
+  // Delegate to the shared suffix-aware scorer, which scores all candidate
+  // splits and picks the best one (suffix-first, doubled-consonant aware).
+  const best = findBestSplit(normalized, RUNTIME_SPLIT_CONTEXT)
+  if (best) {
+    return best.parts
   }
 
-  return parts.filter((part) => part.length > 0)
+  // Fallback: return the whole word as a single unsplit part
+  return [normalized]
 }
 
 /**
@@ -308,8 +269,9 @@ export function findSharedPart(partsA: string[], partsB: string[]): string | nul
 }
 
 /**
- * Validate that a new word can chain from a previous word via suffix matching
- * Rule: last part of previous word must exactly match first part of new word
+ * Validate that a new word can chain from a previous word via suffix matching.
+ * Uses doubled-consonant boundary variants so e.g. "nightclub" → "clubbable"
+ * works via club ↔ clubb equivalence.
  */
 export function validateSuffixChain(previousWord: string, newWord: string): boolean {
   const prevParts = parseCompoundWord(previousWord)
@@ -319,11 +281,7 @@ export function validateSuffixChain(previousWord: string, newWord: string): bool
     return false
   }
   
-  // Must match exactly: last part of previous == first part of new
-  const prevLastPart = prevParts[prevParts.length - 1].toLowerCase()
-  const newFirstPart = newParts[0].toLowerCase()
-  
-  return prevLastPart === newFirstPart
+  return canChainSplit(prevParts, newParts, RUNTIME_SPLIT_CONTEXT)
 }
 
 /**
@@ -341,8 +299,6 @@ export function findSuffixConnections(
   if (newParts.length === 0) {
     return { canConnect: false, connections: [], minLayer: 0 }
   }
-  
-  const newFirstPart = newParts[0].toLowerCase()
   
   for (const node of existingNodes) {
     // Skip goal node unless it's the exact word we're adding (winning move)
@@ -370,8 +326,18 @@ export function findSuffixConnections(
     if (node.parts.length === 0) {
       // Simple word (start word): check if word itself matches new word's first part
       const nodeWord = node.word.toLowerCase()
-      if (nodeWord === newFirstPart) {
-        connections.push({ node, sharedPart: newFirstPart })
+      const nodeVariants = [nodeWord]
+      // Also check doubled-consonant variant of the node word
+      if (nodeWord.length >= 4) {
+        const last = nodeWord[nodeWord.length - 1]
+        const prev = nodeWord[nodeWord.length - 2]
+        if (last === prev) {
+          nodeVariants.push(nodeWord.slice(0, -1))
+        }
+      }
+      const matches = nodeVariants.some(v => newParts[0].toLowerCase() === v || canChainSplit([v], newParts, RUNTIME_SPLIT_CONTEXT))
+      if (matches) {
+        connections.push({ node, sharedPart: newParts[0].toLowerCase() })
         const effectiveLayer = node.layer
         if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
           minLayer = effectiveLayer
@@ -379,9 +345,9 @@ export function findSuffixConnections(
       }
     } else {
       // Compound word: check if last part matches new word's first part
-      const nodeLastPart = node.parts[node.parts.length - 1].toLowerCase()
-      if (nodeLastPart === newFirstPart) {
-        connections.push({ node, sharedPart: newFirstPart })
+      if (canChainSplit(node.parts, newParts, RUNTIME_SPLIT_CONTEXT)) {
+        const nodeLastPart = node.parts[node.parts.length - 1].toLowerCase()
+        connections.push({ node, sharedPart: nodeLastPart })
         const effectiveLayer = node.layer
         if (effectiveLayer >= 0 && effectiveLayer < minLayer) {
           minLayer = effectiveLayer

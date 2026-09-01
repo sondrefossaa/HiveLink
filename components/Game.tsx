@@ -53,7 +53,6 @@ export default function Game() {
   const [showGiveUp, setShowGiveUp] = useState(false)
   const [newPathToast, setNewPathToast] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [graphSpacing, setGraphSpacing] = useState(100)
   const [layoutVersion, setLayoutVersion] = useState(0)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
   const prevPathCountRef = useRef(0)
@@ -301,10 +300,8 @@ export default function Game() {
               edges={gameState.edges}
               selectedNodeId={gameState.selectedNodeId}
               onNodeSelect={gameState.selectNode}
-              goalWord={puzzle.goalWord}
               isComplete={gameState.isComplete}
               winningPath={gameState.winningPath}
-              graphSpacing={graphSpacing}
               layoutVersion={layoutVersion}
             />
           ) : (

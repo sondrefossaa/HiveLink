@@ -2,14 +2,27 @@
 // Grows data/compound-words.json from public word list sources.
 // Existing entries are kept (manual curation wins); new validated compounds are merged in.
 //
+// Splitting is handled by lib/word-splitting.ts: all candidate splits are
+// scored (suffix-aware, doubled-consonant aware) and the best one wins, instead
+// of taking the first left-to-right split where both halves are dictionary words.
+//
 // Usage:
 //   npm run data:words                  # fetch, extract, merge into data/compound-words.json
 //   npm run data:words -- --max 8000    # cap the number of NEW words added
 //   npm run data:words -- --clear       # replace the file entirely with imported words
+//   npm run data:words -- --resplit     # re-score existing entries, fix bad splits
+//   npm run data:words -- --resplit --dry-run  # show the change report without writing
 
 import { readFile, writeFile } from 'fs/promises'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import {
+  findBestSplit,
+  scoreParts,
+  countSplitsWithScore,
+  MIN_SCORE_TO_REPLACE_UNSCOREABLE,
+  type SplitContext,
+} from '../lib/word-splitting'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_FILE = path.join(__dirname, '..', 'data', 'compound-words.json')
@@ -20,17 +33,35 @@ const WORD_LIST_URLS = [
   'https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt',
 ]
 
+// Frequency list used to prefer splits made of common words
+const COMMON_WORD_URLS = [
+  'https://raw.githubusercontent.com/first20hours/google-10000-english/master/google-10000-english-no-swears.txt',
+]
+
 interface WordEntry {
   word: string
   parts: string[]
 }
 
+interface ResplitChange {
+  word: string
+  from: string[]
+  to: string[]
+  fromScore: number | null
+  toScore: number
+  ambiguous: boolean
+}
+
 /**
- * Download word list from URL
+ * Download a plain word list from URL
  */
-async function downloadWordList(url: string): Promise<string[]> {
+async function downloadWordList(
+  url: string,
+  label: string,
+  minLength = 2
+): Promise<string[]> {
   try {
-    console.log(`📥 Downloading word list from ${url}...`)
+    console.log(`📥 Downloading ${label} from ${url}...`)
     const response = await fetch(url)
 
     if (!response.ok) {
@@ -38,14 +69,12 @@ async function downloadWordList(url: string): Promise<string[]> {
     }
 
     const text = await response.text()
-    // Include words for part validation
-    // We'll use all words in the dictionary, but require parts to be at least 5 chars
     const words = text
       .split('\n')
       .map(line => line.trim().toLowerCase())
-      .filter(word => word.length >= 2 && word.length <= 30 && /^[a-z]+$/.test(word))
+      .filter(word => word.length >= minLength && word.length <= 30 && /^[a-z]+$/.test(word))
 
-    console.log(`✓ Downloaded ${words.length} words`)
+    console.log(`✓ Downloaded ${words.length} words (${label})`)
     return words
   } catch (error) {
     console.error(`✗ Failed to download from ${url}:`, error)
@@ -72,68 +101,25 @@ const VALID_SHORT_PARTS = new Set([
 ])
 
 /**
- * Check if a short word (3-4 chars) is a valid compound part
+ * Build the split context: dictionary membership, common-word ranking and the
+ * short-part whitelist all feed into lib/word-splitting scoring.
  */
-function isValidShortPart(word: string): boolean {
-  return VALID_SHORT_PARTS.has(word.toLowerCase())
-}
-
-/**
- * Find all valid 2-part splits where both parts are dictionary words
- */
-function findValidCompoundSplits(word: string, wordSet: Set<string>): string[] | null {
-  const normalized = word.toLowerCase()
-
-  // Try all possible split points
-  // Minimum part length: 3 characters (but prefer longer)
-  // Maximum part length: word.length - 3
-  for (let i = 3; i <= normalized.length - 3; i++) {
-    const part1 = normalized.substring(0, i)
-    const part2 = normalized.substring(i)
-
-    // Both parts must be in the dictionary
-    if (!wordSet.has(part1) || !wordSet.has(part2)) {
-      continue
-    }
-
-    // Validation rules:
-    // - If a part is 3-4 chars, it must be in VALID_SHORT_PARTS
-    // - At least one part must be 5+ chars (filters out "psia" type words)
-    const part1Valid = part1.length >= 5 || isValidShortPart(part1)
-    const part2Valid = part2.length >= 5 || isValidShortPart(part2)
-    const atLeastOneLong = part1.length >= 5 || part2.length >= 5
-
-    if (part1Valid && part2Valid && atLeastOneLong) {
-      return [part1, part2]
-    }
+function buildSplitContext(wordSet: Set<string>, commonWords: Set<string>): SplitContext {
+  return {
+    isWord: (word) => wordSet.has(word),
+    isCommon: (word) => commonWords.has(word),
+    isAllowedShortPart: (word) => VALID_SHORT_PARTS.has(word),
   }
-
-  return null
-}
-
-/**
- * Check if a word is a valid compound word (all parts must be dictionary words)
- */
-function isCompoundWord(word: string, wordSet: Set<string>): string[] | null {
-  // Must be at least 6 characters (3+3 minimum for two parts)
-  if (word.length < 6) {
-    return null
-  }
-
-  // Try to find a valid 2-part split
-  return findValidCompoundSplits(word, wordSet)
 }
 
 /**
  * Process words and extract compound words
  */
-function extractCompoundWords(words: string[]): WordEntry[] {
+function extractCompoundWords(
+  words: string[],
+  ctx: SplitContext
+): WordEntry[] {
   console.log(`🔍 Processing ${words.length} words to find compounds...`)
-  console.log(`  Building word set for validation...`)
-
-  // Create a Set for O(1) lookup
-  const wordSet = new Set(words)
-  console.log(`  ✓ Word set ready (${wordSet.size} words)\n`)
 
   const compoundWords = new Map<string, string[]>()
   let processed = 0
@@ -141,18 +127,17 @@ function extractCompoundWords(words: string[]): WordEntry[] {
   for (const word of words) {
     processed++
     if (processed % 10000 === 0) {
-      console.log(`  Processed ${processed}/${words.length} words, found ${compoundWords.size} compounds...`)
+      console.log(`  Processed ${processed}/${words.length}, found ${compoundWords.size} compounds...`)
     }
 
-    // Check if this word can be split into two valid dictionary words
-    const parts = isCompoundWord(word, wordSet)
-
-    if (parts) {
-      compoundWords.set(word, parts)
+    // Score all candidate splits; the best one wins
+    const best = findBestSplit(word, ctx)
+    if (best) {
+      compoundWords.set(word, best.parts)
     }
   }
 
-  console.log(`✓ Found ${compoundWords.size} compound words (all parts validated as dictionary words)`)
+  console.log(`✓ Found ${compoundWords.size} compound words (suffix-aware scoring)`)
 
   return Array.from(compoundWords.entries()).map(([word, parts]) => ({
     word,
@@ -179,6 +164,112 @@ async function loadExistingEntries(): Promise<WordEntry[]> {
 }
 
 /**
+ * Re-score every existing entry with the shared scorer. An entry is only
+ * replaced when the new split scores STRICTLY better than the stored one, so
+ * already-correct entries never churn.
+ */
+function resplitEntries(
+  entries: WordEntry[],
+  ctx: SplitContext
+): {
+  changes: ResplitChange[]
+  ambiguous: string[]
+  flagged: Array<{ word: string; reason: string }>
+  resolved: WordEntry[]
+} {
+  const changes: ResplitChange[] = []
+  const ambiguous: string[] = []
+  const flagged: Array<{ word: string; reason: string }> = []
+  const resolved: WordEntry[] = []
+
+  for (const entry of entries) {
+    const normalized = entry.word.toLowerCase()
+
+    if (entry.parts.join('') !== normalized) {
+      flagged.push({ word: entry.word, reason: `parts do not concatenate to word (${entry.parts.join('+')})` })
+      resolved.push(entry)
+      continue
+    }
+
+    const oldScore = scoreParts(normalized, entry.parts, ctx)
+    const best = findBestSplit(normalized, ctx)
+
+    if (!best) {
+      if (oldScore === null) {
+        flagged.push({ word: entry.word, reason: `no admissible split found (kept ${entry.parts.join('+')})` })
+      }
+      resolved.push(entry)
+      continue
+    }
+
+    if (oldScore !== null && best.score <= oldScore) {
+      resolved.push(entry)
+      continue
+    }
+
+    if (oldScore === null && best.score < MIN_SCORE_TO_REPLACE_UNSCOREABLE) {
+      // Stored split could not be scored (manual/legacy entry); only a strong
+      // word-stem or doubled-stem suffix split may replace it.
+      resolved.push(entry)
+      continue
+    }
+
+    const ambiguousCount = countSplitsWithScore(normalized, ctx, best.score)
+    const isAmbiguous = ambiguousCount > 1
+    if (isAmbiguous) {
+      ambiguous.push(entry.word)
+    }
+
+    changes.push({
+      word: entry.word,
+      from: entry.parts,
+      to: best.parts,
+      fromScore: oldScore,
+      toScore: best.score,
+      ambiguous: isAmbiguous,
+    })
+    resolved.push({ word: entry.word, parts: best.parts })
+  }
+
+  return { changes, ambiguous, flagged, resolved }
+}
+
+function printResplitReport(
+  changes: ResplitChange[],
+  ambiguous: string[],
+  flagged: Array<{ word: string; reason: string }>
+): void {
+  console.log(`\n📋 Resplit report`)
+  console.log(`  Splits changed: ${changes.length}`)
+  console.log(`  Ambiguous (equally-scored alternatives): ${ambiguous.length}`)
+  console.log(`  Flagged for review: ${flagged.length}`)
+
+  if (changes.length > 0) {
+    console.log(`\n  Changes:`)
+    for (const change of changes) {
+      const from = `${change.from.join('+')} (${change.fromScore ?? 'n/a'})`
+      const to = `${change.to.join('+')} (${change.toScore})`
+      const marker = change.ambiguous ? ' [ambiguous]' : ''
+      console.log(`    ${change.word}: ${from} -> ${to}${marker}`)
+    }
+  }
+
+  if (ambiguous.length > 0) {
+    console.log(`\n  Ambiguous words (best score shared by multiple splits):`)
+    for (const word of ambiguous) {
+      console.log(`    ${word}`)
+    }
+  }
+
+  if (flagged.length > 0) {
+    console.log(`\n  Flagged entries:`)
+    for (const item of flagged) {
+      console.log(`    ${item.word}: ${item.reason}`)
+    }
+  }
+}
+
+/**
  * Main import function
  */
 async function main() {
@@ -186,11 +277,57 @@ async function main() {
 
   const args = process.argv.slice(2)
   const shouldClear = args.includes('--clear')
+  const shouldResplit = args.includes('--resplit')
+  const shouldDryRun = args.includes('--dry-run')
   const maxIndex = args.indexOf('--max')
   const maxNew = maxIndex >= 0 ? Math.max(0, Number(args[maxIndex + 1]) || 0) : null
 
   try {
+    // Download dictionary + frequency list
+    let allWords: string[] = []
+    for (const url of WORD_LIST_URLS) {
+      const words = await downloadWordList(url, 'dictionary', 2)
+      if (words.length > 0) {
+        allWords = words
+        break
+      }
+    }
+    if (allWords.length === 0) {
+      throw new Error('Failed to download word list from any source')
+    }
+
+    const commonWords = new Set<string>()
+    for (const url of COMMON_WORD_URLS) {
+      const common = await downloadWordList(url, 'frequency list', 1)
+      if (common.length > 0) {
+        for (const word of common) commonWords.add(word)
+        break
+      }
+    }
+    if (commonWords.size === 0) {
+      console.log('⚠️  No frequency list available; common-word scoring disabled')
+    }
+
+    const wordSet = new Set(allWords)
+    const ctx = buildSplitContext(wordSet, commonWords)
+
     const existingEntries = await loadExistingEntries()
+
+    if (shouldResplit) {
+      const { changes, ambiguous, flagged, resolved } = resplitEntries(existingEntries, ctx)
+      printResplitReport(changes, ambiguous, flagged)
+
+      if (shouldDryRun) {
+        console.log(`\n🏃 Dry run: data/compound-words.json was NOT modified`)
+        return
+      }
+
+      const merged = resolved.sort((a, b) => a.word.localeCompare(b.word))
+      await writeFile(DATA_FILE, `${JSON.stringify(merged, null, 2)}\n`, 'utf-8')
+      console.log(`\n🍯 Resplit complete! ${changes.length} entries updated, ${merged.length} total entries`)
+      return
+    }
+
     const existingByWord = new Map(existingEntries.map(entry => [entry.word, entry]))
 
     if (shouldClear) {
@@ -198,27 +335,12 @@ async function main() {
       existingByWord.clear()
     }
 
-    // Try to download from first available source
-    let allWords: string[] = []
-
-    for (const url of WORD_LIST_URLS) {
-      const words = await downloadWordList(url)
-      if (words.length > 0) {
-        allWords = words
-        break
-      }
-    }
-
-    if (allWords.length === 0) {
-      throw new Error('Failed to download word list from any source')
-    }
-
     // Remove duplicates
     const uniqueWords = Array.from(new Set(allWords))
     console.log(`✓ ${uniqueWords.length} unique words after deduplication\n`)
 
     // Extract compound words
-    const importedWords = extractCompoundWords(uniqueWords)
+    const importedWords = extractCompoundWords(uniqueWords, ctx)
     console.log()
 
     // Merge: existing entries win, imported entries fill the rest
@@ -245,7 +367,7 @@ async function main() {
     console.log(`  New words added: ${added}`)
     console.log(`  Imported words kept as-is (already present): ${replacedByExisting}`)
   } catch (error) {
-    console.error('✗ Import failed:', error)
+    console.error(`✗ Import failed:`, error)
     process.exit(1)
   }
 }

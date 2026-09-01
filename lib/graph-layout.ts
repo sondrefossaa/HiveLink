@@ -1,18 +1,42 @@
 import type { GraphEdge, GraphNode } from '@/types'
 
-export const FIXED_HORIZONTAL_SPACING = 100 // For backward compatibility with Graph.tsx
-const BASE_CANVAS_SIZE = 640
-const MIN_VERTICAL_SCALE = 1
-const MAX_VERTICAL_SCALE = 1.8
+/**
+ * Graph layout system v4
+ *
+ * Design decisions (see plan):
+ * - Pure function: computeGraphLayout has no side effects. The animation
+ *   manager is driven by the graph component.
+ * - Stable world coordinates: the start node is anchored at the origin and
+ *   the graph grows outward (+X per layer, or +Y when vertical). Nothing is
+ *   re-centered when a new layer is added - the camera handles framing.
+ * - Tree-style placement: each word hangs under its anchor parent, siblings
+ *   spread around the parent's cross-axis position, per-layer collision
+ *   resolution keeps nodes from overlapping.
+ * - Parent matching follows the actual game rule: a child's FIRST part must
+ *   equal its parent's LAST part (words may have 3+ parts).
+ * - Best-fit anchor: when a word connects to multiple existing words, the
+ *   anchor parent is the candidate closest to the mean position of all
+ *   candidates (minimizes total edge length), tie-broken by lowest layer.
+ */
+
+// Layout constants
+export const LAYER_HORIZONTAL_SPACING = 320
+export const CHILD_VERTICAL_SPACING = 110
+// Minimum center-to-center gap between the outermost nodes of adjacent parent
+// groups. Must exceed the node diameter (~75 incl. stroke) plus the label
+// drawn under each node (~25), so the full vertical spacing is used - this
+// keeps gaps uniform across a layer and guarantees no overlap.
+export const MIN_SUBTREE_GAP = CHILD_VERTICAL_SPACING
+
+// Threshold for determining if two nodes are on the same layer
+const SAME_LAYER_THRESHOLD = 50
+
+// Node radii used for bounding box padding (matches renderer sizes + stroke)
+const START_GOAL_NODE_RADIUS = 50
+const REGULAR_NODE_RADIUS = 40
 
 // Animation constants
 const ANIMATION_DURATION = 600 // milliseconds
-
-// Layout constants (v3)
-const LAYER_HORIZONTAL_SPACING = 320
-const CHILD_VERTICAL_SPACING = 110
-const MIN_SUBTREE_GAP = 60
-const START_X = 140
 
 /**
  * Easing function for smooth animation (ease-in-out cubic)
@@ -43,15 +67,25 @@ interface Position {
   y: number
 }
 
+interface PlacementBlock {
+  anchorId: string
+  group: GraphNode[]
+  blockMin: number
+  blockMax: number
+  desiredMin: number
+}
+
 interface AnimationState {
   startPos: Position
   endPos: Position
   startTime: number
 }
 
+const EMPTY_POSITIONS: ReadonlyMap<string, Position> = new Map()
+
 /**
- * Animation manager for smooth node position transitions
- * Lives in graph-layout to keep animation logic centralized
+ * Animation manager for smooth node position transitions.
+ * Singleton - lives in graph-layout to keep animation logic centralized.
  */
 class LayoutAnimationManager {
   private previousPositions = new Map<string, Position>()
@@ -59,7 +93,7 @@ class LayoutAnimationManager {
   private prefersReducedMotion = false
 
   constructor() {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.matchMedia) {
       const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
       this.prefersReducedMotion = mediaQuery.matches
       const handleChange = (e: MediaQueryListEvent) => {
@@ -67,35 +101,36 @@ class LayoutAnimationManager {
       }
       if (mediaQuery.addEventListener) {
         mediaQuery.addEventListener('change', handleChange)
-      } else {
+      } else if (mediaQuery.addListener) {
         mediaQuery.addListener(handleChange)
       }
     }
   }
 
+  isReducedMotion(): boolean {
+    return this.prefersReducedMotion
+  }
+
   /**
-   * Update target positions and start animations if positions changed
-   * Returns map of current positions (immediate if no animation, start pos if animating)
+   * Update target positions and start animations if positions changed.
+   * Returns map of current positions (only for actively animating nodes).
    */
   updateTargets(
     nodes: Array<{ id: string; targetX: number; targetY: number; parentId?: string }>
-  ): Map<string, Position> {
+  ): ReadonlyMap<string, Position> {
     const currentTime = performance.now()
-    const currentPositions = new Map<string, Position>()
 
-    // Build a map of all node target positions for parent lookups
+    // Target positions for parent lookups
     const targetPositionsMap = new Map<string, Position>()
     nodes.forEach((node) => {
       targetPositionsMap.set(node.id, { x: node.targetX, y: node.targetY })
     })
 
-    // Get all current positions (including animating ones) to use for parent lookups
-    // This ensures we can get parent positions even if they're currently animating
+    // All known current positions (previous + actively animating) for parent lookups
     const allCurrentPositions = new Map<string, Position>()
     this.previousPositions.forEach((pos, id) => {
       allCurrentPositions.set(id, pos)
     })
-    // Merge in any currently animating positions
     const animatingPositions = this.getCurrentPositions(currentTime)
     animatingPositions.forEach((pos, id) => {
       allCurrentPositions.set(id, pos)
@@ -106,81 +141,58 @@ class LayoutAnimationManager {
       const targetPos: Position = { x: node.targetX, y: node.targetY }
 
       if (this.prefersReducedMotion) {
-        // No animation - set immediately
-        currentPositions.set(node.id, targetPos)
         this.previousPositions.set(node.id, targetPos)
         this.activeAnimations.delete(node.id)
       } else if (!prevPos) {
-        // New node - start from parent's position if available
+        // New node - grow out of its parent's current position if available
         let startPos: Position = targetPos
 
         if (node.parentId) {
-          // First try to get parent's current animated position (if parent is animating)
-          let parentPos = allCurrentPositions.get(node.parentId)
-          
-          // If parent not in current positions, try to get from target positions (parent might also be new)
-          if (!parentPos) {
-            const parentTargetPos = targetPositionsMap.get(node.parentId)
-            if (parentTargetPos) {
-              // Parent exists in this batch - check if parent has previous position
-              const parentPrevPos = this.previousPositions.get(node.parentId)
-              // Use parent's previous position if available, otherwise use parent's target
-              parentPos = parentPrevPos ?? parentTargetPos
-            }
-          }
-          
+          const parentPos =
+            allCurrentPositions.get(node.parentId) ?? targetPositionsMap.get(node.parentId)
           if (parentPos) {
             startPos = parentPos
           }
         }
 
-        // If starting position is different from target, animate
-        const distance = Math.sqrt(
-          Math.pow(targetPos.x - startPos.x, 2) + Math.pow(targetPos.y - startPos.y, 2)
-        )
+        const distance = Math.hypot(targetPos.x - startPos.x, targetPos.y - startPos.y)
 
         if (distance > 1) {
-          // Start animation from parent's position (or fallback)
           this.activeAnimations.set(node.id, {
             startPos,
             endPos: targetPos,
             startTime: currentTime,
           })
-          currentPositions.set(node.id, startPos)
-          // Don't update previousPositions yet - let animation update it
         } else {
-          // Positions are the same, no animation needed
-          currentPositions.set(node.id, targetPos)
           this.previousPositions.set(node.id, targetPos)
         }
       } else {
-        // Existing node - check if position changed
-        const distance = Math.sqrt(
-          Math.pow(targetPos.x - prevPos.x, 2) + Math.pow(targetPos.y - prevPos.y, 2)
-        )
+        const distance = Math.hypot(targetPos.x - prevPos.x, targetPos.y - prevPos.y)
 
         if (distance < 1) {
-          // Position hasn't changed significantly
-          currentPositions.set(node.id, prevPos)
+          // Position hasn't changed significantly - keep as-is
         } else {
-          // Start animation - begin at previous position
           this.activeAnimations.set(node.id, {
             startPos: prevPos,
             endPos: targetPos,
             startTime: currentTime,
           })
-          currentPositions.set(node.id, prevPos)
         }
       }
     })
 
-    return currentPositions
+    return animatingPositions
   }
 
   /**
-   * Get current interpolated positions for all active animations at given time
+   * Get current interpolated positions for all active animations at given time.
+   * Completed animations are committed and removed.
    */
-  getCurrentPositions(currentTime: number = performance.now()): Map<string, Position> {
+  getCurrentPositions(currentTime: number = performance.now()): ReadonlyMap<string, Position> {
+    if (this.activeAnimations.size === 0) {
+      return EMPTY_POSITIONS
+    }
+
     const currentPositions = new Map<string, Position>()
 
     this.activeAnimations.forEach((animation, nodeId) => {
@@ -188,12 +200,10 @@ class LayoutAnimationManager {
       const progress = Math.min(elapsed / ANIMATION_DURATION, 1)
 
       if (progress >= 1) {
-        // Animation complete
         currentPositions.set(nodeId, animation.endPos)
         this.previousPositions.set(nodeId, animation.endPos)
         this.activeAnimations.delete(nodeId)
       } else {
-        // Interpolate current position
         const currentPos = interpolatePosition(
           animation.startPos.x,
           animation.startPos.y,
@@ -209,24 +219,16 @@ class LayoutAnimationManager {
     return currentPositions
   }
 
-  /**
-   * Check if any animations are currently active
-   */
   hasActiveAnimations(): boolean {
     return this.activeAnimations.size > 0
   }
 
   /**
-   * Get position for a node (current if animating, previous otherwise, or fallback)
+   * Immediately place a node at a position (used after drag snap-back).
    */
-  getPosition(nodeId: string, fallback: Position): Position {
-    const currentTime = performance.now()
-    const currentAnimations = this.getCurrentPositions(currentTime)
-    return (
-      currentAnimations.get(nodeId) ||
-      this.previousPositions.get(nodeId) ||
-      fallback
-    )
+  finalizePosition(nodeId: string, pos: Position): void {
+    this.activeAnimations.delete(nodeId)
+    this.previousPositions.set(nodeId, pos)
   }
 
   /**
@@ -242,26 +244,23 @@ class LayoutAnimationManager {
 const animationManager = new LayoutAnimationManager()
 
 /**
- * Get the animation manager instance (for use in Graph.tsx)
+ * Get the animation manager instance (for use by the graph component)
  */
 export function getAnimationManager(): LayoutAnimationManager {
   return animationManager
 }
 
 /**
- * Interface for tracking node positions during layout
+ * Reset animation state (useful when graph is completely reset)
  */
-interface NodePosition {
-  y: number
-  layer: number
-  parentId?: string
-  minY?: number // Subtree bounding box
-  maxY?: number // Subtree bounding box
+export function resetLayoutAnimation(): void {
+  animationManager.reset()
 }
 
 export interface LayoutNodeMeta extends GraphNode {
   targetX: number
   targetY: number
+  /** Cross-axis position before orientation swap (kept for compatibility) */
   absoluteY: number
   parentId?: string
   computedLayer: number
@@ -274,7 +273,6 @@ export interface GraphLayoutResult {
   goalLayer: number
   startNodeId?: string
   goalNodeId?: string
-  farthestNodeId?: string
   boundingBox: {
     minX: number
     maxX: number
@@ -290,495 +288,252 @@ export interface GraphLayoutResult {
 const resolveNodeId = (endpoint: string | GraphNode): string =>
   typeof endpoint === 'string' ? endpoint : endpoint.id
 
-function buildLayerMap(
-  startNodeId: string,
-  adjacency: Map<string, string[]>,
-  nodeMap: Map<string, GraphNode>,
-  goalNodeId?: string
-): Map<string, number> {
-  const layerMap = new Map<string, number>()
-  const queue: string[] = []
-
-  layerMap.set(startNodeId, 0)
-  queue.push(startNodeId)
-
-  while (queue.length > 0) {
-    const currentId = queue.shift()!
-    const currentLayer = layerMap.get(currentId) ?? 0
-    const children = adjacency.get(currentId) ?? []
-
-    for (const childId of children) {
-      if (childId === goalNodeId) continue
-      
-      // Each connection increments layer by 1 (simple tree layout)
-      const nextLayer = currentLayer + 1
-      
-      if (!layerMap.has(childId) || nextLayer < (layerMap.get(childId) ?? Infinity)) {
-        layerMap.set(childId, nextLayer)
-        queue.push(childId)
-      }
-    }
-  }
-
-  return layerMap
-}
-
-function selectPrimaryParent(
-  nodeId: string,
-  incoming: Map<string, string[]>,
-  layerMap: Map<string, number>,
-  goalNodeId?: string
-): string | undefined {
-  const parents = incoming.get(nodeId) ?? []
-  if (parents.length === 0) return undefined
-
-  // In suffix chaining, every node has exactly one parent (the immediate predecessor)
-  // Choose the parent with the highest layer (most recent in the chain)
-  let chosen: string | undefined
-  let bestLayer = -Infinity
-
-  for (const parentId of parents) {
-    if (parentId === goalNodeId && parents.length > 1) continue
-    const parentLayer = layerMap.get(parentId) ?? -Infinity
-    if (parentLayer > bestLayer) {
-      bestLayer = parentLayer
-      chosen = parentId
-    }
-  }
-
-  return chosen ?? parents[0]
-}
-
+/**
+ * Resolve an edge endpoint to its node id (edges may carry string or node refs)
+ */
+export const resolveEdgeEndpoint = (endpoint: string | GraphNode): string => resolveNodeId(endpoint)
 
 /**
- * MAIN LAYOUT FUNCTION - Graph Layout System v3
- * Deterministic 3-phase tree layout with collision-free guarantees
+ * Build a tree-style layout.
+ *
+ * Layers come straight from node.layer (authoritative, works for restored
+ * games). The goal node is placed one layer past the deepest word. Positions
+ * are parent-relative; the start node is anchored at the origin.
  */
 export function computeGraphLayout(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  canvasCrossAxisSize: number,
-  orientation: 'horizontal' | 'vertical' = 'horizontal',
-  spacingMultiplier: number = 100,
-  autoBalance: boolean = true,
-  existingPositions?: Map<string, { x: number; y: number }>
+  orientation: 'horizontal' | 'vertical' = 'horizontal'
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
-  const goalNode = nodes.find((node) => node.id === 'goal') || nodes.find((node) => node.isGoal)
-  
+  const goalNode = nodes.find((node) => node.id === 'goal') ?? nodes.find((node) => node.isGoal)
   if (!startNode) {
-    throw new Error('Start node is required')
+    // Defensive: no start node (should not happen) - empty layout
+    return {
+      nodes: [],
+      nodeMeta: new Map(),
+      maxLayer: 0,
+      goalLayer: 1,
+      boundingBox: {
+        minX: -100,
+        maxX: 100,
+        minY: -100,
+        maxY: 100,
+        centerX: 0,
+        centerY: 0,
+        width: 200,
+        height: 200,
+      },
+    }
   }
-  
-  const safeCanvasSize = Math.max(canvasCrossAxisSize, 480)
-  const nodeMap = new Map(nodes.map(n => [n.id, n]))
-  
-  // Build adjacency and incoming maps
-  const adjacency = new Map<string, string[]>()
+
+  // Incoming adjacency (parents by edges)
   const incoming = new Map<string, string[]>()
-  
   edges.forEach((edge) => {
     const sourceId = resolveNodeId(edge.source)
     const targetId = resolveNodeId(edge.target)
-    
-    if (!adjacency.has(sourceId)) adjacency.set(sourceId, [])
-    adjacency.get(sourceId)!.push(targetId)
-    
     if (!incoming.has(targetId)) incoming.set(targetId, [])
     incoming.get(targetId)!.push(sourceId)
   })
-  
-  // Calculate layers for all nodes
-  const layerMap = buildLayerMap(startNode.id, adjacency, nodeMap, goalNode?.id)
 
+  // Layer assignment: node.layer is authoritative; goal floats one past max
+  const layerOf = new Map<string, number>()
+  let maxLayer = 0
   nodes.forEach((node) => {
-    if (!layerMap.has(node.id)) {
-      const fallbackLayer = node.layer >= 0 ? node.layer : 0
-      layerMap.set(node.id, fallbackLayer)
-    }
+    if (goalNode && node.id === goalNode.id) return
+    const layer = node.layer >= 0 ? node.layer : 0
+    layerOf.set(node.id, layer)
+    if (layer > maxLayer) maxLayer = layer
   })
-  
-  // Calculate max layer and goal layer
-  const nonGoalLayers = nodes
-    .filter((node) => node.id !== 'goal')
-    .map((node) => layerMap.get(node.id) ?? 0)
-  
-  const maxLayer = nonGoalLayers.length > 0 ? Math.max(...nonGoalLayers) : 0
   const goalLayer = maxLayer + 1
-  
-  // Build parent-child tree structure (suffix-chaining: one parent per node)
-  const parentMap = new Map<string, string | undefined>()
-  const childrenMap = new Map<string, string[]>()
-  
-  // Initialize children map
-  nodes.forEach((node) => {
-    if (!node.isStart && node.id !== goalNode?.id) {
-      const parentId = selectPrimaryParent(node.id, incoming, layerMap, goalNode?.id)
-      parentMap.set(node.id, parentId)
-      
-      if (parentId) {
-        if (!childrenMap.has(parentId)) {
-          childrenMap.set(parentId, [])
-        }
-        childrenMap.get(parentId)!.push(node.id)
-      }
-    }
-  })
-  
-  // Initialize positions map
-  const positions = new Map<string, NodePosition>()
-  
-  // Initialize all nodes with their layer
-  nodes.forEach((node) => {
-    let layer = layerMap.get(node.id) ?? 0
-    if (node.id === goalNode?.id) {
-      layer = goalLayer
-    }
-    
-    positions.set(node.id, {
-      y: safeCanvasSize / 2, // Start at center, will be adjusted
-      layer,
-      parentId: parentMap.get(node.id),
-    })
-  })
-  
-  // PHASE 1: Bottom-up preliminary placement (post-order traversal)
-  const visited = new Set<string>()
-  
-  function postOrderTraverse(nodeId: string) {
-    if (visited.has(nodeId)) return
-    visited.add(nodeId)
-    
-    const children = childrenMap.get(nodeId) ?? []
-    // Process all children first
-    children.forEach(childId => postOrderTraverse(childId))
-    
-    // Now process this node
-    const nodePos = positions.get(nodeId)!
-    const childrenList = children.map(id => positions.get(id)!)
-    
-    if (childrenList.length > 0) {
-      // Place children symmetrically around parent's Y
-      const parentY = nodePos.y
-      const childCount = childrenList.length
-      const midpoint = (childCount - 1) / 2
-      
-      childrenList.forEach((childPos, i) => {
-        const offset = (i - midpoint) * CHILD_VERTICAL_SPACING
-        childPos.y = parentY + offset
-      })
-      
-      // Calculate subtree bounding box
-      let minY = Math.min(...childrenList.map(c => c.y))
-      let maxY = Math.max(...childrenList.map(c => c.y))
-      
-      // Include this node's Y in the bounding box
-      minY = Math.min(minY, nodePos.y)
-      maxY = Math.max(maxY, nodePos.y)
-      
-      // Also include all descendants' bounding boxes
-      childrenList.forEach(childPos => {
-        if (childPos.minY !== undefined && childPos.maxY !== undefined) {
-          minY = Math.min(minY, childPos.minY)
-          maxY = Math.max(maxY, childPos.maxY)
-        }
-      })
-      
-      nodePos.minY = minY
-      nodePos.maxY = maxY
-                } else {
-      // Leaf node: bounding box is just the node itself
-      nodePos.minY = nodePos.y
-      nodePos.maxY = nodePos.y
-    }
+  if (goalNode) {
+    layerOf.set(goalNode.id, goalLayer)
   }
-  
-  // Start post-order traversal from root (start node)
-  postOrderTraverse(startNode.id)
-  
-  // Handle goal node separately if it exists
-  if (goalNode && !visited.has(goalNode.id)) {
-    const goalPos = positions.get(goalNode.id)!
-    goalPos.minY = goalPos.y
-    goalPos.maxY = goalPos.y
-  }
-  
-  // PHASE 2: Top-down collision resolution (pre-order traversal)
-  visited.clear()
-  
-  // Helper function to shift a subtree (node and all descendants) by a given amount
-  function shiftSubtree(nodeId: string, shift: number) {
-    const nodePos = positions.get(nodeId)!
-    nodePos.y += shift
-    
-    // Update bounding box
-    if (nodePos.minY !== undefined) nodePos.minY += shift
-    if (nodePos.maxY !== undefined) nodePos.maxY += shift
-    
-    // Shift all descendants
-    const children = childrenMap.get(nodeId) ?? []
-    children.forEach(childId => shiftSubtree(childId, shift))
-  }
-  
-  // Helper function to recalculate bounding box for a subtree
-  function recalculateBoundingBox(nodeId: string) {
-    const nodePos = positions.get(nodeId)!
-    const children = childrenMap.get(nodeId) ?? []
-    
-    if (children.length === 0) {
-      nodePos.minY = nodePos.y
-      nodePos.maxY = nodePos.y
-      return
-    }
-    
-    // Recalculate for all children first
-    children.forEach(childId => recalculateBoundingBox(childId))
-    
-    // Then calculate this node's bounding box
-    let minY = nodePos.y
-    let maxY = nodePos.y
-    
-    children.forEach(childId => {
-      const childPos = positions.get(childId)!
-      if (childPos.minY !== undefined) minY = Math.min(minY, childPos.minY)
-      if (childPos.maxY !== undefined) maxY = Math.max(maxY, childPos.maxY)
-    })
-    
-    nodePos.minY = minY
-    nodePos.maxY = maxY
-  }
-  
-  function preOrderTraverse(nodeId: string) {
-    if (visited.has(nodeId)) return
-    visited.add(nodeId)
-    
-    const nodePos = positions.get(nodeId)!
-    const children = childrenMap.get(nodeId) ?? []
-    
-    if (children.length > 0) {
-      // Sort children by their preliminary Y positions (stable sort with node ID tiebreaker)
-      const sortedChildren = [...children].sort((a, b) => {
-        const posA = positions.get(a)!
-        const posB = positions.get(b)!
-        const yDiff = posA.y - posB.y
-        if (Math.abs(yDiff) > 0.01) return yDiff
-        // Stable tiebreaker: use node ID for determinism
-        return a.localeCompare(b)
-      })
-      
-      // Process siblings in order, resolving collisions
-      let currentMaxY: number | null = null
-      
-      sortedChildren.forEach((childId) => {
-        const childPos = positions.get(childId)!
-        
-        if (currentMaxY !== null && childPos.minY !== undefined) {
-          // Check if this subtree overlaps or is too close to the previous sibling's subtree
-          const gap = childPos.minY - currentMaxY
-          if (gap < MIN_SUBTREE_GAP) {
-            // Shift this subtree downward
-            const shift = MIN_SUBTREE_GAP - gap
-            shiftSubtree(childId, shift)
-            // Recalculate bounding box after shift
-            recalculateBoundingBox(childId)
-            const shiftedPos = positions.get(childId)!
-            if (shiftedPos.maxY !== undefined) {
-              currentMaxY = shiftedPos.maxY
-            }
-          } else {
-            // Update currentMaxY to the rightmost contour of this subtree
-            if (childPos.maxY !== undefined) {
-              currentMaxY = Math.max(currentMaxY, childPos.maxY)
-            }
-          }
-        } else {
-          // First sibling or no previous sibling - just track maxY
-          if (childPos.maxY !== undefined) {
-            currentMaxY = childPos.maxY
-          }
-        }
-      })
-    }
-    
-    // Recursively process all children's subtrees
-    children.forEach(childId => preOrderTraverse(childId))
-  }
-  
-  // Start pre-order traversal from root
-  preOrderTraverse(startNode.id)
-  
-  // PHASE 2b: Layer-based collision check (check ALL nodes in each layer, not just siblings)
-  // This catches collisions between nodes from different branches
-  const nodesByLayer = new Map<number, string[]>()
-  positions.forEach((pos, nodeId) => {
-    const layer = pos.layer
-    if (!nodesByLayer.has(layer)) {
-      nodesByLayer.set(layer, [])
-    }
-    nodesByLayer.get(layer)!.push(nodeId)
-  })
-  
-  // Process each layer
-  for (const [layer, nodeIds] of nodesByLayer.entries()) {
-    if (nodeIds.length <= 1) continue
-    
-    // Sort all nodes in this layer by Y position (stable sort with node ID tiebreaker)
-    const sortedNodes = [...nodeIds].sort((a, b) => {
-      const posA = positions.get(a)!
-      const posB = positions.get(b)!
-      const yDiff = posA.y - posB.y
-      if (Math.abs(yDiff) > 0.01) return yDiff
-      // Stable tiebreaker: use node ID for determinism
-      return a.localeCompare(b)
-    })
-    
-    // Check adjacent nodes and resolve collisions
-    for (let i = 0; i < sortedNodes.length - 1; i++) {
-      const nodeAId = sortedNodes[i]
-      const nodeBId = sortedNodes[i + 1]
-      
-      const posA = positions.get(nodeAId)!
-      const posB = positions.get(nodeBId)!
-      
-      // Check if nodes are too close (using node Y positions directly)
-      const distance = Math.abs(posB.y - posA.y)
-      if (distance < MIN_SUBTREE_GAP) {
-        // Shift node B and its entire subtree downward
-        const shift = MIN_SUBTREE_GAP - distance
-        shiftSubtree(nodeBId, shift)
-        // Recalculate bounding boxes after shift
-        recalculateBoundingBox(nodeBId)
-        // Update position B for next iteration
-        const updatedPosB = positions.get(nodeBId)!
-        posB.y = updatedPosB.y
-        if (updatedPosB.minY !== undefined) posB.minY = updatedPosB.minY
-        if (updatedPosB.maxY !== undefined) posB.maxY = updatedPosB.maxY
-      }
-    }
-  }
-  
-  // PHASE 3: Final centering
-  // Calculate average Y of layer 0 + layer 1 nodes
-  const layer0Nodes: string[] = []
-  const layer1Nodes: string[] = []
-  
-  positions.forEach((pos, nodeId) => {
-    if (pos.layer === 0) layer0Nodes.push(nodeId)
-    if (pos.layer === 1) layer1Nodes.push(nodeId)
-  })
-  
-  const allLayer01Nodes = [...layer0Nodes, ...layer1Nodes]
-  if (allLayer01Nodes.length > 0) {
-    const avgY = allLayer01Nodes.reduce((sum, id) => sum + positions.get(id)!.y, 0) / allLayer01Nodes.length
-    const targetY = safeCanvasSize / 2
-    const shift = targetY - avgY
-    
-    // Shift all nodes by this amount
-    positions.forEach(pos => {
-      pos.y += shift
-      if (pos.minY !== undefined) pos.minY += shift
-      if (pos.maxY !== undefined) pos.maxY += shift
-    })
-  }
-  
-  // Build layout nodes with final positions
-  let farthestNodeId: string | undefined
-  let farthestLayer = -Infinity
-  
-  // Calculate the center X position between start and goal to center the graph
-  const startLayer = 0
-  const goalLayerX = goalLayer * LAYER_HORIZONTAL_SPACING + START_X
-  const startLayerX = startLayer * LAYER_HORIZONTAL_SPACING + START_X
-  const graphCenterX = goalNode ? (startLayerX + goalLayerX) / 2 : startLayerX
-  
-  // Calculate offset to center the graph (shift so center is at 0)
-  const xOffset = -graphCenterX
-  
-  const layoutNodes: LayoutNodeMeta[] = nodes.map((node) => {
-    let computedLayer = layerMap.get(node.id) ?? 0
-    if (node.id === goalNode?.id) {
-      computedLayer = goalLayer
-    }
-    
-    // Track farthest non-goal node
-    if (!node.isGoal && computedLayer >= 0 && computedLayer >= farthestLayer) {
-      farthestNodeId = node.id
-      farthestLayer = computedLayer
-    }
-    
-    const nodePos = positions.get(node.id)!
-    
-    // Horizontal positioning: targetX = LAYER_HORIZONTAL_SPACING * layer + START_X
-    // Then shift by xOffset to center the graph around 0
-    const targetX = (LAYER_HORIZONTAL_SPACING * computedLayer + START_X) + xOffset
-    const targetY = nodePos.y - safeCanvasSize / 2 // Relative to center
-    
-    let finalTargetX: number
-    let finalTargetY: number
 
-    if (orientation === 'horizontal') {
-      finalTargetX = targetX
-      finalTargetY = targetY
-    } else {
-      // Vertical orientation: swap axes
-      finalTargetX = targetY
-      finalTargetY = targetX
+  // Group nodes per layer (deterministic order)
+  const layers = new Map<number, GraphNode[]>()
+  nodes.forEach((node) => {
+    const layer = layerOf.get(node.id)!
+    if (!layers.has(layer)) layers.set(layer, [])
+    layers.get(layer)!.push(node)
+  })
+
+  // Cross-axis positions (pre-swap "y" in horizontal world space)
+  const yPos = new Map<string, number>()
+  const anchorOf = new Map<string, string>()
+
+  // Anchor the start node at the origin
+  yPos.set(startNode.id, 0)
+  const layer0Others = (layers.get(0) ?? []).filter((n) => n.id !== startNode.id)
+  layer0Others.forEach((node, index) => {
+    yPos.set(node.id, (index + 1) * CHILD_VERTICAL_SPACING)
+  })
+
+  // Place layers 1..maxLayer tree-style
+  for (let layer = 1; layer <= maxLayer; layer++) {
+    const layerNodes = layers.get(layer)
+    if (!layerNodes || layerNodes.length === 0) continue
+
+    // Anchor selection: best-fit parent (closest to mean of all candidates)
+    const assignments: Array<{ node: GraphNode; anchorId: string; anchorY: number }> = []
+    layerNodes.forEach((node) => {
+      const candidates = (incoming.get(node.id) ?? []).filter(
+        (pid) => pid !== goalNode?.id && yPos.has(pid)
+      )
+
+      let anchorId = ''
+      let anchorY = 0
+
+      if (candidates.length > 0) {
+        const meanY =
+          candidates.reduce((sum, id) => sum + yPos.get(id)!, 0) / candidates.length
+
+        let best = candidates[0]
+        let bestDist = Infinity
+        let bestLayer = Infinity
+        candidates.forEach((pid) => {
+          const y = yPos.get(pid)!
+          const dist = Math.abs(y - meanY)
+          const pLayer = layerOf.get(pid) ?? Infinity
+          const better =
+            dist < bestDist - 0.5 ||
+            (Math.abs(dist - bestDist) <= 0.5 && pLayer < bestLayer) ||
+            (Math.abs(dist - bestDist) <= 0.5 && pLayer === bestLayer && pid < best)
+          if (better) {
+            best = pid
+            bestDist = dist
+            bestLayer = pLayer
+          }
+        })
+
+        anchorId = best
+        anchorY = yPos.get(best)!
+      }
+
+      assignments.push({ node, anchorId, anchorY })
+    })
+
+    // Group children by anchor parent
+    const groups = new Map<string, GraphNode[]>()
+    assignments.forEach(({ node, anchorId }) => {
+      if (!groups.has(anchorId)) groups.set(anchorId, [])
+      groups.get(anchorId)!.push(node)
+    })
+    groups.forEach((group) => {
+      group.sort((a, b) => a.word.localeCompare(b.word) || a.id.localeCompare(b.id))
+    })
+
+    // Forward pass: place groups top-to-bottom, centered on the anchor,
+    // pushing down when a group would collide with the one above
+    const orderedAnchors = [...groups.keys()].sort((a, b) => {
+      const ya = a === '' ? 0 : yPos.get(a)!
+      const yb = b === '' ? 0 : yPos.get(b)!
+      return ya - yb || a.localeCompare(b)
+    })
+
+    const blocks: PlacementBlock[] = []
+    let currentMax = -Infinity
+    orderedAnchors.forEach((anchorId) => {
+      const group = groups.get(anchorId)!
+      const anchorY = anchorId === '' ? 0 : yPos.get(anchorId)!
+      const mid = (group.length - 1) / 2
+      const desiredMin = anchorY - mid * CHILD_VERTICAL_SPACING
+      let blockMin = desiredMin
+      let blockMax = anchorY + mid * CHILD_VERTICAL_SPACING
+
+      if (currentMax > -Infinity && blockMin < currentMax + MIN_SUBTREE_GAP) {
+        const shift = currentMax + MIN_SUBTREE_GAP - blockMin
+        blockMin += shift
+        blockMax += shift
+      }
+
+      blocks.push({ anchorId, group, blockMin, blockMax, desiredMin })
+      currentMax = blockMax
+    })
+
+    // Backward pass: pull shifted groups back up toward their anchors where
+    // free space allows, so layers stay balanced around their parents
+    for (let i = blocks.length - 1; i > 0; i--) {
+      const block = blocks[i]
+      const prevLimit = blocks[i - 1].blockMax + MIN_SUBTREE_GAP
+      const target = Math.max(block.desiredMin, prevLimit)
+      if (target < block.blockMin) {
+        const shift = block.blockMin - target
+        block.blockMin -= shift
+        block.blockMax -= shift
+      }
     }
-    
+
+    blocks.forEach((block) => {
+      block.group.forEach((node, index) => {
+        yPos.set(node.id, block.blockMin + index * CHILD_VERTICAL_SPACING)
+        if (block.anchorId !== '') {
+          anchorOf.set(node.id, block.anchorId)
+        }
+      })
+    })
+  }
+
+  // Goal node: centered on its incoming (winning) edge sources, else 0
+  if (goalNode) {
+    const sources = (incoming.get(goalNode.id) ?? []).filter((id) => id !== goalNode.id)
+    const withPos = sources.filter((id) => yPos.has(id))
+    const goalY =
+      withPos.length > 0
+        ? withPos.reduce((sum, id) => sum + yPos.get(id)!, 0) / withPos.length
+        : 0
+    yPos.set(goalNode.id, goalY)
+  }
+
+  // Build layout nodes: x = layer * spacing (start at origin), swap for vertical
+  const layoutNodes: LayoutNodeMeta[] = []
+  const nodeMeta = new Map<string, LayoutNodeMeta>()
+  nodes.forEach((node) => {
+    const layer = layerOf.get(node.id)!
+    const y = yPos.get(node.id) ?? 0
+    const x = layer * LAYER_HORIZONTAL_SPACING
+
+    let targetX = x
+    let targetY = y
+    if (orientation === 'vertical') {
+      targetX = y
+      targetY = x
+    }
+
     const layoutNode: LayoutNodeMeta = {
       ...node,
-      layer: computedLayer,
-      computedLayer,
-      targetX: finalTargetX,
-      targetY: finalTargetY,
-      absoluteY: nodePos.y,
-      parentId: nodePos.parentId,
+      layer,
+      computedLayer: layer,
+      targetX,
+      targetY,
+      absoluteY: y,
+      parentId: anchorOf.get(node.id),
     }
-
-    return layoutNode
+    layoutNodes.push(layoutNode)
+    nodeMeta.set(node.id, layoutNode)
   })
 
-  // Update animation targets
-  animationManager.updateTargets(
-    layoutNodes.map((node) => ({
-      id: node.id,
-      targetX: node.targetX,
-      targetY: node.targetY,
-      parentId: node.parentId,
-    }))
-  )
-
-  const nodeMeta = new Map(layoutNodes.map((node) => [node.id, node]))
-
-  // Calculate bounding box of all nodes (accounting for node sizes)
-  // Start/goal nodes: 48px base size, regular nodes: 36px base size
-  // Add buffer for stroke and visual radius
-  const START_GOAL_NODE_RADIUS = 50
-  const REGULAR_NODE_RADIUS = 40
-  
+  // Bounding box padded with node radii (post-swap coordinates)
   let minX = Infinity
   let maxX = -Infinity
   let minY = Infinity
   let maxY = -Infinity
-
-  if (layoutNodes.length > 0) {
-    layoutNodes.forEach((node) => {
-      const nodeRadius = node.isStart || node.isGoal ? START_GOAL_NODE_RADIUS : REGULAR_NODE_RADIUS
-      minX = Math.min(minX, node.targetX - nodeRadius)
-      maxX = Math.max(maxX, node.targetX + nodeRadius)
-      minY = Math.min(minY, node.targetY - nodeRadius)
-      maxY = Math.max(maxY, node.targetY + nodeRadius)
-    })
-  } else {
-    // Empty graph - use default bounds
+  layoutNodes.forEach((node) => {
+    const radius = node.isStart || node.isGoal ? START_GOAL_NODE_RADIUS : REGULAR_NODE_RADIUS
+    minX = Math.min(minX, node.targetX - radius)
+    maxX = Math.max(maxX, node.targetX + radius)
+    minY = Math.min(minY, node.targetY - radius)
+    maxY = Math.max(maxY, node.targetY + radius)
+  })
+  if (!isFinite(minX)) {
     minX = -100
     maxX = 100
     minY = -100
     maxY = 100
   }
 
-  const width = maxX - minX
-  const height = maxY - minY
+  const width = Math.max(maxX - minX, 0)
+  const height = Math.max(maxY - minY, 0)
   const centerX = (minX + maxX) / 2
   const centerY = (minY + maxY) / 2
 
@@ -789,23 +544,114 @@ export function computeGraphLayout(
     goalLayer,
     startNodeId: startNode.id,
     goalNodeId: goalNode?.id,
-    farthestNodeId,
     boundingBox: {
-      minX: isFinite(minX) ? minX : -100,
-      maxX: isFinite(maxX) ? maxX : 100,
-      minY: isFinite(minY) ? minY : -100,
-      maxY: isFinite(maxY) ? maxY : 100,
-      centerX: isFinite(centerX) ? centerX : 0,
-      centerY: isFinite(centerY) ? centerY : 0,
-      width: Math.max(width, 0), // Ensure non-negative
-      height: Math.max(height, 0), // Ensure non-negative
+      minX,
+      maxX,
+      minY,
+      maxY,
+      centerX,
+      centerY,
+      width,
+      height,
     },
   }
 }
 
 /**
- * Reset animation state (useful when graph is completely reset)
+ * Presentation-level edge filtering (ported from the old graphData memo):
+ * - Removes exact and reverse duplicate edges
+ * - Removes same-layer edges that span over an intermediate connected node
  */
-export function resetLayoutAnimation(): void {
-  animationManager.reset()
+export function computeVisibleEdges(
+  edges: GraphEdge[],
+  nodeMeta: Map<string, LayoutNodeMeta>,
+  orientation: 'horizontal' | 'vertical'
+): GraphEdge[] {
+  const mainAxis = (node: LayoutNodeMeta): number =>
+    orientation === 'horizontal' ? node.targetX : node.targetY
+
+  const seenEdges = new Set<string>()
+  const edgeSet = new Set<string>()
+  const sourceToTargets = new Map<string, Set<string>>()
+  const targetToSources = new Map<string, Set<string>>()
+
+  edges.forEach((edge) => {
+    const sourceId = resolveNodeId(edge.source)
+    const targetId = resolveNodeId(edge.target)
+    const key = `${sourceId}->${targetId}`
+    edgeSet.add(key)
+
+    if (!sourceToTargets.has(sourceId)) sourceToTargets.set(sourceId, new Set())
+    if (!targetToSources.has(targetId)) targetToSources.set(targetId, new Set())
+    sourceToTargets.get(sourceId)!.add(targetId)
+    targetToSources.get(targetId)!.add(sourceId)
+  })
+
+  // Pre-build nodes by main-axis position (rounded to nearest SAME_LAYER_THRESHOLD) for same-layer checks
+  const nodesByLayerPos = new Map<number, LayoutNodeMeta[]>()
+  nodeMeta.forEach((node) => {
+    const layerPos = Math.round(mainAxis(node) / SAME_LAYER_THRESHOLD) * SAME_LAYER_THRESHOLD
+    if (!nodesByLayerPos.has(layerPos)) {
+      nodesByLayerPos.set(layerPos, [])
+    }
+    nodesByLayerPos.get(layerPos)!.push(node)
+  })
+
+  const hasPathThrough = (sourceId: string, targetId: string, intermediateId: string): boolean => {
+    const sourceToIntermediate =
+      sourceToTargets.get(sourceId)?.has(intermediateId) ||
+      targetToSources.get(intermediateId)?.has(sourceId) ||
+      edgeSet.has(`${sourceId}->${intermediateId}`) ||
+      edgeSet.has(`${intermediateId}->${sourceId}`)
+    const intermediateToTarget =
+      sourceToTargets.get(intermediateId)?.has(targetId) ||
+      targetToSources.get(targetId)?.has(intermediateId) ||
+      edgeSet.has(`${intermediateId}->${targetId}`) ||
+      edgeSet.has(`${targetId}->${intermediateId}`)
+    return Boolean(sourceToIntermediate && intermediateToTarget)
+  }
+
+  return edges.filter((edge) => {
+    const sourceId = resolveNodeId(edge.source)
+    const targetId = resolveNodeId(edge.target)
+    const key = `${sourceId}->${targetId}`
+    const reverseKey = `${targetId}->${sourceId}`
+
+    if (seenEdges.has(key) || seenEdges.has(reverseKey)) {
+      return false
+    }
+
+    const sourceNode = nodeMeta.get(sourceId)
+    const targetNode = nodeMeta.get(targetId)
+
+    if (!sourceNode || !targetNode) {
+      seenEdges.add(key)
+      return true
+    }
+
+    const sameLayer = Math.abs(mainAxis(sourceNode) - mainAxis(targetNode)) < SAME_LAYER_THRESHOLD
+
+    if (sameLayer) {
+      const layerPos = Math.round(mainAxis(sourceNode) / SAME_LAYER_THRESHOLD) * SAME_LAYER_THRESHOLD
+      const sameLayerNodes = nodesByLayerPos.get(layerPos) || []
+
+      const crossAxis = (node: LayoutNodeMeta): number =>
+        orientation === 'horizontal' ? node.targetY : node.targetX
+      const minPos = Math.min(crossAxis(sourceNode), crossAxis(targetNode))
+      const maxPos = Math.max(crossAxis(sourceNode), crossAxis(targetNode))
+
+      const hasIntermediateNode = sameLayerNodes.some((node) => {
+        if (node.id === sourceId || node.id === targetId) return false
+        if (crossAxis(node) <= minPos || crossAxis(node) >= maxPos) return false
+        return hasPathThrough(sourceId, targetId, node.id)
+      })
+
+      if (hasIntermediateNode) {
+        return false
+      }
+    }
+
+    seenEdges.add(key)
+    return true
+  })
 }
