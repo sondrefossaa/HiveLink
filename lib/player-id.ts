@@ -1,8 +1,26 @@
-import { v4 as uuidv4 } from 'uuid'
 import type { Player } from '@/types'
 
 const PLAYER_ID_KEY = 'hivelink_player_id'
 const PLAYER_DATA_KEY = 'hivelink_player_data'
+const SCORES_KEY = 'hivelink_scores'
+
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  // Fallback for older environments
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+}
+
+export interface LocalScore {
+  puzzleDate: string
+  wordsUsed: number
+  layers: number
+  pathsFound: number
+  finishedAt: string
+  elapsedMs: number | null
+  playerName?: string
+}
 
 /**
  * Get or create an anonymous player ID
@@ -11,14 +29,14 @@ const PLAYER_DATA_KEY = 'hivelink_player_data'
 export function getPlayerId(): string {
   if (typeof window === 'undefined') {
     // Server-side, return a temporary ID
-    return `temp-${uuidv4()}`
+    return `temp-${generateId()}`
   }
   
   try {
     let playerId = localStorage.getItem(PLAYER_ID_KEY)
     
     if (!playerId) {
-      playerId = uuidv4()
+      playerId = generateId()
       localStorage.setItem(PLAYER_ID_KEY, playerId)
       
       // Also store creation timestamp
@@ -33,7 +51,7 @@ export function getPlayerId(): string {
   } catch (error) {
     // localStorage not available (private browsing, etc.)
     console.warn('localStorage not available:', error)
-    return `session-${uuidv4()}`
+    return `session-${generateId()}`
   }
 }
 
@@ -363,6 +381,115 @@ export function updatePlayerStats(
     }))
   } catch (error) {
     console.warn('Error updating player stats:', error)
+  }
+}
+
+/**
+ * Get all locally saved daily scores, sorted newest first
+ */
+export function getScores(): LocalScore[] {
+  if (typeof window === 'undefined') {
+    return []
+  }
+
+  try {
+    const data = localStorage.getItem(SCORES_KEY)
+    const scores: LocalScore[] = data ? JSON.parse(data) : []
+    return scores.sort((a, b) => b.puzzleDate.localeCompare(a.puzzleDate))
+  } catch (error) {
+    console.warn('Error reading scores:', error)
+    return []
+  }
+}
+
+/**
+ * Get the saved score for a specific puzzle date
+ */
+export function getScoreForDate(puzzleDate: string): LocalScore | null {
+  return getScores().find(score => score.puzzleDate === puzzleDate) ?? null
+}
+
+/**
+ * Save or update a score for a puzzle date.
+ * Keeps the best result: fewer words wins; on equal words, more paths wins.
+ */
+export function upsertScore(score: Omit<LocalScore, 'playerName'>): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const scores = getScores()
+    const existingIndex = scores.findIndex(s => s.puzzleDate === score.puzzleDate)
+
+    if (existingIndex >= 0) {
+      const existing = scores[existingIndex]
+      const isBetter =
+        score.wordsUsed < existing.wordsUsed ||
+        (score.wordsUsed === existing.wordsUsed && score.pathsFound > existing.pathsFound)
+
+      if (isBetter) {
+        scores[existingIndex] = {
+          ...existing,
+          ...score,
+          pathsFound: Math.max(existing.pathsFound, score.pathsFound),
+          playerName: getPlayerName() ?? existing.playerName,
+        }
+      }
+    } else {
+      scores.unshift({ ...score, playerName: getPlayerName() ?? undefined })
+    }
+
+    localStorage.setItem(SCORES_KEY, JSON.stringify(scores))
+  } catch (error) {
+    console.warn('Error saving score:', error)
+  }
+}
+
+/**
+ * Increment the paths found count for a completed puzzle (exploration)
+ */
+export function recordPathFound(puzzleDate: string): void {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    const scores = getScores()
+    const index = scores.findIndex(s => s.puzzleDate === puzzleDate)
+    if (index < 0) return
+
+    scores[index] = { ...scores[index], pathsFound: scores[index].pathsFound + 1 }
+    localStorage.setItem(SCORES_KEY, JSON.stringify(scores))
+  } catch (error) {
+    console.warn('Error recording path:', error)
+  }
+}
+
+/**
+ * Set the player name on all saved scores (used after renaming)
+ */
+export function updateAllScoreNames(playerName: string): number {
+  if (typeof window === 'undefined') {
+    return 0
+  }
+
+  try {
+    const scores = getScores()
+    let updated = 0
+    for (let i = 0; i < scores.length; i++) {
+      if (scores[i].playerName !== playerName) {
+        scores[i] = { ...scores[i], playerName }
+        updated++
+      }
+    }
+    if (updated > 0) {
+      localStorage.setItem(SCORES_KEY, JSON.stringify(scores))
+    }
+    return updated
+  } catch (error) {
+    console.warn('Error updating score names:', error)
+    return 0
   }
 }
 

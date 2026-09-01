@@ -80,38 +80,12 @@ export interface PracticePuzzle {
 export type PuzzleInstance = DailyPuzzle | PracticePuzzle;
 
 // Score Types
-export interface Score {
-  id: number;
-  puzzleDate: string;
-  playerId: string;
-  wordsUsed: number;
-  layers: number;
-  pathsFound: number;
-  finishedAt: string;
-  isDaily: boolean;
-}
-
-export interface LeaderboardEntry {
-  rank: number;
-  playerId: string;
-  playerName?: string;
-  wordsUsed: number;
-  pathsFound: number;
-  finishedAt: string;
-}
-
-export interface AverageStats {
-  avgWordsUsed: number;
-  avgPathsFound: number;
-  totalPlayers: number;
-}
-
-export interface LeaderboardResponse {
-  entries: LeaderboardEntry[];
-  playerRank?: number;
-  playerPercentile?: number;
-  totalPlayers: number;
-  averageStats?: AverageStats;
+export interface LocalScoreInfo {
+  puzzleDate: string
+  wordsUsed: number
+  layers: number
+  pathsFound: number
+  finishedAt: string
 }
 
 // Validation Types
@@ -187,19 +161,7 @@ export interface MultiConnectionResult {
   minLayer: number;
 }
 
-// Ad and Reward Types
-export type RewardType = 'hint' | 'practice_unlimited' | 'streak_protection' | 'ad_free'
-
-export interface RewardStatus {
-  id: number;
-  rewardType: RewardType;
-  unlockedAt: string;
-  expiresAt: string | null;
-  usedAt: string | null;
-  metadata: Record<string, unknown>;
-  isActive: boolean;
-}
-
+// Hint Types
 export interface HintResult {
   suggestedWord: string;
   sharedPart: string;

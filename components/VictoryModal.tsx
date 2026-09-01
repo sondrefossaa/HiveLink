@@ -1,14 +1,12 @@
 'use client'
 
-import { useEffect, useCallback, useState, useRef } from 'react'
+import { useEffect, useCallback, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import confetti from 'canvas-confetti'
 import ShareButton from './ShareButton'
-import RewardedVideoAd from './RewardedVideoAd'
-import { useAdRewards } from '@/hooks/useAdRewards'
-import type { GameStats, PuzzleDifficulty, AverageStats } from '@/types'
+import type { GameStats, PuzzleDifficulty } from '@/types'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
-import { getPlayerId } from '@/lib/player-id'
+import { getScores } from '@/lib/player-id'
 
 interface VictoryModalProps {
   isOpen: boolean
@@ -69,18 +67,38 @@ export default function VictoryModal({
   startWord,
   goalWord,
   difficulty,
-  puzzleDate,
 }: VictoryModalProps) {
   const [showDetails, setShowDetails] = useState(false)
   const [imageStatus, setImageStatus] = useState<'idle' | 'loading' | 'copied' | 'downloaded' | 'error'>('idle')
   const { effectivePreference } = useMotionPreference()
   
-  // Cached average stats - only fetch once per puzzle
-  const [averageStats, setAverageStats] = useState<AverageStats | null>(null)
-  const [loadingAverages, setLoadingAverages] = useState(false)
-  const fetchedPuzzleRef = useRef<string | null>(null)
-  const [showPracticeAd, setShowPracticeAd] = useState(false)
-  const { rewards, unlockReward } = useAdRewards()
+  // Cached personal averages - computed once per modal open
+  const [personalStats, setPersonalStats] = useState<{
+    avgWordsUsed: number
+    avgPathsFound: number
+    totalGames: number
+  } | null>(null)
+
+  useEffect(() => {
+    if (!isOpen || !isDaily) {
+      setPersonalStats(null)
+      return
+    }
+
+    const scores = getScores()
+    if (scores.length === 0) {
+      setPersonalStats(null)
+      return
+    }
+
+    const totalWords = scores.reduce((sum, score) => sum + score.wordsUsed, 0)
+    const totalPaths = scores.reduce((sum, score) => sum + score.pathsFound, 0)
+    setPersonalStats({
+      avgWordsUsed: totalWords / scores.length,
+      avgPathsFound: totalPaths / scores.length,
+      totalGames: scores.length,
+    })
+  }, [isOpen, isDaily])
 
   // Get the first/best path for sharing
   const path = allPaths[0] || []
@@ -225,37 +243,6 @@ export default function VictoryModal({
 
     return () => window.clearInterval(interval)
   }, [effectivePreference, isOpen])
-
-  // Fetch community averages when modal opens (cached per puzzle)
-  useEffect(() => {
-    if (!isOpen || !isDaily) return
-    if (!puzzleDate) return
-    if (fetchedPuzzleRef.current === puzzleDate) return // Already fetched for this puzzle
-    
-    const fetchAverages = async () => {
-      setLoadingAverages(true)
-      try {
-        const playerId = getPlayerId()
-        const params = new URLSearchParams({ playerId })
-        params.set('date', puzzleDate)
-
-        const response = await fetch(`/api/leaderboard/today?${params.toString()}`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.success && data.data.averageStats) {
-            setAverageStats(data.data.averageStats)
-            fetchedPuzzleRef.current = puzzleDate
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch averages:', error)
-      } finally {
-        setLoadingAverages(false)
-      }
-    }
-    
-    fetchAverages()
-  }, [isOpen, isDaily, puzzleDate])
 
   // Format time
   const formatTime = useCallback((ms: number) => {
@@ -405,7 +392,7 @@ export default function VictoryModal({
                 </div>
               </motion.div>
 
-              {/* Community comparison */}
+              {/* Personal history comparison */}
               {isDaily && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
@@ -414,22 +401,18 @@ export default function VictoryModal({
                   className="mb-6 p-4 rounded-xl bg-hive-dark/30 border border-hive-graphite/50"
                 >
                   <div className="text-xs text-gray-500 uppercase tracking-wide mb-3 text-center">
-                    Community Average
+                    Your Average
                   </div>
-                  {loadingAverages ? (
-                    <div className="flex justify-center">
-                      <div className="w-5 h-5 border-2 border-hive-yellow/30 border-t-hive-yellow rounded-full animate-spin" />
-                    </div>
-                  ) : averageStats ? (
+                  {personalStats ? (
                     <div className="grid grid-cols-2 gap-4 text-center">
                       <div>
                         <div className="flex items-center justify-center gap-1">
                           <span className="text-lg font-semibold text-gray-300">
-                            {averageStats.avgWordsUsed.toFixed(1)}
+                            {personalStats.avgWordsUsed.toFixed(1)}
                           </span>
-                          {stats.wordsUsed < averageStats.avgWordsUsed ? (
+                          {stats.wordsUsed < personalStats.avgWordsUsed ? (
                             <span className="text-green-400 text-sm">↓</span>
-                          ) : stats.wordsUsed > averageStats.avgWordsUsed ? (
+                          ) : stats.wordsUsed > personalStats.avgWordsUsed ? (
                             <span className="text-red-400 text-sm">↑</span>
                           ) : (
                             <span className="text-gray-400 text-sm"></span>
@@ -440,11 +423,11 @@ export default function VictoryModal({
                       <div>
                         <div className="flex items-center justify-center gap-1">
                           <span className="text-lg font-semibold text-gray-300">
-                            {averageStats.avgPathsFound.toFixed(1)}
+                            {personalStats.avgPathsFound.toFixed(1)}
                           </span>
-                          {pathsFound > averageStats.avgPathsFound ? (
+                          {pathsFound > personalStats.avgPathsFound ? (
                             <span className="text-green-400 text-sm">↑</span>
-                          ) : pathsFound < averageStats.avgPathsFound ? (
+                          ) : pathsFound < personalStats.avgPathsFound ? (
                             <span className="text-red-400 text-sm">↓</span>
                           ) : (
                             <span className="text-gray-400 text-sm">=</span>
@@ -455,12 +438,12 @@ export default function VictoryModal({
                     </div>
                   ) : (
                     <div className="text-center text-sm text-gray-500">
-                      Be the first to complete today&apos;s puzzle!
+                      Finish more puzzles to build your history!
                     </div>
                   )}
-                  {averageStats && averageStats.totalPlayers > 0 && (
+                  {personalStats && personalStats.totalGames > 0 && (
                     <div className="text-xs text-gray-500 text-center mt-2">
-                      {averageStats.totalPlayers} player{averageStats.totalPlayers !== 1 ? 's' : ''} today
+                      Across {personalStats.totalGames} solved puzzle{personalStats.totalGames !== 1 ? 's' : ''}
                     </div>
                   )}
                 </motion.div>
@@ -620,20 +603,6 @@ export default function VictoryModal({
                 />
               </div>
               <div className="flex flex-col gap-3">
-                {!isDaily && !rewards?.hasPracticeUnlimited && (
-                  <button
-                    onClick={() => setShowPracticeAd(true)}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-hive-yellow/20 to-hive-gold/20 hover:from-hive-yellow/30 hover:to-hive-gold/30
-                              text-hive-yellow font-medium transition-colors border border-hive-yellow/30
-                              flex items-center justify-center gap-2"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Watch Ad for Unlimited Practice
-                  </button>
-                )}
                 <div className="flex gap-3">
                   <button
                     onClick={() => { onClose(); onContinue(); }}
@@ -663,17 +632,6 @@ export default function VictoryModal({
           </motion.div>
         </motion.div>
       )}
-
-      {/* Practice unlimited ad modal */}
-      <RewardedVideoAd
-        rewardType="practice_unlimited"
-        isOpen={showPracticeAd}
-        onRewardUnlocked={() => {
-          setShowPracticeAd(false)
-          // Refresh rewards
-        }}
-        onClose={() => setShowPracticeAd(false)}
-      />
     </AnimatePresence>
   )
 }

@@ -1,41 +1,5 @@
-import { getRedisClient } from './redis'
-
-const ACQUIRE_TOKEN_SCRIPT = `
-local key = KEYS[1]
-local now = tonumber(ARGV[1])
-local refill_rate = tonumber(ARGV[2])
-local capacity = tonumber(ARGV[3])
-local ttl = tonumber(ARGV[4])
-
-local state = redis.call('HMGET', key, 'tokens', 'last_refill')
-local tokens = tonumber(state[1])
-local last_refill = tonumber(state[2])
-
-if not tokens then tokens = capacity end
-if not last_refill then last_refill = now end
-
-if now < last_refill then last_refill = now end
-local delta = now - last_refill
-local refill = delta * refill_rate
-if refill > 0 then
-  tokens = math.min(capacity, tokens + refill)
-end
-
-local allowed = 0
-local wait_time = 0
-
-if tokens >= 1 then
-  tokens = tokens - 1
-  allowed = 1
-else
-  wait_time = math.ceil((1 - tokens) / refill_rate)
-end
-
-redis.call('HMSET', key, 'tokens', tokens, 'last_refill', now)
-redis.call('PEXPIRE', key, ttl)
-
-return {allowed, wait_time, tokens}
-`
+// lib/rate-limit.ts
+// Local token-bucket rate limiter (no Redis). Used to pace Datamuse API calls.
 
 type RateLimiterOptions = {
   id: string
@@ -52,14 +16,13 @@ type QueueJob = {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-export class DistributedRateLimiter {
+export class RateLimiter {
   private readonly options: RateLimiterOptions
-  private readonly redisKey: string
   private readonly refillRatePerMs: number
   private queue: QueueJob[] = []
   private draining = false
-  private localTokens: number
-  private localLastRefill = Date.now()
+  private tokens: number
+  private lastRefill = Date.now()
 
   constructor(options: RateLimiterOptions) {
     if (options.intervalMs <= 0) {
@@ -72,9 +35,8 @@ export class DistributedRateLimiter {
 
     const burstCapacity = Math.max(options.burstCapacity, 1)
     this.options = { ...options, burstCapacity }
-    this.redisKey = `rate-limit:${options.id}`
     this.refillRatePerMs = options.tokensPerInterval / options.intervalMs
-    this.localTokens = burstCapacity
+    this.tokens = burstCapacity
   }
 
   async schedule<T>(fn: () => Promise<T>): Promise<T> {
@@ -95,7 +57,7 @@ export class DistributedRateLimiter {
 
     this.draining = true
     while (this.queue.length) {
-      const waitTime = await this.acquireSlot()
+      const waitTime = this.acquireSlot()
       if (waitTime > 0) {
         await delay(waitTime)
         continue
@@ -113,53 +75,22 @@ export class DistributedRateLimiter {
     this.draining = false
   }
 
-  private async acquireSlot(): Promise<number> {
-    const redis = getRedisClient()
-    if (!redis) {
-      return this.acquireLocalSlot()
-    }
-
-    try {
-      const now = Date.now()
-      const ttl = Math.ceil(this.options.intervalMs * 2)
-      const result = (await redis.eval(
-        ACQUIRE_TOKEN_SCRIPT,
-        1,
-        this.redisKey,
-        now,
-        this.refillRatePerMs,
-        this.options.burstCapacity,
-        ttl
-      )) as [number, number]
-
-      if (Array.isArray(result) && result[0] === 1) {
-        return 0
-      }
-
-      const waitTime = Array.isArray(result) ? Number(result[1]) : this.options.intervalMs
-      return Number.isFinite(waitTime) && waitTime > 0 ? waitTime : this.options.intervalMs
-    } catch (error) {
-      console.error('Distributed rate limiter Redis error:', error)
-      return this.acquireLocalSlot()
-    }
-  }
-
-  private acquireLocalSlot(): number {
+  private acquireSlot(): number {
     const now = Date.now()
-    const delta = now - this.localLastRefill
-    this.localLastRefill = now
+    const delta = now - this.lastRefill
+    this.lastRefill = now
 
-    this.localTokens = Math.min(
+    this.tokens = Math.min(
       this.options.burstCapacity,
-      this.localTokens + delta * this.refillRatePerMs
+      this.tokens + delta * this.refillRatePerMs
     )
 
-    if (this.localTokens >= 1) {
-      this.localTokens -= 1
+    if (this.tokens >= 1) {
+      this.tokens -= 1
       return 0
     }
 
-    return Math.ceil((1 - this.localTokens) / this.refillRatePerMs)
+    return Math.ceil((1 - this.tokens) / this.refillRatePerMs)
   }
 }
 
@@ -170,7 +101,7 @@ const burstCapacity = Math.max(
   1
 )
 
-const datamuseLimiter = new DistributedRateLimiter({
+const datamuseLimiter = new RateLimiter({
   id: 'datamuse-compound-validation',
   tokensPerInterval,
   intervalMs,

@@ -1,0 +1,1852 @@
+{
+  "2026-09-01": {
+    "startWord": "block",
+    "goalWord": "ticking",
+    "optimalSteps": 3
+  },
+  "2026-09-02": {
+    "startWord": "bawdy",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-03": {
+    "startWord": "house",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-09-04": {
+    "startWord": "checker",
+    "goalWord": "loads",
+    "optimalSteps": 3
+  },
+  "2026-09-05": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-06": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-07": {
+    "startWord": "bed",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-09-08": {
+    "startWord": "clothes",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-09-09": {
+    "startWord": "brine",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-09-10": {
+    "startWord": "bug",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-09-11": {
+    "startWord": "row",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-09-12": {
+    "startWord": "coffee",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-09-13": {
+    "startWord": "clearing",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-14": {
+    "startWord": "chapter",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-09-15": {
+    "startWord": "chair",
+    "goalWord": "trap",
+    "optimalSteps": 4
+  },
+  "2026-09-16": {
+    "startWord": "boiler",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-17": {
+    "startWord": "boat",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-09-18": {
+    "startWord": "boat",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-09-19": {
+    "startWord": "chart",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-20": {
+    "startWord": "barrel",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-21": {
+    "startWord": "caddice",
+    "goalWord": "pulls",
+    "optimalSteps": 4
+  },
+  "2026-09-22": {
+    "startWord": "bell",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-09-23": {
+    "startWord": "short",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-09-24": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-09-25": {
+    "startWord": "boarding",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-09-26": {
+    "startWord": "block",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-09-27": {
+    "startWord": "chapter",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-09-28": {
+    "startWord": "door",
+    "goalWord": "lessness",
+    "optimalSteps": 3
+  },
+  "2026-09-29": {
+    "startWord": "bird",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-09-30": {
+    "startWord": "bird",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2026-10-01": {
+    "startWord": "charter",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-10-02": {
+    "startWord": "fire",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2026-10-03": {
+    "startWord": "dragon",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-10-04": {
+    "startWord": "may",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2026-10-05": {
+    "startWord": "bawdy",
+    "goalWord": "trap",
+    "optimalSteps": 4
+  },
+  "2026-10-06": {
+    "startWord": "blithe",
+    "goalWord": "walked",
+    "optimalSteps": 3
+  },
+  "2026-10-07": {
+    "startWord": "house",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2026-10-08": {
+    "startWord": "cake",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-10-09": {
+    "startWord": "chart",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-10-10": {
+    "startWord": "house",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2026-10-11": {
+    "startWord": "coffee",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-10-12": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-10-13": {
+    "startWord": "bird",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-10-14": {
+    "startWord": "caddis",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-10-15": {
+    "startWord": "saw",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-10-16": {
+    "startWord": "black",
+    "goalWord": "waver",
+    "optimalSteps": 4
+  },
+  "2026-10-17": {
+    "startWord": "clearing",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-10-18": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-10-19": {
+    "startWord": "barge",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-10-20": {
+    "startWord": "black",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-10-21": {
+    "startWord": "bawdy",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-10-22": {
+    "startWord": "boiler",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-10-23": {
+    "startWord": "batty",
+    "goalWord": "houses",
+    "optimalSteps": 3
+  },
+  "2026-10-24": {
+    "startWord": "bird",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-10-25": {
+    "startWord": "hot",
+    "goalWord": "swain",
+    "optimalSteps": 3
+  },
+  "2026-10-26": {
+    "startWord": "bride",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-10-27": {
+    "startWord": "charter",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2026-10-28": {
+    "startWord": "bell",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-10-29": {
+    "startWord": "clearing",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-10-30": {
+    "startWord": "boots",
+    "goalWord": "holder",
+    "optimalSteps": 4
+  },
+  "2026-10-31": {
+    "startWord": "caddice",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2026-11-01": {
+    "startWord": "black",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-11-02": {
+    "startWord": "bread",
+    "goalWord": "fly",
+    "optimalSteps": 3
+  },
+  "2026-11-03": {
+    "startWord": "bird",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-11-04": {
+    "startWord": "bird",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-11-05": {
+    "startWord": "saw",
+    "goalWord": "pulls",
+    "optimalSteps": 4
+  },
+  "2026-11-06": {
+    "startWord": "bread",
+    "goalWord": "trap",
+    "optimalSteps": 4
+  },
+  "2026-11-07": {
+    "startWord": "charter",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2026-11-08": {
+    "startWord": "mouse",
+    "goalWord": "making",
+    "optimalSteps": 4
+  },
+  "2026-11-09": {
+    "startWord": "bird",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-11-10": {
+    "startWord": "boarding",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-11-11": {
+    "startWord": "boots",
+    "goalWord": "worts",
+    "optimalSteps": 3
+  },
+  "2026-11-12": {
+    "startWord": "butter",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2026-11-13": {
+    "startWord": "fire",
+    "goalWord": "topper",
+    "optimalSteps": 3
+  },
+  "2026-11-14": {
+    "startWord": "bottle",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-11-15": {
+    "startWord": "may",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-11-16": {
+    "startWord": "bawdy",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-11-17": {
+    "startWord": "bawdy",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-11-18": {
+    "startWord": "bed",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-11-19": {
+    "startWord": "black",
+    "goalWord": "onion",
+    "optimalSteps": 4
+  },
+  "2026-11-20": {
+    "startWord": "catch",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-11-21": {
+    "startWord": "snow",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-11-22": {
+    "startWord": "coffee",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-11-23": {
+    "startWord": "backs",
+    "goalWord": "maker",
+    "optimalSteps": 3
+  },
+  "2026-11-24": {
+    "startWord": "coffee",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-11-25": {
+    "startWord": "cup",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-11-26": {
+    "startWord": "fire",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-11-27": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-11-28": {
+    "startWord": "after",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2026-11-29": {
+    "startWord": "short",
+    "goalWord": "ticker",
+    "optimalSteps": 4
+  },
+  "2026-11-30": {
+    "startWord": "bell",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-12-01": {
+    "startWord": "butts",
+    "goalWord": "boat",
+    "optimalSteps": 4
+  },
+  "2026-12-02": {
+    "startWord": "dream",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-12-03": {
+    "startWord": "bird",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-12-04": {
+    "startWord": "butter",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-12-05": {
+    "startWord": "horse",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-12-06": {
+    "startWord": "mocking",
+    "goalWord": "walks",
+    "optimalSteps": 3
+  },
+  "2026-12-07": {
+    "startWord": "clothes",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-12-08": {
+    "startWord": "mocking",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2026-12-09": {
+    "startWord": "red",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-12-10": {
+    "startWord": "fire",
+    "goalWord": "onion",
+    "optimalSteps": 3
+  },
+  "2026-12-11": {
+    "startWord": "counter",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-12-12": {
+    "startWord": "counter",
+    "goalWord": "fly",
+    "optimalSteps": 4
+  },
+  "2026-12-13": {
+    "startWord": "boiler",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-12-14": {
+    "startWord": "coffee",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-12-15": {
+    "startWord": "caddis",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2026-12-16": {
+    "startWord": "butter",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2026-12-17": {
+    "startWord": "fruit",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2026-12-18": {
+    "startWord": "barge",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-12-19": {
+    "startWord": "may",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2026-12-20": {
+    "startWord": "bawdy",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-12-21": {
+    "startWord": "boat",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-12-22": {
+    "startWord": "charge",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2026-12-23": {
+    "startWord": "boiler",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-12-24": {
+    "startWord": "block",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2026-12-25": {
+    "startWord": "black",
+    "goalWord": "ismal",
+    "optimalSteps": 3
+  },
+  "2026-12-26": {
+    "startWord": "clearing",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-12-27": {
+    "startWord": "black",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2026-12-28": {
+    "startWord": "bawdy",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2026-12-29": {
+    "startWord": "cake",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2026-12-30": {
+    "startWord": "charter",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2026-12-31": {
+    "startWord": "bleach",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-01-01": {
+    "startWord": "catch",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-01-02": {
+    "startWord": "bride",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-01-03": {
+    "startWord": "barrel",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-01-04": {
+    "startWord": "bawdy",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-01-05": {
+    "startWord": "bug",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-01-06": {
+    "startWord": "barrel",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-01-07": {
+    "startWord": "horse",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-01-08": {
+    "startWord": "fire",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-01-09": {
+    "startWord": "checker",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-01-10": {
+    "startWord": "dragon",
+    "goalWord": "wethers",
+    "optimalSteps": 4
+  },
+  "2027-01-11": {
+    "startWord": "boarding",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-01-12": {
+    "startWord": "charter",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-01-13": {
+    "startWord": "bride",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-01-14": {
+    "startWord": "house",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-01-15": {
+    "startWord": "saw",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-01-16": {
+    "startWord": "house",
+    "goalWord": "hanger",
+    "optimalSteps": 4
+  },
+  "2027-01-17": {
+    "startWord": "steam",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-01-18": {
+    "startWord": "boiler",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-01-19": {
+    "startWord": "checker",
+    "goalWord": "yards",
+    "optimalSteps": 3
+  },
+  "2027-01-20": {
+    "startWord": "checker",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-01-21": {
+    "startWord": "clothes",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-01-22": {
+    "startWord": "clearing",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-01-23": {
+    "startWord": "boat",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-01-24": {
+    "startWord": "humming",
+    "goalWord": "like",
+    "optimalSteps": 3
+  },
+  "2027-01-25": {
+    "startWord": "boots",
+    "goalWord": "maker",
+    "optimalSteps": 3
+  },
+  "2027-01-26": {
+    "startWord": "butts",
+    "goalWord": "flower",
+    "optimalSteps": 3
+  },
+  "2027-01-27": {
+    "startWord": "fire",
+    "goalWord": "waver",
+    "optimalSteps": 3
+  },
+  "2027-01-28": {
+    "startWord": "saw",
+    "goalWord": "wether",
+    "optimalSteps": 4
+  },
+  "2027-01-29": {
+    "startWord": "short",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-01-30": {
+    "startWord": "chart",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-01-31": {
+    "startWord": "show",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-02-01": {
+    "startWord": "batty",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-02-02": {
+    "startWord": "counter",
+    "goalWord": "header",
+    "optimalSteps": 3
+  },
+  "2027-02-03": {
+    "startWord": "atmos",
+    "goalWord": "manship",
+    "optimalSteps": 4
+  },
+  "2027-02-04": {
+    "startWord": "caddice",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-02-05": {
+    "startWord": "blood",
+    "goalWord": "builder",
+    "optimalSteps": 3
+  },
+  "2027-02-06": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-02-07": {
+    "startWord": "house",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-02-08": {
+    "startWord": "short",
+    "goalWord": "ball",
+    "optimalSteps": 3
+  },
+  "2027-02-09": {
+    "startWord": "butter",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-02-10": {
+    "startWord": "check",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-02-11": {
+    "startWord": "caddis",
+    "goalWord": "mouth",
+    "optimalSteps": 4
+  },
+  "2027-02-12": {
+    "startWord": "barrel",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-02-13": {
+    "startWord": "boiler",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-02-14": {
+    "startWord": "burro",
+    "goalWord": "board",
+    "optimalSteps": 3
+  },
+  "2027-02-15": {
+    "startWord": "bride",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-02-16": {
+    "startWord": "cake",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-02-17": {
+    "startWord": "block",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-02-18": {
+    "startWord": "boarding",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-02-19": {
+    "startWord": "saw",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-02-20": {
+    "startWord": "chapter",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-02-21": {
+    "startWord": "coffee",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-02-22": {
+    "startWord": "barge",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-02-23": {
+    "startWord": "catch",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-02-24": {
+    "startWord": "barge",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-02-25": {
+    "startWord": "boiler",
+    "goalWord": "trap",
+    "optimalSteps": 4
+  },
+  "2027-02-26": {
+    "startWord": "barrel",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-02-27": {
+    "startWord": "chapter",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-02-28": {
+    "startWord": "checker",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-03-01": {
+    "startWord": "counter",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-03-02": {
+    "startWord": "batter",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-03-03": {
+    "startWord": "boarding",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-03-04": {
+    "startWord": "dragon",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-03-05": {
+    "startWord": "alder",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-03-06": {
+    "startWord": "house",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-03-07": {
+    "startWord": "club",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-03-08": {
+    "startWord": "fly",
+    "goalWord": "making",
+    "optimalSteps": 3
+  },
+  "2027-03-09": {
+    "startWord": "bird",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-03-10": {
+    "startWord": "dragon",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-03-11": {
+    "startWord": "club",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-03-12": {
+    "startWord": "alder",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-03-13": {
+    "startWord": "charter",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-03-14": {
+    "startWord": "butter",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-03-15": {
+    "startWord": "barge",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-03-16": {
+    "startWord": "may",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-03-17": {
+    "startWord": "house",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-03-18": {
+    "startWord": "atmos",
+    "goalWord": "stitch",
+    "optimalSteps": 3
+  },
+  "2027-03-19": {
+    "startWord": "caddis",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-03-20": {
+    "startWord": "charge",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-03-21": {
+    "startWord": "clock",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-03-22": {
+    "startWord": "clothes",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-03-23": {
+    "startWord": "death",
+    "goalWord": "wethers",
+    "optimalSteps": 3
+  },
+  "2027-03-24": {
+    "startWord": "clock",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-03-25": {
+    "startWord": "tug",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-03-26": {
+    "startWord": "clearing",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-03-27": {
+    "startWord": "charter",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-03-28": {
+    "startWord": "club",
+    "goalWord": "trap",
+    "optimalSteps": 4
+  },
+  "2027-03-29": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-03-30": {
+    "startWord": "barge",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-03-31": {
+    "startWord": "boots",
+    "goalWord": "birds",
+    "optimalSteps": 3
+  },
+  "2027-04-01": {
+    "startWord": "barrel",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-04-02": {
+    "startWord": "black",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-04-03": {
+    "startWord": "boiler",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-04-04": {
+    "startWord": "saw",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-04-05": {
+    "startWord": "bawdy",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-04-06": {
+    "startWord": "brush",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-04-07": {
+    "startWord": "cake",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-04-08": {
+    "startWord": "bleach",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-04-09": {
+    "startWord": "alder",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-04-10": {
+    "startWord": "house",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-04-11": {
+    "startWord": "clearing",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-04-12": {
+    "startWord": "clothes",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-04-13": {
+    "startWord": "saw",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-04-14": {
+    "startWord": "caddis",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-04-15": {
+    "startWord": "black",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-04-16": {
+    "startWord": "bride",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-04-17": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-04-18": {
+    "startWord": "belly",
+    "goalWord": "ismal",
+    "optimalSteps": 3
+  },
+  "2027-04-19": {
+    "startWord": "bug",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-04-20": {
+    "startWord": "after",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-04-21": {
+    "startWord": "catch",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-04-22": {
+    "startWord": "alder",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-04-23": {
+    "startWord": "fire",
+    "goalWord": "mouth",
+    "optimalSteps": 3
+  },
+  "2027-04-24": {
+    "startWord": "caddice",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-04-25": {
+    "startWord": "backs",
+    "goalWord": "house",
+    "optimalSteps": 3
+  },
+  "2027-04-26": {
+    "startWord": "counter",
+    "goalWord": "loads",
+    "optimalSteps": 3
+  },
+  "2027-04-27": {
+    "startWord": "clatter",
+    "goalWord": "making",
+    "optimalSteps": 3
+  },
+  "2027-04-28": {
+    "startWord": "charter",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-04-29": {
+    "startWord": "barrel",
+    "goalWord": "less",
+    "optimalSteps": 3
+  },
+  "2027-04-30": {
+    "startWord": "alder",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-05-01": {
+    "startWord": "charter",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-05-02": {
+    "startWord": "charter",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-03": {
+    "startWord": "bed",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-05-04": {
+    "startWord": "alder",
+    "goalWord": "making",
+    "optimalSteps": 4
+  },
+  "2027-05-05": {
+    "startWord": "fly",
+    "goalWord": "wethers",
+    "optimalSteps": 3
+  },
+  "2027-05-06": {
+    "startWord": "chart",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-05-07": {
+    "startWord": "black",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-05-08": {
+    "startWord": "black",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-05-09": {
+    "startWord": "chart",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-05-10": {
+    "startWord": "clock",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-05-11": {
+    "startWord": "fruit",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-05-12": {
+    "startWord": "barge",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-13": {
+    "startWord": "clock",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-05-14": {
+    "startWord": "death",
+    "goalWord": "maker",
+    "optimalSteps": 3
+  },
+  "2027-05-15": {
+    "startWord": "bird",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-16": {
+    "startWord": "boarding",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-05-17": {
+    "startWord": "fire",
+    "goalWord": "binder",
+    "optimalSteps": 4
+  },
+  "2027-05-18": {
+    "startWord": "bleach",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-05-19": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-20": {
+    "startWord": "coffee",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-05-21": {
+    "startWord": "black",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-05-22": {
+    "startWord": "caddis",
+    "goalWord": "worts",
+    "optimalSteps": 4
+  },
+  "2027-05-23": {
+    "startWord": "fire",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-05-24": {
+    "startWord": "butter",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-05-25": {
+    "startWord": "tea",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-05-26": {
+    "startWord": "dragon",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-05-27": {
+    "startWord": "charge",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-28": {
+    "startWord": "boiler",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-05-29": {
+    "startWord": "charter",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-05-30": {
+    "startWord": "sail",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-05-31": {
+    "startWord": "clitter",
+    "goalWord": "pulls",
+    "optimalSteps": 4
+  },
+  "2027-06-01": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-02": {
+    "startWord": "seed",
+    "goalWord": "like",
+    "optimalSteps": 3
+  },
+  "2027-06-03": {
+    "startWord": "bleach",
+    "goalWord": "less",
+    "optimalSteps": 3
+  },
+  "2027-06-04": {
+    "startWord": "hot",
+    "goalWord": "loading",
+    "optimalSteps": 3
+  },
+  "2027-06-05": {
+    "startWord": "clothes",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-06-06": {
+    "startWord": "club",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-07": {
+    "startWord": "barge",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-06-08": {
+    "startWord": "barrel",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-09": {
+    "startWord": "seed",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-06-10": {
+    "startWord": "barge",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-06-11": {
+    "startWord": "barge",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-12": {
+    "startWord": "boarding",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-06-13": {
+    "startWord": "caddis",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-06-14": {
+    "startWord": "bawdy",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-15": {
+    "startWord": "bower",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-06-16": {
+    "startWord": "barge",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-06-17": {
+    "startWord": "cake",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-06-18": {
+    "startWord": "charge",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-06-19": {
+    "startWord": "broncho",
+    "goalWord": "ticker",
+    "optimalSteps": 3
+  },
+  "2027-06-20": {
+    "startWord": "fire",
+    "goalWord": "master",
+    "optimalSteps": 3
+  },
+  "2027-06-21": {
+    "startWord": "backs",
+    "goalWord": "mouthed",
+    "optimalSteps": 3
+  },
+  "2027-06-22": {
+    "startWord": "clothes",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-06-23": {
+    "startWord": "clitter",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-06-24": {
+    "startWord": "cake",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-06-25": {
+    "startWord": "charge",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-06-26": {
+    "startWord": "bug",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-06-27": {
+    "startWord": "catch",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-06-28": {
+    "startWord": "butter",
+    "goalWord": "pulls",
+    "optimalSteps": 4
+  },
+  "2027-06-29": {
+    "startWord": "house",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-06-30": {
+    "startWord": "club",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-07-01": {
+    "startWord": "cake",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-02": {
+    "startWord": "black",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-07-03": {
+    "startWord": "charter",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-07-04": {
+    "startWord": "bleach",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-07-05": {
+    "startWord": "bleach",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-07-06": {
+    "startWord": "bell",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-07-07": {
+    "startWord": "clearing",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-08": {
+    "startWord": "back",
+    "goalWord": "fly",
+    "optimalSteps": 3
+  },
+  "2027-07-09": {
+    "startWord": "bug",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-10": {
+    "startWord": "atmos",
+    "goalWord": "boat",
+    "optimalSteps": 3
+  },
+  "2027-07-11": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-07-12": {
+    "startWord": "clothes",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-07-13": {
+    "startWord": "boiler",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-14": {
+    "startWord": "horse",
+    "goalWord": "house",
+    "optimalSteps": 4
+  },
+  "2027-07-15": {
+    "startWord": "horse",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-07-16": {
+    "startWord": "dragon",
+    "goalWord": "house",
+    "optimalSteps": 4
+  },
+  "2027-07-17": {
+    "startWord": "bug",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-07-18": {
+    "startWord": "canker",
+    "goalWord": "header",
+    "optimalSteps": 3
+  },
+  "2027-07-19": {
+    "startWord": "barrel",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-20": {
+    "startWord": "alder",
+    "goalWord": "binder",
+    "optimalSteps": 4
+  },
+  "2027-07-21": {
+    "startWord": "boarding",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-07-22": {
+    "startWord": "counter",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-07-23": {
+    "startWord": "clothes",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-24": {
+    "startWord": "canker",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-07-25": {
+    "startWord": "hoe",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-07-26": {
+    "startWord": "boiler",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-07-27": {
+    "startWord": "butts",
+    "goalWord": "bottle",
+    "optimalSteps": 3
+  },
+  "2027-07-28": {
+    "startWord": "barge",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-07-29": {
+    "startWord": "checker",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-07-30": {
+    "startWord": "alder",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-07-31": {
+    "startWord": "house",
+    "goalWord": "bell",
+    "optimalSteps": 3
+  },
+  "2027-08-01": {
+    "startWord": "after",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-08-02": {
+    "startWord": "coffee",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-03": {
+    "startWord": "fire",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-08-04": {
+    "startWord": "bawdy",
+    "goalWord": "less",
+    "optimalSteps": 3
+  },
+  "2027-08-05": {
+    "startWord": "cake",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-06": {
+    "startWord": "after",
+    "goalWord": "armine",
+    "optimalSteps": 4
+  },
+  "2027-08-07": {
+    "startWord": "clitter",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-08-08": {
+    "startWord": "atmos",
+    "goalWord": "fly",
+    "optimalSteps": 3
+  },
+  "2027-08-09": {
+    "startWord": "catch",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-08-10": {
+    "startWord": "may",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-08-11": {
+    "startWord": "cake",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-12": {
+    "startWord": "clock",
+    "goalWord": "knob",
+    "optimalSteps": 4
+  },
+  "2027-08-13": {
+    "startWord": "seed",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-08-14": {
+    "startWord": "breech",
+    "goalWord": "owner",
+    "optimalSteps": 3
+  },
+  "2027-08-15": {
+    "startWord": "bawdy",
+    "goalWord": "step",
+    "optimalSteps": 4
+  },
+  "2027-08-16": {
+    "startWord": "batty",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-08-17": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-18": {
+    "startWord": "boots",
+    "goalWord": "waver",
+    "optimalSteps": 3
+  },
+  "2027-08-19": {
+    "startWord": "bride",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-20": {
+    "startWord": "backie",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-08-21": {
+    "startWord": "fire",
+    "goalWord": "hanger",
+    "optimalSteps": 4
+  },
+  "2027-08-22": {
+    "startWord": "life",
+    "goalWord": "door",
+    "optimalSteps": 4
+  },
+  "2027-08-23": {
+    "startWord": "cake",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-24": {
+    "startWord": "horse",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-08-25": {
+    "startWord": "fire",
+    "goalWord": "topper",
+    "optimalSteps": 4
+  },
+  "2027-08-26": {
+    "startWord": "counter",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-08-27": {
+    "startWord": "clothes",
+    "goalWord": "way",
+    "optimalSteps": 4
+  },
+  "2027-08-28": {
+    "startWord": "boat",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-08-29": {
+    "startWord": "clitter",
+    "goalWord": "step",
+    "optimalSteps": 3
+  },
+  "2027-08-30": {
+    "startWord": "fire",
+    "goalWord": "knob",
+    "optimalSteps": 3
+  },
+  "2027-08-31": {
+    "startWord": "cockle",
+    "goalWord": "trap",
+    "optimalSteps": 3
+  },
+  "2027-09-01": {
+    "startWord": "bride",
+    "goalWord": "bell",
+    "optimalSteps": 4
+  },
+  "2027-09-02": {
+    "startWord": "clothes",
+    "goalWord": "door",
+    "optimalSteps": 3
+  },
+  "2027-09-03": {
+    "startWord": "fire",
+    "goalWord": "topper",
+    "optimalSteps": 4
+  },
+  "2027-09-04": {
+    "startWord": "catch",
+    "goalWord": "way",
+    "optimalSteps": 3
+  },
+  "2027-09-05": {
+    "startWord": "chapter",
+    "goalWord": "step",
+    "optimalSteps": 4
+  }
+}

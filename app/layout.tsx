@@ -3,6 +3,7 @@ import { Inter, Space_Grotesk } from 'next/font/google'
 import './globals.css'
 import { MotionPreferenceProvider } from '@/hooks/useMotionPreference'
 import ZoomPrevention from '@/components/ZoomPrevention'
+import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -21,6 +22,8 @@ export const metadata: Metadata = {
   description: 'Chain compound words from start to goal in this daily puzzle game. A new challenge every day!',
   keywords: ['puzzle', 'word game', 'compound words', 'daily puzzle', 'wordle', 'hivelink'],
   authors: [{ name: 'HiveLink' }],
+  applicationName: 'HiveLink',
+  manifest: '/manifest.webmanifest',
   metadataBase: new URL('https://hivelink.buzz'),
   openGraph: {
     title: 'HiveLink - Daily Compound Word Puzzle',
@@ -46,6 +49,15 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  icons: {
+    icon: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/icon.svg', type: 'image/svg+xml' }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: 'HiveLink',
+    statusBarStyle: 'black-translucent',
+  },
 }
 
 export const viewport: Viewport = {
@@ -63,16 +75,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
-      <head>
-        {/* Google Adsense */}
-        <meta name="google-adsense-account" content="ca-pub-6391311831202615"></meta>
-        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6391311831202615"crossOrigin="anonymous"></script>
-      </head>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
         <ZoomPrevention />
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
+        <ServiceWorkerRegistration />
       </body>
     </html>
   )
 }
-

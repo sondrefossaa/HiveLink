@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useAdRewards } from '@/hooks/useAdRewards'
+import { getDailyPuzzle } from '@/lib/daily-puzzle'
+import { generatePracticePuzzle as generatePracticePuzzleForDifficulty } from '@/lib/puzzle-generator'
 import type {
   DailyPuzzle,
   PracticePuzzle,
@@ -65,7 +66,6 @@ interface UsePuzzleResult {
   setDifficulty: (difficulty: PuzzleDifficulty) => void
   generatePracticePuzzle: () => Promise<void>
   isGeneratingPractice: boolean
-  hasUnlimitedPractice: boolean
 }
 
 function resolveClientTimeZone(): string {
@@ -89,9 +89,6 @@ function formatLocalDate(timeZone: string, date: Date = new Date()): string {
 }
 
 export function usePuzzle(): UsePuzzleResult {
-  const { rewards } = useAdRewards()
-  const hasUnlimitedPractice = rewards?.hasPracticeUnlimited ?? false
-  
   // Read URL params on first render (but don't clear yet)
   // Using a ref to store the initial params so they persist across strict mode double-mounting
   const initialParamsRef = useRef<SharedPuzzleParams | null | undefined>(undefined)
@@ -124,31 +121,14 @@ export function usePuzzle(): UsePuzzleResult {
     setError(null)
 
     try {
-      const params = new URLSearchParams({
-        timezone,
-        date: getLocalDate(),
-      })
-
-      const response = await fetch(`/api/puzzle/today?${params.toString()}`)
-      const data = await response.json()
-
-      if (!response.ok) {
-        const message = data.error || 'Failed to fetch puzzle'
-        setError(message)
-        setDailyPuzzle(null)
-        return
-      }
-
-      if (data.success && data.data) {
-        setDailyPuzzle(data.data as DailyPuzzle)
-      } else {
-        throw new Error(data.error || 'Failed to fetch puzzle')
-      }
+      const dateKey = getLocalDate()
+      const puzzle = await getDailyPuzzle(dateKey)
+      setDailyPuzzle(puzzle)
     } catch (err) {
-      console.error('Error fetching puzzle:', err)
-      setError(err instanceof Error ? err.message : 'Failed to fetch puzzle')
-      
-      // Set a fallback puzzle for offline cases
+      console.error('Error resolving daily puzzle:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load puzzle')
+
+      // Set a fallback puzzle so the game stays playable
       setDailyPuzzle({
         id: 0,
         puzzleNumber: 1,
@@ -162,7 +142,7 @@ export function usePuzzle(): UsePuzzleResult {
     } finally {
       setDailyLoading(false)
     }
-  }, [getLocalDate, timezone])
+  }, [getLocalDate])
 
   // Generate a practice puzzle with specific start/goal words (for shared puzzles)
   const generateSharedPracticePuzzle = useCallback(async (
@@ -174,16 +154,14 @@ export function usePuzzle(): UsePuzzleResult {
     setError(null)
 
     try {
-      const url = `/api/puzzle/generate?difficulty=${sharedDifficulty}&start=${encodeURIComponent(startWord)}&goal=${encodeURIComponent(goalWord)}`
-      const response = await fetch(url)
-      const data = await response.json()
+      const puzzle = await generatePracticePuzzleForDifficulty(
+        sharedDifficulty,
+        startWord,
+        goalWord
+      )
 
-      if (!data.success || !data.data) {
-        throw new Error(data.error || 'Failed to generate practice puzzle')
-      }
+      setPracticePuzzle(puzzle)
 
-      setPracticePuzzle(data.data as PracticePuzzle)
-      
       // Clear URL params after successful load
       if (!urlClearedRef.current) {
         clearUrlParams()
@@ -245,14 +223,8 @@ export function usePuzzle(): UsePuzzleResult {
     setError(null)
 
     try {
-      const response = await fetch(`/api/puzzle/generate?difficulty=${diff}`)
-      const data = await response.json()
-
-      if (!data.success || !data.data) {
-        throw new Error(data.error || 'Failed to generate practice puzzle')
-      }
-
-      setPracticePuzzle(data.data as PracticePuzzle)
+      const puzzle = await generatePracticePuzzleForDifficulty(diff)
+      setPracticePuzzle(puzzle)
     } catch (err) {
       console.error('Error generating practice puzzle:', err)
       setError(err instanceof Error ? err.message : 'Failed to generate practice puzzle')
@@ -311,7 +283,7 @@ export function usePuzzle(): UsePuzzleResult {
     setDifficulty: handleDifficultyChange,
     generatePracticePuzzle,
     isGeneratingPractice: practiceLoading,
-    hasUnlimitedPractice,
   }
 }
+
 

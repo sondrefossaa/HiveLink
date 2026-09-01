@@ -24,8 +24,9 @@ butterfly → flytrap → trapdoor → doorbell
 ### Prerequisites
 
 - Node.js 18+
-- npm or yarn
-- A Neon Postgres database (free tier works great!)
+- npm
+
+No database or remote services required — the app runs fully client-side with bundled JSON data and works offline as a PWA.
 
 ### Installation
 
@@ -40,35 +41,12 @@ cd hivelink
 npm install
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env
-```
-
-4. Update `.env` with your Neon database credentials:
-```env
-DATABASE_URL="postgresql://user:password@host/database?sslmode=require"
-DIRECT_URL="postgresql://user:password@host/database?sslmode=require"
-```
-
-5. Initialize the database:
-```bash
-npx prisma db push
-npm run db:seed
-```
-
-6. (Optional) Import compound words dataset:
-```bash
-npm run import:words
-```
-This downloads a public word list, identifies compound words, and imports them into your database for faster validation. The dataset is not committed to Git.
-
-7. Run the development server:
+3. Run the development server:
 ```bash
 npm run dev
 ```
 
-8. Open [http://localhost:3000](http://localhost:3000) in your browser!
+4. Open [http://localhost:3000](http://localhost:3000) in your browser!
 
 ## 🛠 Tech Stack
 
@@ -78,100 +56,73 @@ npm run dev
 - **Animations**: Framer Motion
 - **Graph Visualization**: react-force-graph-2d
 - **Particles**: tsparticles
-- **Database**: Neon Postgres + Prisma ORM
-- **Deployment**: Vercel
+- **Data**: Bundled JSON files (no database)
+- **PWA**: Installable, offline-capable via service worker
 
 ## 📁 Project Structure
 
 ```
 hivelink/
 ├── app/
-│   ├── layout.tsx          # Root layout
-│   ├── page.tsx             # Main game page
-│   ├── globals.css          # Global styles
-│   └── api/                 # API routes
-│       ├── puzzle/today/    # Get today's puzzle
-│       ├── validate/        # Validate compound words
-│       ├── score/           # Submit scores
-│       └── leaderboard/     # Get leaderboard
+│   ├── layout.tsx          # Root layout + PWA metadata
+│   ├── page.tsx            # Main game page
+│   ├── manifest.ts         # PWA manifest
+│   └── api/og/             # OG share image (only server route)
 ├── components/
-│   ├── Game.tsx             # Main game orchestrator
-│   ├── Graph.tsx            # Force-directed graph
-│   ├── InputBar.tsx         # Word input
-│   ├── TopBar.tsx           # Stats and info
-│   ├── VictoryModal.tsx     # Win screen
+│   ├── Game.tsx            # Main game orchestrator
+│   ├── Graph.tsx           # Force-directed graph
+│   ├── InputBar.tsx        # Word input
+│   ├── HintButton.tsx      # Free client-side hints
+│   ├── LeaderboardModal.tsx# Personal stats & history
+│   ├── TopBar.tsx          # Stats and info
+│   ├── VictoryModal.tsx    # Win screen
 │   └── ParticleBackground.tsx
 ├── hooks/
-│   ├── useGameState.ts      # Game state management
-│   └── usePuzzle.ts         # Puzzle fetching
+│   ├── useGameState.ts     # Game state management
+│   └── usePuzzle.ts        # Puzzle resolution (local)
 ├── lib/
-│   ├── prisma.ts            # Database client
-│   ├── validation.ts        # Word validation
-│   ├── compound-utils.ts    # Word parsing
-│   └── player-id.ts         # Player management
+│   ├── dictionary.ts       # Bundled dictionary access
+│   ├── daily-puzzle.ts     # Daily puzzle resolution (bundled + deterministic fallback)
+│   ├── puzzle-generator.ts # Seeded puzzle generation
+│   ├── validation.ts       # Word validation (bundled dictionary + Datamuse fallback)
+│   ├── hints.ts            # Client-side hint generation
+│   ├── compound-utils.ts   # Word parsing
+│   └── player-id.ts        # Player identity, scores & stats (localStorage)
+├── data/
+│   ├── compound-words.json # Compound word dictionary
+│   └── daily-puzzles.json  # Pre-generated daily puzzles
 ├── scripts/
-│   └── import-compound-words.ts  # Import compound words dataset
-├── types/
-│   └── index.ts             # TypeScript types
-└── prisma/
-    ├── schema.prisma        # Database schema
-    └── seed.ts              # Seed data
+│   ├── import-compound-words.ts  # Grow the dictionary (writes data/compound-words.json)
+│   ├── regenerate-daily.ts       # Pre-generate daily puzzles (writes data/daily-puzzles.json)
+│   └── generate-icons.ts         # Regenerate PWA icons
+└── types/
+    └── index.ts            # TypeScript types
 ```
 
-## 🚢 Deployment on Vercel
+## 🗃 Data Model
 
-### 1. Connect Your Repository
+All game data lives in the repo:
 
-1. Push your code to GitHub
-2. Go to [Vercel](https://vercel.com) and import your repository
-3. Vercel will auto-detect Next.js
+- **`data/compound-words.json`** — the compound word dictionary. Bundled with the app and used for validation, hints, and puzzle generation.
+- **`data/daily-puzzles.json`** — pre-generated daily puzzles (date → start/goal/optimal steps). Pins each day's puzzle; dates not present fall back to deterministic date-seeded generation in the browser.
+- **`localStorage`** — per-device player identity, saved game state, solved-puzzle history, streaks, and stats.
 
-### 2. Set Up Neon Database
+## 🧰 Data Scripts
 
-1. Create a free database at [Neon](https://neon.tech)
-2. Copy the connection string
-
-### 3. Configure Environment Variables
-
-In your Vercel project settings, add:
-
-```
-DATABASE_URL=your_neon_connection_string
-DIRECT_URL=your_neon_direct_connection_string
-```
-
-### 4. Deploy
-
-Vercel will automatically:
-- Run `prisma generate` during build
-- Deploy your app
-- Set up serverless functions for API routes
-
-### 5. Initialize Database
-
-Run the seed script after first deploy:
 ```bash
-npx prisma db push
-npm run db:seed
+npm run data:words            # Fetch public word lists, extract compound words, merge into the dictionary
+npm run data:words -- --max 5000    # Cap how many new words are added
+npm run data:puzzles          # Pre-generate daily puzzles (today → +370 days)
+npm run data:puzzles -- --force     # Regenerate existing dates too
+npm run data:puzzles -- --start 2026-09-01 --days 14
+npm run icons                 # Regenerate PWA PNG icons
 ```
 
-## 📝 Adding New Puzzles
+After changing the dictionary, run `npm run data:puzzles -- --force` to refresh future puzzles, then commit the JSON files.
 
-Add puzzles to the `prisma/seed.ts` file:
+## 🚢 Deployment
 
-```typescript
-const puzzles = [
-  {
-    date: new Date('2024-01-15'),
-    startWord: 'butterfly',
-    goalWord: 'moonshine',
-    optimalSteps: 6,
-  },
-  // Add more puzzles...
-]
-```
-
-Then run: `npm run db:seed`
+The app deploys anywhere Next.js runs (e.g. Vercel). There are no environment variables to configure — the only server component is the `/api/og` share-image route. Everything else is static and runs in the browser, so the game works fully offline once installed.
 
 ## 🎨 Customization
 
@@ -193,10 +144,8 @@ colors: {
 
 ### Word Validation
 The game validates compound words using:
-1. **Local database** (fast): Compound words stored in Postgres via `npm run import:words`
-2. **Datamuse API** (fallback): External API for words not in the database
-
-To import a comprehensive compound words dataset, run `npm run import:words`. This downloads a public word list, identifies compound words, and bulk-imports them into your Neon database.
+1. **Bundled dictionary** (instant, offline): words in `data/compound-words.json`
+2. **Datamuse API** (fallback): external API for words not in the dictionary (requires network)
 
 ## 🤝 Contributing
 
@@ -214,4 +163,3 @@ MIT License - see [LICENSE](LICENSE) for details.
 ---
 
 Made with 🍯 by [Your Name]
-

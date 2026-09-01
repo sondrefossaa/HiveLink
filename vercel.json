@@ -1,13 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma generate && next build",
   "framework": "nextjs",
-  "regions": ["iad1"],
-  "crons": [
-    {
-      "path": "/api/cron/generate-daily",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "regions": ["iad1"]
 }
-

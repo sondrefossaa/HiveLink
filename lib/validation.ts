@@ -8,7 +8,6 @@ import {
 } from './compound-utils'
 import type { ValidationResult } from '@/types'
 import { datamuseRateLimiter } from './rate-limit'
-import { getPrismaClient } from './prisma-client'
 
 // In-memory cache for Datamuse API results
 const validationCache = new Map<string, ValidationResult>()
@@ -49,23 +48,25 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
     return result
   }
 
-  // Prefer local database lookup before hitting external APIs
-  const storedResult = await lookupCompoundWord(normalized)
-  if (storedResult) {
+  // Prefer the bundled dictionary parts before hitting external APIs
+  const bundledParts = getKnownCompoundParts(normalized)
+  if (bundledParts && bundledParts.length >= 2) {
+    const storedResult: ValidationResult = {
+      valid: true,
+      parts: bundledParts,
+      word: normalized,
+    }
     validationCache.set(normalized, storedResult)
     return storedResult
   }
   
   try {
-    // Query Datamuse API to check if the word exists using distributed rate limiting
+    // Query Datamuse API to check if the word exists using local rate limiting
     const data = (await datamuseRateLimiter.schedule(async () => {
       const response = await fetch(
         `https://api.datamuse.com/words?sp=${normalized}&md=d&max=1`,
         {
           cache: 'no-store',
-          headers: {
-            'User-Agent': 'HiveLink Compound Validator/1.0',
-          },
         }
       )
 
@@ -140,7 +141,6 @@ export async function validateCompoundWord(word: string): Promise<ValidationResu
       word: normalized,
     }
     registerCompoundParts(normalized, parts)
-    void persistCompoundWord(normalized, parts)
     validationCache.set(normalized, result)
     return result
     
@@ -248,9 +248,6 @@ async function verifyCompoundPart(part: string): Promise<boolean> {
         `https://api.datamuse.com/words?sp=${normalized}&md=d&max=1`,
         {
           cache: 'no-store',
-          headers: {
-            'User-Agent': 'HiveLink Compound Validator/1.0',
-          },
         }
       )
 
@@ -442,60 +439,5 @@ function tryAlternativeParsing(word: string): string[] {
 export function clearValidationCache(): void {
   validationCache.clear()
   partValidationCache.clear()
-}
-
-async function lookupCompoundWord(word: string): Promise<ValidationResult | null> {
-  if (typeof window !== 'undefined') {
-    return null
-  }
-
-  try {
-    const prisma = await getPrismaClient()
-    const record = await prisma.compoundWord.findUnique({
-      where: { word },
-    })
-
-    if (!record) {
-      return null
-    }
-
-    if (!isLikelyCompoundWord(record.word, record.parts)) {
-      return null
-    }
-
-    registerCompoundParts(record.word, record.parts)
-
-    return {
-      valid: true,
-      parts: record.parts,
-      word: record.word,
-    }
-  } catch (error) {
-    console.error('Compound word DB lookup failed:', error)
-    return null
-  }
-}
-
-async function persistCompoundWord(word: string, parts: string[]): Promise<void> {
-  if (typeof window !== 'undefined') {
-    return
-  }
-
-  if (!isLikelyCompoundWord(word, parts)) {
-    return
-  }
-
-  registerCompoundParts(word, parts)
-
-  try {
-    const prisma = await getPrismaClient()
-    await prisma.compoundWord.upsert({
-      where: { word },
-      update: { parts },
-      create: { word, parts },
-    })
-  } catch (error) {
-    console.error('Compound word DB persist failed:', error)
-  }
 }
 

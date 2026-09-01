@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getPlayerName, setPlayerName, getPlayerId } from '@/lib/player-id'
+import { getPlayerName, setPlayerName, updateAllScoreNames } from '@/lib/player-id'
 
 interface PlayerNameInputProps {
   onNameSet?: (name: string) => void
@@ -54,20 +54,13 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
     setTimeout(() => setSuccess(false), 3000)
   }
   
-  const updateExistingScores = async (playerName: string) => {
+  const updateExistingScores = (playerName: string) => {
     try {
-      const playerId = getPlayerId()
-      const response = await fetch('/api/player/update-name', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId, playerName }),
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        console.log(`Updated ${data.data?.updatedCount || 0} scores with your name`)
-        onNameUpdated?.()
+      const updatedCount = updateAllScoreNames(playerName)
+      if (updatedCount > 0) {
+        console.log(`Updated ${updatedCount} saved scores with your name`)
       }
+      onNameUpdated?.()
     } catch (error) {
       console.error('Failed to update existing scores:', error)
     }

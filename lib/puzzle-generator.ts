@@ -1,18 +1,12 @@
 import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
-import type { CompoundWord } from '@/types'
-import compoundWords from '@/data/compound-words.json'
+import { parseCompoundWord } from '@/lib/compound-utils'
 import {
-  parseCompoundWord,
-  isLikelyCompoundWord,
-  registerCompoundParts,
-} from '@/lib/compound-utils'
-import { getPrismaClient } from '@/lib/prisma-client'
-
-interface WordEntry {
-  word: string
-  parts: string[]
-  source?: 'canonical' | 'runtime'
-}
+  createEnvironment,
+  DEFAULT_ENVIRONMENT,
+  toWordEntry,
+  type WordEntry,
+  type WordEnvironment,
+} from '@/lib/dictionary'
 
 interface GeneratedPuzzle extends PracticePuzzle {
   solutionPath: string[]
@@ -30,43 +24,6 @@ interface DailyPuzzleOptions {
   minSteps?: number
 }
 
-interface WordEnvironment {
-  words: WordEntry[]
-  partIndex: Map<string, WordEntry[]>
-}
-
-function toWordEntry(word: string, parts?: string[], source: WordEntry['source'] = 'runtime'): WordEntry | null {
-  const normalizedWord = word.toLowerCase()
-  const providedParts = parts ? parts.map((part) => part.toLowerCase()).filter(Boolean) : []
-
-  if (
-    providedParts.length >= 2 &&
-    providedParts.join('') === normalizedWord &&
-    isLikelyCompoundWord(word, providedParts)
-  ) {
-    return { word: normalizedWord, parts: providedParts, source }
-  }
-
-  const parsedParts = parseCompoundWord(word)
-  if (isLikelyCompoundWord(word, parsedParts)) {
-    return {
-      word: normalizedWord,
-      parts: parsedParts.map((part) => part.toLowerCase()),
-      source,
-    }
-  }
-
-  return null
-}
-
-const RAW_WORDS = (compoundWords as CompoundWord[])
-  .map((entry) => toWordEntry(entry.word, entry.parts, 'canonical'))
-  .filter((entry): entry is WordEntry => entry !== null)
-
-const DEFAULT_ENVIRONMENT = createEnvironment(RAW_WORDS)
-let practiceEnvironmentCache: WordEnvironment | null = null
-let practiceEnvironmentPromise: Promise<WordEnvironment> | null = null
-
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
   easy: { min: 3, max: 4 }, // Reduced for suffix chaining
   medium: { min: 4, max: 5 }, // Reduced for suffix chaining - was 6-7
@@ -74,46 +31,6 @@ const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }>
 }
 
 const MAX_CHAIN_ATTEMPTS = 800 // Increased for suffix chaining which is more restrictive
-
-function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
-  const index = new Map<string, WordEntry[]>()
-  for (const entry of words) {
-    // For suffix chaining, index by FIRST part (to find candidates that start with a given part)
-    if (entry.parts.length > 0) {
-      const firstPart = entry.parts[0].toLowerCase()
-      const list = index.get(firstPart) ?? []
-      list.push(entry)
-      index.set(firstPart, list)
-    }
-    // Also index by all parts for other uses
-    const uniqueParts = Array.from(new Set(entry.parts))
-    for (const part of uniqueParts) {
-      const partLower = part.toLowerCase()
-      if (partLower === entry.parts[0].toLowerCase()) continue // Already added above
-      const list = index.get(partLower) ?? []
-      if (!list.includes(entry)) {
-        list.push(entry)
-      }
-      index.set(partLower, list)
-    }
-  }
-  return index
-}
-
-function createEnvironment(entries: WordEntry[]): WordEnvironment {
-  const normalized = entries.map((entry) => ({
-    word: entry.word.toLowerCase(),
-    parts: entry.parts.map((part) => part.toLowerCase()),
-    source: entry.source ?? 'runtime',
-  }))
-
-  const words = normalized.filter((entry) => entry.parts.length >= 2)
-
-  return {
-    words,
-    partIndex: buildPartIndex(words),
-  }
-}
 
 // Seeded random number generator (Mulberry32)
 function createSeededRandom(seed: number): () => number {
@@ -312,75 +229,9 @@ function findWordEntry(word: string, environment: WordEnvironment): WordEntry | 
   return environment.words.find((entry) => entry.word === normalized) || null
 }
 
+// Practice puzzles use the bundled dictionary directly - no database needed.
 async function loadPracticeEnvironment(): Promise<WordEnvironment> {
-  if (practiceEnvironmentCache) {
-    return practiceEnvironmentCache
-  }
-
-  if (practiceEnvironmentPromise) {
-    return practiceEnvironmentPromise
-  }
-
-  // Always fall back to the baked-in list if we're not on the server
-  if (typeof window !== 'undefined') {
-    practiceEnvironmentCache = DEFAULT_ENVIRONMENT
-    return practiceEnvironmentCache
-  }
-
-  practiceEnvironmentPromise = (async () => {
-    try {
-      const prisma = await getPrismaClient()
-      const records = await prisma.compoundWord.findMany({
-        select: { word: true, parts: true },
-      })
-
-      const merged = new Map<string, WordEntry>()
-
-      for (const entry of RAW_WORDS) {
-        registerCompoundParts(entry.word, entry.parts)
-      }
-
-      for (const record of records) {
-        const entry = toWordEntry(record.word, record.parts, 'runtime')
-        if (!entry) {
-          continue
-        }
-
-        registerCompoundParts(entry.word, entry.parts)
-        merged.set(entry.word, entry)
-      }
-
-      if (merged.size === 0) {
-        for (const entry of RAW_WORDS) {
-          merged.set(entry.word, entry)
-        }
-      } else {
-        for (const entry of RAW_WORDS) {
-          if (!merged.has(entry.word)) {
-            merged.set(entry.word, entry)
-          }
-        }
-      }
-
-      const entries = Array.from(merged.values())
-      if (entries.length === 0) {
-        return DEFAULT_ENVIRONMENT
-      }
-
-      return createEnvironment(entries)
-    } catch (error) {
-      console.error('Failed to load dictionary compound words for practice puzzles:', error)
-      return DEFAULT_ENVIRONMENT
-    }
-  })()
-
-  try {
-    practiceEnvironmentCache = await practiceEnvironmentPromise
-  } finally {
-    practiceEnvironmentPromise = null
-  }
-
-  return practiceEnvironmentCache
+  return DEFAULT_ENVIRONMENT
 }
 
 export async function generatePracticePuzzle(

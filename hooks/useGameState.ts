@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import type { GraphNode, GraphEdge, GameState, ValidationResult, PuzzleInstance } from '@/types'
+import type { GraphNode, GraphEdge, GameState, PuzzleInstance } from '@/types'
 import {
   parseCompoundWord,
   findSuffixConnections,
@@ -11,13 +11,14 @@ import {
   findPathToNode,
 } from '@/lib/compound-utils'
 import { quickValidate } from '@/lib/quick-validation'
+import { validateCompoundWord } from '@/lib/validation'
 import {
   getSavedGameState,
   saveGameState,
   markPuzzleCompleted,
-  isPuzzleCompleted,
   updatePlayerStats,
-  getPlayerId,
+  upsertScore,
+  recordPathFound,
 } from '@/lib/player-id'
 
 interface SavedState {
@@ -279,22 +280,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         return { success: false, error: err }
       }
 
-      // Validate via API
-      const response = await fetch('/api/validate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ word: normalized }),
-      })
-
-      const result = await response.json()
-      
-      if (!result.success || !result.data) {
-        const err = result.error || 'Validation failed'
-        setError(err)
-        return { success: false, error: err }
-      }
-
-      const validation: ValidationResult = result.data
+      // Validate locally (bundled dictionary + Datamuse fallback)
+      const validation = await validateCompoundWord(normalized)
 
       if (!validation.valid) {
         setError(validation.error || 'Not a valid compound word')
@@ -420,6 +407,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
             allPathsRef.current = sorted // Update ref immediately
             return sorted
           })
+          if (puzzle.isDaily) {
+            recordPathFound(puzzle.date)
+          }
         }
         
         if (isFirstWin) {
@@ -513,7 +503,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       let layersToSubmit = maxLayer
       if (winningPath.length > 0) {
         const winningPathWords = new Set(winningPath.map(w => w.toLowerCase()))
-        const winningPathNodes = nodes.filter(n => 
+        const winningPathNodes = nodes.filter(n =>
           winningPathWords.has(n.word.toLowerCase())
         )
         if (winningPathNodes.length > 0) {
@@ -528,26 +518,22 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         }
       }
 
-      const playerId = getPlayerId()
-      
-      await fetch('/api/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerId,
-          wordsUsed,
-          layers: layersToSubmit,
-          puzzleDate: puzzle.date,
-          isDaily: puzzle.isDaily,
-          timeElapsed: finalTimeElapsed,
-        }),
+      // Save the score locally (per-device history)
+      const finishedAtMs = startTime + (finalTimeElapsed ?? Date.now() - startTime)
+      upsertScore({
+        puzzleDate: puzzle.date,
+        wordsUsed,
+        layers: layersToSubmit,
+        pathsFound: 1,
+        finishedAt: new Date(finishedAtMs).toISOString(),
+        elapsedMs: finalTimeElapsed ?? null,
       })
 
       scoreSubmittedRef.current = true
     } catch (error) {
-      console.error('Error submitting score:', error)
+      console.error('Error saving score:', error)
     }
-  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes])
+  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes, startTime])
 
   // Auto-submit score when game is complete
   useEffect(() => {

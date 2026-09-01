@@ -47,7 +47,6 @@ export default function Game() {
     setDifficulty,
     generatePracticePuzzle,
     isGeneratingPractice,
-    hasUnlimitedPractice,
   } = usePuzzle()
   const gameState = useGameState(puzzle)
   const [showVictory, setShowVictory] = useState(false)
