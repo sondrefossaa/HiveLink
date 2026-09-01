@@ -77,7 +77,7 @@ export default function LoadingScreen() {
           transition={{ delay: 0.5 }}
           className="text-gray-400"
         >
-          Loading puzzle...
+          Laster puslespill...
         </motion.p>
 
         {/* Loading dots */}

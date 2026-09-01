@@ -99,8 +99,8 @@ export async function getDailyPuzzle(dateKey: string): Promise<DailyPuzzle> {
     console.error(`Failed to generate daily puzzle for ${dateKey}:`, error)
     // Deterministic fallback so the game stays playable
     return buildDailyPuzzle(dateKey, {
-      startWord: 'butter',
-      goalWord: 'chair',
+      startWord: 'fot',
+      goalWord: 'stol',
       optimalSteps: 4,
     })
   }

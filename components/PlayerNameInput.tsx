@@ -26,17 +26,17 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
     const trimmed = name.trim()
     
     if (!trimmed) {
-      setError('Name cannot be empty')
+      setError('Navnet kan ikke være tomt')
       return
     }
     
     if (trimmed.length > 20) {
-      setError('Name must be 20 characters or less')
+      setError('Navnet må være 20 tegn eller færre')
       return
     }
     
     if (!/^[a-zA-Z0-9_\s-]+$/.test(trimmed)) {
-      setError('Only letters, numbers, spaces, hyphens, and underscores allowed')
+      setError('Bare bokstaver, tall, mellomrom, bindestreker og understreker er tillatt')
       return
     }
     
@@ -87,7 +87,7 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
         <button
           onClick={() => setIsEditing(true)}
           className={`text-hive-yellow hover:text-white transition-colors font-medium ${className}`}
-          title="Click to change your name"
+          title="Klikk for å endre navnet ditt"
         >
           {name}
         </button>
@@ -103,9 +103,9 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
       <button
         onClick={() => setIsEditing(true)}
         className={`text-hive-yellow/80 hover:text-hive-yellow transition-colors text-sm ${className}`}
-        title="Click to add your name"
+        title="Klikk for å legge til navnet ditt"
       >
-        add your name
+        legg til navnet ditt
       </button>
     )
   }
@@ -118,7 +118,7 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
           value={name}
           onChange={(e) => setName(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="your name"
+          placeholder="navnet ditt"
           maxLength={20}
           autoFocus
           className="bg-hive-graphite/80 text-white px-3 py-1 rounded text-sm focus:outline-none focus:ring-2 focus:ring-hive-yellow/50 placeholder-gray-500"
@@ -127,13 +127,13 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
           onClick={handleSave}
           className="bg-hive-yellow text-hive-dark px-3 py-1 rounded text-sm font-medium hover:bg-hive-yellow/90 transition-colors"
         >
-          Save
+          Lagre
         </button>
         <button
           onClick={handleCancel}
           className="text-hive-yellow/60 hover:text-hive-yellow text-sm transition-colors"
         >
-          Cancel
+          Avbryt
         </button>
       </div>
       {error && (

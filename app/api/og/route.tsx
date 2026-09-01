@@ -9,8 +9,8 @@ export async function GET(request: NextRequest) {
     
     // Get params from URL
     const status = searchParams.get('status') || 'playing' // 'won', 'gave-up', 'playing'
-    const startWord = searchParams.get('start') || 'butterfly'
-    const goalWord = searchParams.get('goal') || 'moonlight'
+    const startWord = searchParams.get('start') || 'fotball'
+    const goalWord = searchParams.get('goal') || 'ballong'
     const words = searchParams.get('words') || '0'
     const layers = searchParams.get('layers') || '0'
     const time = searchParams.get('time') || '0:00'
@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
 
     // Status config - matching VictoryModal style
     const statusConfig: Record<string, { emoji: string; title: string; subtitle: string; subtitleColor: string }> = {
-      won: { emoji: '🏆', title: 'Puzzle Solved!', subtitle: 'Excellent!', subtitleColor: '#4ade80' },
-      'gave-up': { emoji: '🔄', title: 'Keep Trying!', subtitle: 'You got this', subtitleColor: '#fbbf24' },
-      playing: { emoji: '🐝', title: 'In Progress', subtitle: 'Still buzzing...', subtitleColor: '#F4B400' },
+      won: { emoji: '🏆', title: 'Puslespill løst!', subtitle: 'Utmerket!', subtitleColor: '#4ade80' },
+      'gave-up': { emoji: '🔄', title: 'Prøv igjen!', subtitle: 'Du får dette til', subtitleColor: '#fbbf24' },
+      playing: { emoji: '🐝', title: 'Pågående', subtitle: 'Hummer fortsatt...', subtitleColor: '#F4B400' },
     }
     const statusInfo = statusConfig[status] || statusConfig.playing
 
@@ -213,7 +213,7 @@ export async function GET(request: NextRequest) {
                   {words}
                 </span>
                 <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Words
+                  Ord
                 </span>
               </div>
 
@@ -239,7 +239,7 @@ export async function GET(request: NextRequest) {
                   {layers}
                 </span>
                 <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Layers
+                  Lag
                 </span>
               </div>
 
@@ -265,7 +265,7 @@ export async function GET(request: NextRequest) {
                   {time}
                 </span>
                 <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Time
+                  Tid
                 </span>
               </div>
             </div>

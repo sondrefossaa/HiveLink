@@ -31,9 +31,9 @@ interface TopBarProps {
 }
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
-  easy: 'Easy',
-  medium: 'Medium',
-  hard: 'Hard',
+  easy: 'Lett',
+  medium: 'Middels',
+  hard: 'Vanskelig',
 }
 
 export default function TopBar({
@@ -66,7 +66,7 @@ export default function TopBar({
   
   // Format date for display
   const formattedDate = date
-    ? new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
+    ? new Date(date + 'T00:00:00').toLocaleDateString('nb-NO', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
@@ -107,16 +107,16 @@ export default function TopBar({
                 {isDaily ? (
                   <>
                     <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
-                      🐝 {currentStreak} day streak
+                      🐝 {currentStreak} dagers rekke
                     </span>
                     <div className="flex md:hidden items-center gap-1.5">
-                      <span className="text-gray-400">Hello,</span>
+                      <span className="text-gray-400">Hei,</span>
                       <PlayerNameInput className="text-sm" />
                     </div>
                   </>
                 ) : (
                   <span className="bg-hive-yellow/10 text-hive-yellow px-3 py-1 rounded-full font-medium">
-                    Practice
+                    Øvelse
                   </span>
                 )}
               </div>
@@ -124,7 +124,7 @@ export default function TopBar({
               {/* Player Name and Date */}
               <div className="hidden md:flex items-center gap-2 text-sm">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-gray-400">Hello,</span>
+                  <span className="text-gray-400">Hei,</span>
                   <PlayerNameInput className="text-sm" />
                 </div>
                 
@@ -150,7 +150,7 @@ export default function TopBar({
                     {wordsUsed}
                   </motion.div>
                   <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
-                    Words
+                    Ord
                   </div>
                 </div>
 
@@ -166,7 +166,7 @@ export default function TopBar({
                     {layersExplored}
                   </motion.div>
                   <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
-                    Layers
+                    Lag
                   </div>
                 </div>
 
@@ -182,8 +182,8 @@ export default function TopBar({
                       >
                         {parValue}
                       </motion.div>
-                      <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
-                        Target
+                        <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
+                        Mål
                       </div>
                     </div>
                   </>
@@ -208,7 +208,7 @@ export default function TopBar({
                             : 'text-gray-300 hover:text-white'
                         }`}
                       >
-                        {option === 'daily' ? 'Daily' : 'Practice'}
+                        {option === 'daily' ? 'Daglig' : 'Øvelse'}
                       </button>
                     ))}
                   </div>
@@ -230,7 +230,7 @@ export default function TopBar({
                             d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
                           />
                         </svg>
-                        <span className="text-sm font-medium">Leaderboard</span>
+                        <span className="text-sm font-medium">Ledertavle</span>
                       </button>
                     )
                   ) : (
@@ -253,7 +253,7 @@ export default function TopBar({
                         disabled={isGeneratingPractice}
                         className="px-3 py-1.5 rounded-lg bg-hive-yellow text-hive-dark text-sm font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors whitespace-nowrap"
                       >
-                        {isGeneratingPractice ? '...' : 'New Puzzle'}
+                        {isGeneratingPractice ? '...' : 'Nytt puslespill'}
                       </button>
                     </>
                   )}
@@ -292,7 +292,7 @@ export default function TopBar({
                 className={`flex-1 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border shadow-sm text-right
                            ${isComplete ? 'border-green-500/50' : 'border-hive-graphite/60'}`}
               >
-                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Goal</div>
+                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Mål</div>
                 <div className={`text-sm font-bold leading-none truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>
                   {goalWord}
                 </div>
@@ -301,7 +301,7 @@ export default function TopBar({
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 uppercase tracking-wide text-[10px]">Mode</span>
+                <span className="text-gray-400 uppercase tracking-wide text-[10px]">Modus</span>
                 <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
                   {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
                     <button
@@ -313,7 +313,7 @@ export default function TopBar({
                           : 'text-gray-300 hover:text-white'
                       }`}
                     >
-                      {option === 'daily' ? 'Daily' : 'Practice'}
+                      {option === 'daily' ? 'Daglig' : 'Øvelse'}
                     </button>
                   ))}
                 </div>
@@ -339,7 +339,7 @@ export default function TopBar({
                     disabled={isGeneratingPractice}
                     className="px-2 py-1 rounded-lg bg-hive-yellow text-hive-dark text-xs font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors"
                   >
-                    New
+                    Ny
                   </button>
                 </div>
               )}
@@ -357,7 +357,7 @@ export default function TopBar({
                       d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21"
                     />
                   </svg>
-                  Leaderboard
+                  Ledertavle
                 </button>
               )}
             </div>

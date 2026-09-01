@@ -52,7 +52,7 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
         }
       }}
       className={`px-4 py-2 rounded-xl font-medium transition-colors flex items-center gap-2 bg-hive-yellow hover:bg-hive-gold text-hive-dark disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
-      title="Get a hint"
+      title="Få et hint"
     >
       {loading ? (
         <motion.div

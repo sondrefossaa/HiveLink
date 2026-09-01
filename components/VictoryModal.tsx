@@ -259,11 +259,11 @@ export default function VictoryModal({
     const optimal = stats.optimalSteps || stats.wordsUsed
     const ratio = stats.wordsUsed / optimal
 
-  if (ratio <= 1) return { emoji: '👑', text: 'Queen Bee!', color: 'text-yellow-400' }
-  if (ratio <= 1.2) return { emoji: '🐝', text: 'Forager Bee', color: 'text-green-400' }
-  if (ratio <= 1.5) return { emoji: '🍯', text: 'Courting Drone', color: 'text-blue-400' }
-  if (ratio <= 2) return { emoji: '🌸', text: 'Nectar Scout', color: 'text-purple-400' }
-  return { emoji: '🐛', text: 'Hive Helper', color: 'text-gray-500' }
+  if (ratio <= 1) return { emoji: '👑', text: 'Dronningbie!', color: 'text-yellow-400' }
+  if (ratio <= 1.2) return { emoji: '🐝', text: 'Samlarbie', color: 'text-green-400' }
+  if (ratio <= 1.5) return { emoji: '🍯', text: 'Parringsdrone', color: 'text-blue-400' }
+  if (ratio <= 2) return { emoji: '🌸', text: 'Nektarspeider', color: 'text-purple-400' }
+  return { emoji: '🐛', text: 'Bihjelper', color: 'text-gray-500' }
   }, [stats])
 
   const rating = getPerformanceRating()
@@ -321,7 +321,7 @@ export default function VictoryModal({
                 transition={{ delay: 0.3 }}
                 className="text-2xl font-bold text-center text-white mb-1"
               >
-                Puzzle Solved!
+                Puslespill løst!
               </motion.h2>
 
               <motion.p
@@ -340,7 +340,7 @@ export default function VictoryModal({
                   transition={{ delay: 0.45 }}
                   className="mb-4 px-3 py-2 rounded-xl bg-hive-yellow/10 text-hive-yellow text-sm text-center"
                 >
-                  Practice game · Does not count toward streak or stats
+                  Øvelsespill · Tell ikke mot rekke eller statistikk
                 </motion.div>
               )}
 
@@ -351,7 +351,7 @@ export default function VictoryModal({
                   transition={{ delay: 0.5 }}
                   className="text-center text-sm text-gray-300 mb-2"
                 >
-                  Par: {parValue} words
+                  Par: {parValue} ord
                 </motion.p>
               )}
 
@@ -363,7 +363,7 @@ export default function VictoryModal({
                   transition={{ delay: 0.55 }}
                   className="text-center text-sm text-gray-400 mb-6"
                 >
-                  {pathsFound} {pathsFound === 1 ? 'path found!' : 'paths found!'} Keep exploring to find more.
+                  {pathsFound} {pathsFound === 1 ? 'sti funnet!' : 'stier funnet!'} Fortsett å utforske for å finne flere.
                 </motion.p>
               )}
 
@@ -379,7 +379,7 @@ export default function VictoryModal({
                     {stats.wordsUsed}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
-                    Shortest Path
+                    Korteste sti
                   </div>
                 </div>
                 <div className="text-center p-3 rounded-xl bg-hive-dark/50">
@@ -387,7 +387,7 @@ export default function VictoryModal({
                     {pathsFound}
                   </div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide">
-                    Paths
+                    Stier
                   </div>
                 </div>
               </motion.div>
@@ -401,7 +401,7 @@ export default function VictoryModal({
                   className="mb-6 p-4 rounded-xl bg-hive-dark/30 border border-hive-graphite/50"
                 >
                   <div className="text-xs text-gray-500 uppercase tracking-wide mb-3 text-center">
-                    Your Average
+                    Ditt gjennomsnitt
                   </div>
                   {personalStats ? (
                     <div className="grid grid-cols-2 gap-4 text-center">
@@ -418,7 +418,7 @@ export default function VictoryModal({
                             <span className="text-gray-400 text-sm"></span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">Shortest Path</div>
+                          <div className="text-xs text-gray-500">Korteste sti</div>
                       </div>
                       <div>
                         <div className="flex items-center justify-center gap-1">
@@ -433,17 +433,17 @@ export default function VictoryModal({
                             <span className="text-gray-400 text-sm">=</span>
                           )}
                         </div>
-                        <div className="text-xs text-gray-500">Paths Found</div>
+                        <div className="text-xs text-gray-500">Stier funnet</div>
                       </div>
                     </div>
                   ) : (
                     <div className="text-center text-sm text-gray-500">
-                      Finish more puzzles to build your history!
+                      Fullfør flere puslespill for å bygge historikken din!
                     </div>
                   )}
                   {personalStats && personalStats.totalGames > 0 && (
                     <div className="text-xs text-gray-500 text-center mt-2">
-                      Across {personalStats.totalGames} solved puzzle{personalStats.totalGames !== 1 ? 's' : ''}
+                      På tvers av {personalStats.totalGames} løste puslespill
                     </div>
                   )}
                 </motion.div>
@@ -457,7 +457,7 @@ export default function VictoryModal({
                   transition={{ delay: 0.6 }}
                   className="text-center text-sm text-gray-400 mb-6"
                 >
-                  Optimal solution: {stats.optimalSteps} words
+                  Optimal løsning: {stats.optimalSteps} ord
                 </motion.p>
               )}
 
@@ -470,7 +470,7 @@ export default function VictoryModal({
                 className="w-full py-2 text-sm text-gray-400 hover:text-white
                           flex items-center justify-center gap-2 transition-colors"
               >
-                <span>{showDetails ? 'Hide' : 'Show'} your path</span>
+                <span>{showDetails ? 'Skjul' : 'Vis'} stien din</span>
                 <motion.svg
                   animate={{ rotate: showDetails ? 180 : 0 }}
                   className="w-4 h-4"
@@ -501,7 +501,7 @@ export default function VictoryModal({
                         <div key={pathIndex} className="space-y-2">
                           {allPaths.length > 1 && (
                             <div className="text-xs text-gray-500 uppercase tracking-wide text-center">
-                              Path {pathIndex + 1} ({Math.max(0, singlePath.length - 2)} words)
+                              Sti {pathIndex + 1} ({Math.max(0, singlePath.length - 2)} ord)
                             </div>
                           )}
                           <div className="flex flex-wrap items-center justify-center gap-2">
@@ -526,8 +526,8 @@ export default function VictoryModal({
                       {allPaths.length > 0 && (
                         <div className="text-center text-sm text-gray-400 pt-2">
                           {allPaths.length === 1 
-                            ? 'Keep exploring to find more paths!' 
-                            : `${allPaths.length} unique paths discovered!`}
+                            ? 'Fortsett å utforske for å finne flere stier!' 
+                            : `${allPaths.length} unike stier oppdaget!`}
                         </div>
                       )}
                     </div>
@@ -566,7 +566,7 @@ export default function VictoryModal({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                   )}
-                  {imageStatus === 'downloaded' ? 'Downloaded!' : 'Download'}
+                  {imageStatus === 'downloaded' ? 'Lastet ned!' : 'Last ned'}
                 </button>
                 <button
                   onClick={handleCopyImage}
@@ -589,7 +589,7 @@ export default function VictoryModal({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
                     </svg>
                   )}
-                  {imageStatus === 'copied' ? 'Copied!' : 'Copy Image'}
+                  {imageStatus === 'copied' ? 'Kopiert!' : 'Kopier bilde'}
                 </button>
                 <ShareButton
                   puzzleNumber={puzzleNumber}
@@ -613,7 +613,7 @@ export default function VictoryModal({
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
                     </svg>
-                    Continue Playing
+                    Fortsett å spille
                   </button>
                   <button
                     onClick={onTryAgain}
@@ -624,7 +624,7 @@ export default function VictoryModal({
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                     </svg>
-                    Try Again
+                    Prøv igjen
                   </button>
                 </div>
               </div>

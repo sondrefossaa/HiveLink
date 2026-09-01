@@ -1,20 +1,22 @@
+import { normalizeNo } from './norwegian-dictionary'
+
 export function quickValidate(word: string): { valid: boolean; error?: string } {
-  const normalized = word.toLowerCase().replace(/[^a-z]/g, '')
+  const normalized = normalizeNo(word)
 
   if (normalized.length === 0) {
-    return { valid: false, error: 'Please enter a word' }
+    return { valid: false, error: 'Skriv inn et ord' }
   }
 
   if (normalized.length < 4) {
-    return { valid: false, error: 'Word must be at least 4 characters' }
+    return { valid: false, error: 'Ordet må være minst 4 bokstaver' }
   }
 
   if (normalized.length > 30) {
-    return { valid: false, error: 'Word is too long' }
+    return { valid: false, error: 'Ordet er for langt' }
   }
 
-  if (!/^[a-z]+$/.test(normalized)) {
-    return { valid: false, error: 'Word can only contain letters' }
+  if (!/^\p{L}+$/u.test(normalized)) {
+    return { valid: false, error: 'Ordet kan bare inneholde bokstaver' }
   }
 
   return { valid: true }

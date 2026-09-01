@@ -17,9 +17,9 @@ interface ShareButtonProps {
 }
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
-  easy: 'Easy',
+  easy: 'Lett',
   medium: 'Medium',
-  hard: 'Hard',
+  hard: 'Vanskelig',
 }
 
 export default function ShareButton({
@@ -79,9 +79,9 @@ export default function ShareButton({
   const generateShareText = useCallback(() => {
     // Status emoji and text
     const statusConfig = {
-      won: { emoji: '🏆', text: 'Solved!' },
-      'gave-up': { emoji: '❌', text: 'Gave up' },
-      playing: { emoji: '⏳', text: 'Still buzzing...' },
+      won: { emoji: '🏆', text: 'Løst!' },
+      'gave-up': { emoji: '❌', text: 'Ga opp' },
+      playing: { emoji: '⏳', text: 'Hummer fortsatt...' },
     }
     const { emoji: statusEmoji, text: statusText } = statusConfig[status]
     
@@ -91,7 +91,7 @@ export default function ShareButton({
     // Header: puzzle number for daily, difficulty for practice
     const header = isDaily
       ? `🍯 HiveLink #${puzzleNumber}`
-      : `🍯 HiveLink Practice (${difficultyLabels[difficulty || 'medium']})`
+      : `🍯 HiveLink Øvelse (${difficultyLabels[difficulty || 'medium']})`
 
     // Generate shareable URL
     const shareUrl = generateShareUrl()
@@ -102,9 +102,9 @@ ${chainViz} ${statusText}
 
 ${startWord} → ${goalWord}
 
-📝 ${wordsUsed} words | 📊 ${layers} layers
+📝 ${wordsUsed} ord | 📊 ${layers} lag
 
-Play: ${shareUrl}`
+Spill: ${shareUrl}`
 
     return text
   }, [puzzleNumber, wordsUsed, layers, status, startWord, goalWord, isDaily, difficulty, generateShareUrl])
@@ -127,7 +127,7 @@ Play: ${shareUrl}`
             const file = new File([blob], 'hivelink-result.png', { type: 'image/png' })
             
             await navigator.share({
-              title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Practice',
+              title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Øvelse',
               text,
               url: shareUrl,
               files: [file],
@@ -141,7 +141,7 @@ Play: ${shareUrl}`
         
         // Fall back to text-only share
         await navigator.share({
-          title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Practice',
+          title: isDaily ? `HiveLink #${puzzleNumber}` : 'HiveLink Øvelse',
           text,
           url: shareUrl,
         })
@@ -171,7 +171,7 @@ Play: ${shareUrl}`
         className="w-9 h-9 rounded-lg bg-hive-graphite/50 hover:bg-hive-graphite/80
                    text-hive-yellow flex items-center justify-center transition-colors
                    border border-hive-slate/30"
-        title={copied ? 'Copied!' : 'Share progress'}
+        title={copied ? 'Kopiert!' : 'Del fremgang'}
       >
         {copied ? (
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -222,7 +222,7 @@ Play: ${shareUrl}`
                 d="M5 13l4 4L19 7"
               />
             </svg>
-            Copied!
+            Kopiert!
           </motion.span>
         ) : (
           <motion.span
@@ -240,7 +240,7 @@ Play: ${shareUrl}`
                 d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
               />
             </svg>
-            Share
+            Del
           </motion.span>
         )}
       </AnimatePresence>

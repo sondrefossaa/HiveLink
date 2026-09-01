@@ -42,11 +42,11 @@ export function getHintSourceNode(
  */
 export function formatHintMessage(hint: HintResult): string {
   if (hint.confidence === 'high') {
-    return `Try "${hint.suggestedWord}" - it shares "${hint.sharedPart}" with "${hint.parentWord}"`
+    return `Prøv "${hint.suggestedWord}" — det deler "${hint.sharedPart}" med "${hint.parentWord}"`
   } else if (hint.confidence === 'medium') {
-    return `Consider "${hint.suggestedWord}" - it connects via "${hint.sharedPart}"`
+    return `Vurder "${hint.suggestedWord}" — det kobler via "${hint.sharedPart}"`
   } else {
-    return `You could try "${hint.suggestedWord}"`
+    return `Du kan prøve "${hint.suggestedWord}"`
   }
 }
 

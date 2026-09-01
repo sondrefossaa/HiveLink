@@ -18,16 +18,16 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: 'HiveLink - Daily Compound Word Puzzle',
-  description: 'Chain compound words from start to goal in this daily puzzle game. A new challenge every day!',
-  keywords: ['puzzle', 'word game', 'compound words', 'daily puzzle', 'wordle', 'hivelink'],
+  title: 'HiveLink – Daglig sammensatt ord-puslespill',
+  description: 'Kjed sammen sammensatte ord fra start til mål i dette daglige puslespillet. En ny utfordring hver dag!',
+  keywords: ['puslespill', 'ordspill', 'sammensatte ord', 'daglig puslespill', 'hivelink'],
   authors: [{ name: 'HiveLink' }],
   applicationName: 'HiveLink',
   manifest: '/manifest.webmanifest',
   metadataBase: new URL('https://hivelink.buzz'),
   openGraph: {
-    title: 'HiveLink - Daily Compound Word Puzzle',
-    description: 'Chain compound words from start to goal in this daily puzzle game.',
+    title: 'HiveLink – Daglig sammensatt ord-puslespill',
+    description: 'Kjed sammen sammensatte ord fra start til mål i dette daglige puslespillet.',
     type: 'website',
     siteName: 'HiveLink',
     images: [
@@ -35,14 +35,14 @@ export const metadata: Metadata = {
         url: '/api/og',
         width: 1200,
         height: 630,
-        alt: 'HiveLink - Daily Compound Word Puzzle',
+        alt: 'HiveLink – Daglig sammensatt ord-puslespill',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'HiveLink - Daily Compound Word Puzzle',
-    description: 'Chain compound words from start to goal in this daily puzzle game.',
+    title: 'HiveLink – Daglig sammensatt ord-puslespill',
+    description: 'Kjed sammen sammensatte ord fra start til mål i dette daglige puslespillet.',
     images: ['/api/og'],
   },
   robots: {
@@ -74,7 +74,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+    <html lang="nb" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
         <ZoomPrevention />
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>

@@ -17,7 +17,7 @@ const formatTimeOfDay = (iso: string): string => {
 }
 
 const formatDate = (dateKey: string): string => {
-  return new Date(dateKey + 'T00:00:00').toLocaleDateString('en-US', {
+  return new Date(dateKey + 'T00:00:00').toLocaleDateString('nb-NO', {
     month: 'short',
     day: 'numeric',
   })
@@ -74,7 +74,7 @@ export default function LeaderboardModal({
                   <svg className="w-5 h-5 text-hive-yellow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 21h8m-6 0v-5.586a1 1 0 00-.293-.707L5.414 11a2 2 0 01-.586-1.414V5a2 2 0 012-2h10a2 2 0 012 2v4.586a2 2 0 01-.586 1.414l-3.293 3.293a1 1 0 00-.293.707V21" />
                   </svg>
-                  Your Stats
+                  Din statistikk
                 </h2>
                 <p className="text-sm text-gray-400">
                   {puzzleNumber ? `Puzzle #${puzzleNumber}` : 'Daily puzzles'}
@@ -97,22 +97,22 @@ export default function LeaderboardModal({
             <div className="p-5 space-y-4 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div className="p-4 rounded-xl bg-hive-dark/40 border border-hive-graphite/40">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Solved</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Løst</p>
                   <p className="text-2xl font-semibold text-white">{stats?.gamesWon ?? 0}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-hive-dark/40 border border-hive-graphite/40">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Streak</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Rekke</p>
                   <p className="text-2xl font-semibold text-white">{stats?.currentStreak ?? 0}</p>
                   {stats && stats.maxStreak > 0 && (
-                    <p className="text-xs text-gray-500 mt-1">Best {stats.maxStreak}</p>
+                    <p className="text-xs text-gray-500 mt-1">Beste {stats.maxStreak}</p>
                   )}
                 </div>
                 <div className="p-4 rounded-xl bg-hive-dark/40 border border-hive-graphite/40">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Best Path</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Beste sti</p>
                   <p className="text-2xl font-semibold text-white">{bestWordsUsed ?? '—'}</p>
                 </div>
                 <div className="p-4 rounded-xl bg-hive-dark/40 border border-hive-graphite/40">
-                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Avg Words</p>
+                  <p className="text-xs uppercase tracking-wide text-gray-500 mb-1">Gj.snitt ord</p>
                   <p className="text-2xl font-semibold text-white">
                     {stats && stats.gamesWon > 0 ? stats.averageWords.toFixed(1) : '—'}
                   </p>
@@ -122,25 +122,25 @@ export default function LeaderboardModal({
               <div className="mt-6">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">
-                    Solved Puzzles
+                    Løste puslespill
                   </h3>
-                  <span className="text-xs text-gray-500">Saved on this device</span>
+                  <span className="text-xs text-gray-500">Lagret på denne enheten</span>
                 </div>
 
                 {scores.length === 0 ? (
                   <div className="text-sm text-gray-500 text-center py-6">
-                    No solved puzzles yet. Complete today&apos;s puzzle to start your history!
+                    Ingen løste puslespill ennå. Fullfør dagens puslespill for å starte historikken din!
                   </div>
                 ) : (
                   <div className="rounded-xl border border-hive-graphite/40 overflow-hidden">
                     <table className="w-full text-sm text-gray-200">
                       <thead className="bg-hive-dark/60 text-xs uppercase tracking-wide text-gray-500">
                         <tr>
-                          <th className="text-left px-4 py-3">Date</th>
-                          <th className="text-left px-4 py-3">Words</th>
-                          <th className="text-left px-4 py-3">Layers</th>
-                          <th className="text-left px-4 py-3">Paths</th>
-                          <th className="text-left px-4 py-3">Time</th>
+                          <th className="text-left px-4 py-3">Dato</th>
+                          <th className="text-left px-4 py-3">Ord</th>
+                          <th className="text-left px-4 py-3">Lag</th>
+                          <th className="text-left px-4 py-3">Stier</th>
+                          <th className="text-left px-4 py-3">Tid</th>
                         </tr>
                       </thead>
                       <tbody>

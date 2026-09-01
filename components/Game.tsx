@@ -29,7 +29,7 @@ const Graph = dynamic(() => import('./Graph'), {
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             className="w-8 h-8 border-2 border-hive-yellow border-t-transparent rounded-full"
           />
-          <span>Loading game...</span>
+          <span>Laster spill...</span>
         </div>
       </motion.div>
     </div>
@@ -230,7 +230,7 @@ export default function Game() {
             className="w-16 h-16 mx-auto mb-4 border-4 border-hive-yellow border-t-transparent rounded-full"
           />
           <p className="text-hive-yellow text-lg">
-            {mode === 'daily' ? "Loading today's puzzle..." : "Loading puzzle..."}
+            {mode === 'daily' ? "Laster dagens puslespill..." : "Laster puslespill..."}
           </p>
         </motion.div>
       </div>
@@ -251,13 +251,13 @@ export default function Game() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">Failed to load puzzle</h2>
+          <h2 className="text-xl font-bold text-white mb-2">Kunne ikke laste puslespill</h2>
           <p className="text-gray-400 mb-4">{puzzleError}</p>
           <button
             onClick={() => window.location.reload()}
             className="px-6 py-2 rounded-xl bg-hive-yellow hover:bg-hive-gold text-hive-dark font-medium transition-colors"
           >
-            Try Again
+            Prøv igjen
           </button>
         </motion.div>
       </div>
@@ -317,7 +317,7 @@ export default function Game() {
                     transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
                     className="w-8 h-8 border-2 border-hive-yellow border-t-transparent rounded-full"
                   />
-                  <span>Loading graph...</span>
+                  <span>Laster graf...</span>
                 </div>
               </motion.div>
             </div>
@@ -355,7 +355,7 @@ export default function Game() {
             className={`bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-2 border 
                        ${gameState.isComplete ? 'border-green-500/50' : 'border-hive-graphite'}`}
           >
-            <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Goal</div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Mål</div>
             <div className={`text-lg font-bold ${gameState.isComplete ? 'text-green-400' : 'text-white'}`}>
               {puzzle.goalWord}
             </div>
@@ -424,7 +424,7 @@ export default function Game() {
                      bg-hive-yellow/90 hover:bg-hive-gold backdrop-blur-sm
                      text-hive-dark flex items-center justify-center transition-colors
                      border border-hive-gold/50 shadow-hive-glow"
-          aria-label="View solution"
+          aria-label="Se løsning"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -439,7 +439,7 @@ export default function Game() {
                    bg-hive-graphite/80 hover:bg-hive-slate/80 backdrop-blur-sm
                    text-hive-yellow flex items-center justify-center transition-colors
                    border border-hive-slate/50"
-        aria-label="How to play"
+        aria-label="Slik spiller du"
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -464,22 +464,22 @@ export default function Game() {
               onClick={(e) => e.stopPropagation()}
               className="relative bg-hive-charcoal rounded-2xl border border-hive-graphite p-6 max-w-sm w-full"
             >
-              <h3 className="text-xl font-bold text-white mb-2">Give up?</h3>
+              <h3 className="text-xl font-bold text-white mb-2">Gi opp?</h3>
               <p className="text-gray-400 mb-6">
-                This will reset your progress for today&apos;s puzzle. Are you sure?
+                Dette vil tilbakestille fremgangen din for dagens puslespill. Er du sikker?
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setShowGiveUp(false)}
                   className="flex-1 py-2.5 rounded-xl bg-hive-graphite hover:bg-hive-slate text-white font-medium transition-colors"
                 >
-                  Keep Playing
+                  Fortsett å spille
                 </button>
                 <button
                   onClick={confirmGiveUp}
                   className="flex-1 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-400 font-medium transition-colors"
                 >
-                  Give Up
+                  Gi opp
                 </button>
               </div>
             </motion.div>
@@ -502,7 +502,7 @@ export default function Game() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            New path discovered!
+            Ny sti oppdaget!
           </motion.div>
         )}
       </AnimatePresence>
@@ -522,7 +522,7 @@ export default function Game() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
             </svg>
-            Hint applied! Word filled in.
+            Hint brukt! Ord fylt inn.
           </motion.div>
         )}
       </AnimatePresence>

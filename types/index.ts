@@ -139,6 +139,8 @@ export interface ApiResponse<T> {
 export interface CompoundWord {
   word: string;
   parts: string[];
+  fuge?: string;
+  frequency?: number;
 }
 
 export interface ConnectionResult {

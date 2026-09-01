@@ -2,10 +2,10 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'HiveLink - Daily Compound Word Puzzle',
+    name: 'HiveLink – Daglig sammensatt ord-puslespill',
     short_name: 'HiveLink',
     description:
-      'Chain compound words from start to goal in this daily puzzle game. A new challenge every day!',
+      'Kjed sammen sammensatte ord fra start til mål i dette daglige puslespillet. En ny utfordring hver dag!',
     id: '/',
     start_url: '/',
     scope: '/',

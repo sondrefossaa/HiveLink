@@ -8,6 +8,7 @@ import {
   type WordEntry,
   type WordEnvironment,
 } from '@/lib/dictionary'
+import { isCommonWord } from '@/lib/norwegian-dictionary'
 
 interface GeneratedPuzzle extends PracticePuzzle {
   solutionPath: string[]
@@ -26,9 +27,9 @@ interface DailyPuzzleOptions {
 }
 
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
-  easy: { min: 3, max: 4 }, // Reduced for suffix chaining
-  medium: { min: 4, max: 5 }, // Reduced for suffix chaining - was 6-7
-  hard: { min: 6, max: 7 }, // Reduced for suffix chaining - was 8-9
+  easy: { min: 4, max: 6 },
+  medium: { min: 5, max: 8 },
+  hard: { min: 7, max: 12 },
 }
 
 const MAX_CHAIN_ATTEMPTS = 800 // Increased for suffix chaining which is more restrictive
@@ -484,40 +485,13 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   
   // If we have wordEntries provided, merge in common words (words whose parts are all common)
   if (options.wordEntries && options.wordEntries.length > 0) {
-    // Filter to words whose parts are all common/recognizable
-    const commonParts = new Set([
-      'air', 'any', 'back', 'ball', 'bed', 'bird', 'black', 'blue', 'book', 'box',
-      'bread', 'break', 'butter', 'cake', 'car', 'card', 'care', 'coat', 'corn',
-      'cup', 'day', 'dog', 'door', 'down', 'dream', 'drop', 'eye', 'fall', 'fire',
-      'fish', 'flower', 'fly', 'foot', 'fruit', 'gold', 'grand', 'grass', 'green',
-      'ground', 'gun', 'hair', 'hand', 'head', 'heart', 'high', 'hill', 'home',
-      'honey', 'horse', 'hot', 'house', 'ice', 'key', 'land', 'life', 'light',
-      'line', 'mail', 'man', 'meat', 'milk', 'mine', 'moon', 'mother', 'night',
-      'out', 'over', 'pan', 'paper', 'pass', 'place', 'play', 'port', 'pot',
-      'print', 'proof', 'rail', 'rain', 'ring', 'road', 'rock', 'room', 'sand',
-      'sea', 'shine', 'ship', 'shoe', 'shop', 'side', 'silver', 'sky', 'snow',
-      'some', 'son', 'star', 'step', 'stone', 'stop', 'storm', 'straw', 'sub', 'sun',
-      'table', 'tail', 'thing', 'time', 'top', 'town', 'trap', 'tree', 'under',
-      'up', 'walk', 'wall', 'ward', 'water', 'way', 'week', 'white', 'wind',
-      'wood', 'work', 'worm', 'yard', 'berry', 'boat', 'bow', 'bush', 'chain',
-      'cloth', 'craft', 'field', 'guard', 'keeper', 'knob', 'less', 'like',
-      'maker', 'mark', 'master', 'mate', 'piece', 'plane', 'power', 'scape',
-      'smith', 'ware', 'wheel', 'wise', 'wright', 'board', 'bridge', 'brook',
-      'case', 'child', 'class', 'club', 'court', 'crew', 'cross', 'drive',
-      'driver', 'farm', 'father', 'force', 'front', 'game', 'gate', 'girl',
-      'glass', 'hill', 'hold', 'holder', 'iron', 'jack', 'king', 'lady', 'lane',
-      'layer', 'lord', 'love', 'market', 'meal', 'mill', 'nail', 'neck', 'net',
-      'news', 'note', 'pack', 'path', 'pen', 'point', 'pool', 'post', 'queen',
-      'safe', 'sauce', 'school', 'shell'
-    ])
-    
-    // Filter to words whose ALL parts are common
+    // Filter to words whose parts are all common/recognizable Norwegian words
     const filteredEntries = options.wordEntries
       .map((entry) => toWordEntry(entry.word, entry.parts, 'runtime'))
       .filter((entry): entry is WordEntry => {
         if (!entry || entry.parts.length < 2) return false
-        // Only include if ALL parts are common words
-        return entry.parts.every(part => commonParts.has(part.toLowerCase()))
+        // Only include if ALL parts are common Norwegian words
+        return entry.parts.every(part => isCommonWord(part))
       })
     
     // Merge with canonical words

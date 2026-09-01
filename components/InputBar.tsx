@@ -85,13 +85,13 @@ export default function InputBar({
     const trimmed = input.trim().toLowerCase()
 
     if (!trimmed) {
-      setLocalError('Please enter a word')
+      setLocalError('Skriv inn et ord')
       inputRef.current?.focus()
       return
     }
 
     if (trimmed.length < 4) {
-      setLocalError('Word must be at least 4 characters')
+      setLocalError('Ordet må være minst 4 bokstaver')
       setShake(true)
       setTimeout(() => setShake(false), 500)
       inputRef.current?.focus()
@@ -105,7 +105,7 @@ export default function InputBar({
     if (result.success) {
       setInput('')
     } else {
-      setLocalError(result.error || 'Invalid word')
+      setLocalError(result.error || 'Ugyldig ord')
       setShake(true)
       setTimeout(() => setShake(false), 500)
     }
@@ -155,7 +155,7 @@ export default function InputBar({
               className="mb-3 text-center"
             >
               <span className="text-sm text-gray-400">
-                Connect from:{' '}
+                Koble fra:{' '}
                 <span className="text-hive-yellow font-medium">{selectedNode.word}</span>
                 <span className="text-gray-500 ml-2">
                   ({selectedNode.parts.join(' + ')})
@@ -213,7 +213,7 @@ export default function InputBar({
                 value={input}
                 onChange={(e) => setInput(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
                 onKeyDown={handleKeyDown}
-                placeholder={isDisabled ? 'Puzzle complete!' : 'Enter a compound word to continue...'}
+                placeholder={isDisabled ? 'Puslespill fullført!' : 'Skriv inn et sammensatt ord for å fortsette...'}
                 disabled={isDisabled}
                 readOnly={isDisabled || isLoading}
                 autoComplete="off"
@@ -223,7 +223,7 @@ export default function InputBar({
                 className="flex-1 min-w-0 bg-transparent text-white text-lg px-2 sm:px-4 py-2
                          placeholder:text-gray-500 focus:outline-none
                          disabled:text-gray-500 disabled:cursor-not-allowed"
-                aria-label="Enter compound word"
+                aria-label="Skriv inn sammensatt ord"
               />
 
               <motion.button
@@ -238,7 +238,7 @@ export default function InputBar({
                              ? 'bg-hive-graphite text-gray-500 cursor-not-allowed'
                              : 'bg-hive-yellow hover:bg-hive-gold text-hive-dark shadow-hive-glow'
                          }`}
-                aria-label="Submit word"
+                aria-label="Send inn ord"
               >
                 {isLoading ? (
                   <motion.div
@@ -248,7 +248,7 @@ export default function InputBar({
                   />
                 ) : (
                   <>
-                    <span className="text-sm sm:text-base">Link</span>
+                    <span className="text-sm sm:text-base">Koble</span>
                     <svg className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         strokeLinecap="round"
@@ -265,9 +265,9 @@ export default function InputBar({
 
           {/* Hint text */}
           <p className="mt-3 text-center text-xs text-gray-500">
-            Enter a word that starts with the last part of{' '}
+            Skriv inn et ord som begynner med siste del av{' '}
             <span className="text-hive-yellow">
-              {selectedNode ? selectedNode.word : 'the start word'}
+              {selectedNode ? selectedNode.word : 'startordet'}
             </span>
           </p>
         </form>

@@ -1,6 +1,6 @@
 // lib/dictionary.ts
 // Client-safe dictionary built from the bundled data/compound-words.json.
-// Replaces the former database-backed compound word table.
+// Norwegian: no doubled-consonant variants needed.
 
 import compoundWordsJson from '@/data/compound-words.json'
 import type { CompoundWord } from '@/types'
@@ -9,25 +9,7 @@ import {
   isLikelyCompoundWord,
   registerCompoundParts,
 } from '@/lib/compound-utils'
-
-const DOUBLABLE_CONSONANTS = new Set(['b','d','f','g','l','m','n','p','r','s','t','z'])
-
-/**
- * Compute variant first-parts that a word could chain FROM, accounting for
- * doubled-consonant boundaries (clubb+able ↔ club+bable).
- * E.g. "clubb" → ["clubb", "club"]
- */
-function firstPartVariants(firstPart: string): string[] {
-  const variants = new Set<string>([firstPart])
-  if (firstPart.length >= 4) {
-    const last = firstPart[firstPart.length - 1]
-    const prev = firstPart[firstPart.length - 2]
-    if (last === prev && DOUBLABLE_CONSONANTS.has(last)) {
-      variants.add(firstPart.slice(0, -1))  // clubb → club
-    }
-  }
-  return Array.from(variants)
-}
+import { normalizeNo } from '@/lib/norwegian-dictionary'
 
 export interface WordEntry {
   word: string
@@ -45,8 +27,8 @@ export function toWordEntry(
   parts?: string[],
   source: WordEntry['source'] = 'runtime'
 ): WordEntry | null {
-  const normalizedWord = word.toLowerCase()
-  const providedParts = parts ? parts.map((part) => part.toLowerCase()).filter(Boolean) : []
+  const normalizedWord = normalizeNo(word)
+  const providedParts = parts ? parts.map(p => normalizeNo(p)).filter(Boolean) : []
 
   if (
     providedParts.length >= 2 &&
@@ -60,7 +42,7 @@ export function toWordEntry(
   if (isLikelyCompoundWord(word, parsedParts)) {
     return {
       word: normalizedWord,
-      parts: parsedParts.map((part) => part.toLowerCase()),
+      parts: parsedParts.map(p => normalizeNo(p)),
       source,
     }
   }
@@ -82,15 +64,11 @@ export function buildPartIndex(words: WordEntry[]): Map<string, WordEntry[]> {
   for (const entry of words) {
     const indexedKeys = new Set<string>()
 
-    // For suffix chaining, index by FIRST part and its doubled-consonant variants
-    // so that e.g. "clubbable" (parts=[clubb,able]) is findable under both
-    // "clubb" and "club".
+    // Index by FIRST part for suffix chaining
     if (entry.parts.length > 0) {
       const firstPart = entry.parts[0].toLowerCase()
-      for (const key of firstPartVariants(firstPart)) {
-        addKey(key, entry)
-        indexedKeys.add(key)
-      }
+      addKey(firstPart, entry)
+      indexedKeys.add(firstPart)
     }
 
     // Also index by all parts for other uses
@@ -120,8 +98,6 @@ export function createEnvironment(entries: WordEntry[]): WordEnvironment {
   }
 }
 
-// Canonical words bundled with the app, registered with the compound-utils
-// part caches so validation works fully offline.
 export const CANONICAL_WORDS: WordEntry[] = (compoundWordsJson as CompoundWord[])
   .map((entry) => {
     const wordEntry = toWordEntry(entry.word, entry.parts, 'canonical')
@@ -134,30 +110,25 @@ export const CANONICAL_WORDS: WordEntry[] = (compoundWordsJson as CompoundWord[]
 
 export const DEFAULT_ENVIRONMENT: WordEnvironment = createEnvironment(CANONICAL_WORDS)
 
-// Lowercased word -> parts lookup for the bundled dictionary.
 const WORD_PARTS_MAP: Map<string, string[]> = new Map(
   CANONICAL_WORDS.map((entry) => [entry.word, entry.parts])
 )
 
-/** Get the bundled parts for a word, or null if unknown. */
 export function getPartsForWord(word: string): string[] | null {
-  const parts = WORD_PARTS_MAP.get(word.toLowerCase())
+  const parts = WORD_PARTS_MAP.get(normalizeNo(word))
   return parts ? [...parts] : null
 }
 
-/** Check if a word exists in the bundled dictionary. */
 export function hasDictionaryWord(word: string): boolean {
-  return WORD_PARTS_MAP.has(word.toLowerCase())
+  return WORD_PARTS_MAP.has(normalizeNo(word))
 }
 
-/** All bundled compound word entries ({ word, parts }). */
 export function getWordEntries(): Array<{ word: string; parts: string[] }> {
   return CANONICAL_WORDS.map(({ word, parts }) => ({ word, parts }))
 }
 
-/** All words that start with the given part (suffix chaining candidates). */
 export function getWordsStartingWith(part: string, limit?: number): WordEntry[] {
-  const firstPart = part.toLowerCase()
+  const firstPart = normalizeNo(part)
   const candidates = DEFAULT_ENVIRONMENT.partIndex.get(firstPart) ?? []
   const filtered = candidates.filter(
     (entry) => entry.parts.length > 0 && entry.parts[0].toLowerCase() === firstPart
