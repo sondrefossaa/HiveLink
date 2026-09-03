@@ -23,42 +23,42 @@
   ],
   "sourceCoverage": {
     "nodes": {
-      "nb": 20726,
-      "nowacLemma": 15122
+      "nb": 22298,
+      "nowacLemma": 15949
     },
     "compounds": {
-      "nb": 82426,
-      "nowacLemma": 75063,
-      "eiesland": 4979
+      "nb": 96778,
+      "nowacLemma": 85534,
+      "eiesland": 5418
     }
   },
   "tiers": [
     {
       "tier": "easy",
-      "nodes": 3555,
-      "nounEndpoints": 3494,
-      "compounds": 1807,
-      "analyses": 1807,
-      "activeKeys": 1524,
-      "largestWeakComponent": 1233
+      "nodes": 3745,
+      "nounEndpoints": 3627,
+      "compounds": 2031,
+      "analyses": 2044,
+      "activeKeys": 1650,
+      "largestWeakComponent": 1364
     },
     {
       "tier": "medium",
-      "nodes": 7666,
-      "nounEndpoints": 7496,
-      "compounds": 9670,
-      "analyses": 9672,
-      "activeKeys": 4232,
-      "largestWeakComponent": 4021
+      "nodes": 8077,
+      "nounEndpoints": 7830,
+      "compounds": 11036,
+      "analyses": 11195,
+      "activeKeys": 4618,
+      "largestWeakComponent": 4387
     },
     {
       "tier": "hard",
-      "nodes": 12834,
-      "nounEndpoints": 10576,
-      "compounds": 31681,
-      "analyses": 31686,
-      "activeKeys": 8418,
-      "largestWeakComponent": 8260
+      "nodes": 13573,
+      "nounEndpoints": 11084,
+      "compounds": 36563,
+      "analyses": 38110,
+      "activeKeys": 9268,
+      "largestWeakComponent": 9140
     }
   ]
 }

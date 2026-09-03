@@ -37,7 +37,6 @@ export interface GraphProps {
   isComplete: boolean;
   winningPath: string[];
   winningPathNodeIds?: string[];
-  layoutVersion?: number;
 }
 
 // Share Types
@@ -202,4 +201,5 @@ export interface HintResult {
   sharedPart: string;
   parentWord: string;
   confidence: 'high' | 'medium' | 'low';
+  stepsToGoal?: number;
 }

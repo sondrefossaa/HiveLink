@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
     const goalWord = searchParams.get('goal') || 'ballong'
     const words = searchParams.get('words') || '0'
     const layers = searchParams.get('layers') || '0'
-    const time = searchParams.get('time') || '0:00'
+    const paths = searchParams.get('paths') || '0'
+    const pathWords = searchParams.getAll('path').slice(0, 8)
+    const fullPath = pathWords.join(' → ')
+    const pathText = fullPath.length > 70 ? `${fullPath.slice(0, 67)}...` : fullPath
     const puzzleNumber = searchParams.get('puzzle')
     const difficulty = searchParams.get('difficulty') || 'medium'
     const isDaily = !!puzzleNumber
@@ -139,7 +142,7 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: '16px',
-                marginBottom: '28px',
+                marginBottom: pathText ? '16px' : '28px',
               }}
             >
               <div
@@ -181,6 +184,23 @@ export async function GET(request: NextRequest) {
                 </span>
               </div>
             </div>
+
+            {pathText && (
+              <div
+                style={{
+                  display: 'flex',
+                  color: '#d4d4d4',
+                  fontSize: '17px',
+                  textAlign: 'center',
+                  marginBottom: '24px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: 'rgba(13, 13, 13, 0.45)',
+                }}
+              >
+                {pathText}
+              </div>
+            )}
 
             {/* Stats grid - matching VictoryModal layout */}
             <div
@@ -243,7 +263,7 @@ export async function GET(request: NextRequest) {
                 </span>
               </div>
 
-              {/* Time stat */}
+              {/* Paths stat */}
               <div
                 style={{
                   display: 'flex',
@@ -262,10 +282,10 @@ export async function GET(request: NextRequest) {
                     color: '#F4B400',
                   }}
                 >
-                  {time}
+                  {paths}
                 </span>
                 <span style={{ fontSize: '12px', color: '#888', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Tid
+                  Stier
                 </span>
               </div>
             </div>

@@ -20,7 +20,11 @@ const METADATA_OUTPUT = join(ROOT, 'data', 'compound-build-metadata.json')
 const EXCEPTIONS_PATH = join(ROOT, 'data', 'dictionary-exceptions.json')
 const LETTERS = /^[a-zæøå]+$/u
 const EXPECTED_EIESELAND_ROWS = 60_865
-const SOURCE_MASK = { ordbank: 1, nst: 2, eiesland: 4, manual: 8 } as const
+const SOURCE_MASK = { ordbank: 1, nst: 2, eiesland: 4, manual: 8, nowac: 16 } as const
+const NOWAC_RAW_TOKENS = join(NEW_SOURCES_DIR, 'nowac-1.1.raw_tokens.lowercase.freq.gz')
+const NOWAC_MIN_FREQUENCY = 50
+const NOWAC_MIN_PART_LENGTH = 3
+const NOWAC_MIN_WORD_LENGTH = 6
 
 type Source = keyof typeof SOURCE_MASK
 
@@ -319,6 +323,174 @@ async function loadNowacLemmaFrequency(candidates: Set<string>): Promise<Map<str
   return counts
 }
 
+/**
+ * Discover compound words from NoWaC raw tokens.
+ *
+ * Strategy:
+ * - Use raw tokens (not lemma file) to avoid POS tagging bugs
+ * - For each token with freq >= threshold, try to split into two known parts
+ * - Require both parts to be known Norwegian words (from Ordbank/NST)
+ * - Preserve ambiguous analyses rather than blindly selecting a split
+ * - Frequency alone never validates a compound — structural validation is required
+ *
+ * TODO: When UiB Ordbank API key is obtained (contact ordbokene@uib.no),
+ * add source #3 to the hierarchy: UiB Ordbank API with extended_vocabulary=true
+ * before falling back to NoWaC inference. The API provides authoritative
+ * compound analysis with initial_lexeme/final_lexeme/junction fields.
+ */
+async function discoverFromNowac(
+  knownWords: Set<string>,
+  knownCompoundHeads: Set<string>,
+  knownModifiers: Set<string>,
+  standaloneNounHeads: Set<string>,
+  existingWordForms: Set<string>,
+  existingAnalyses: Map<string, Analysis[]>
+): Promise<{ added: number; candidates: number }> {
+  if (!existsSync(NOWAC_RAW_TOKENS)) {
+    console.warn(`NoWaC raw tokens not found, skipping NoWaC discovery: ${NOWAC_RAW_TOKENS}`)
+    return { added: 0, candidates: 0 }
+  }
+
+  const isWord = (word: string): boolean => knownWords.has(normalize(word))
+
+  // Try all valid 2-part splits, same logic as word-splitting.ts
+  function findAllSplits(word: string): Array<{ parts: [string, string]; linker: string; score: number }> {
+    const normalized = normalize(word)
+    if (normalized.length < NOWAC_MIN_WORD_LENGTH) return []
+    if (!LETTERS.test(normalized)) return []
+
+    const candidates: Array<{ parts: [string, string]; linker: string; score: number }> = []
+
+    // 1. Plain boundary: foo|bar
+    for (let i = NOWAC_MIN_PART_LENGTH; i <= normalized.length - NOWAC_MIN_PART_LENGTH; i++) {
+      const left = normalized.slice(0, i)
+      const right = normalized.slice(i)
+      if (!LETTERS.test(left) || !LETTERS.test(right)) continue
+      // Both parts must be known words, head must be a standalone Norwegian noun,
+      // and modifier must already be used in existing compounds
+      if (isWord(left) && isWord(right) && standaloneNounHeads.has(right) && knownModifiers.has(left)) {
+        candidates.push({ parts: [left, right], linker: '', score: 50 })
+      }
+    }
+
+    // 2. Binde-s: foo + s + bar
+    for (let i = NOWAC_MIN_PART_LENGTH; i <= normalized.length - NOWAC_MIN_PART_LENGTH - 1; i++) {
+      const left = normalized.slice(0, i)
+      const rest = normalized.slice(i)
+      if (rest.startsWith('s') && rest.length > 1) {
+        const right = rest.slice(1)
+        if (right.length >= NOWAC_MIN_PART_LENGTH && LETTERS.test(left) && LETTERS.test(right)) {
+          if (isWord(left) && isWord(right) && standaloneNounHeads.has(right) && knownModifiers.has(left)) {
+            candidates.push({ parts: [left, right], linker: 's', score: 55 })
+          }
+        }
+      }
+    }
+
+    // 3. Binde-e: foo + e + bar
+    for (let i = NOWAC_MIN_PART_LENGTH; i <= normalized.length - NOWAC_MIN_PART_LENGTH - 1; i++) {
+      const left = normalized.slice(0, i)
+      const rest = normalized.slice(i)
+      if (rest.startsWith('e') && rest.length > 1) {
+        const right = rest.slice(1)
+        if (right.length >= NOWAC_MIN_PART_LENGTH && LETTERS.test(left) && LETTERS.test(right)) {
+          if (isWord(left) && isWord(right) && standaloneNounHeads.has(right) && knownModifiers.has(left)) {
+            candidates.push({ parts: [left, right], linker: 'e', score: 53 })
+          }
+        }
+      }
+    }
+
+    // Deduplicate by parts key, keep highest score
+    const seen = new Map<string, { parts: [string, string]; linker: string; score: number }>()
+    for (const c of candidates) {
+      const key = c.parts.join('|')
+      const existing = seen.get(key)
+      if (!existing || c.score > existing.score) {
+        seen.set(key, c)
+      }
+    }
+
+    return Array.from(seen.values()).sort((a, b) => b.score - a.score)
+  }
+
+  const lines = createInterface({
+    input: createReadStream(NOWAC_RAW_TOKENS).pipe(createGunzip()),
+    crlfDelay: Infinity,
+  })
+
+  let added = 0
+  let candidates = 0
+  const seen = new Set<string>()
+
+  for await (const line of lines) {
+    const match = line.match(/^\s*(\d+)\s+([a-zæøå]+)\s*$/)
+    if (!match) continue
+    const count = Number(match[1])
+    const word = normalize(match[2])
+    if (count < NOWAC_MIN_FREQUENCY) continue
+    if (!LETTERS.test(word)) continue
+    if (word.length < NOWAC_MIN_PART_LENGTH * 2) continue
+
+    // Skip if already in Ordbank/NST
+    if (existingAnalyses.has(word)) continue
+    // Skip if word is already a complete word in fullformsliste (not a compound)
+    if (existingWordForms.has(word)) continue
+    // Skip words with common English-only letter patterns (no æøå usage)
+    if (!/[æøå]/.test(word) && /[wxyz]/.test(word)) continue
+    // Skip words ending in common English suffixes
+    if (/(?:tion|sion|ment|ness|ful|less|ous|ive|ally)$/.test(word)) continue
+    // Skip very short words
+    if (word.length < NOWAC_MIN_WORD_LENGTH) continue
+    if (seen.has(word)) continue
+    seen.add(word)
+
+    // Try to split the word
+    const splits = findAllSplits(word)
+    if (splits.length === 0) continue
+
+    // Take the best split (both parts must be known words — score >= 50)
+    const best = splits[0]
+    if (best.score < 50) continue
+
+    // The head (right part) must be a known noun — already validated in findAllSplits
+    candidates++
+
+    // Build analysis — preserve all valid splits as ambiguous analyses
+    const analysis: Analysis = {
+      word,
+      parts: best.parts,
+      terminalParts: best.parts,
+      incomingKeys: [best.parts[0]],
+      outgoingKeys: [best.parts[1]],
+      linker: best.linker,
+      deleted: '',
+      sources: new Set(['nowac']),
+      sourceIds: [`freq:${count}`],
+    }
+
+    // Add all valid splits as alternative analyses
+    for (const split of splits) {
+      if (split.score < 50) break
+      const altAnalysis: Analysis = {
+        word,
+        parts: split.parts,
+        terminalParts: split.parts,
+        incomingKeys: [split.parts[0]],
+        outgoingKeys: [split.parts[1]],
+        linker: split.linker,
+        deleted: '',
+        sources: new Set(['nowac']),
+        sourceIds: [`freq:${count}`],
+      }
+      addAnalysis(existingAnalyses, altAnalysis)
+    }
+    added++
+  }
+
+  return { added, candidates }
+}
+
 async function build(): Promise<void> {
   for (const path of [ORDBANK_ARCHIVE, NST_ARCHIVE, EIESELAND_PATH, NB_ARCHIVE, NOWAC_LEMMA_FREQUENCY]) {
     if (!existsSync(path)) throw new Error(`Missing required source: ${path}`)
@@ -351,6 +523,65 @@ async function build(): Promise<void> {
     const key = preferred.parts.map(lexicalPart).join('+')
     options.sort((a, b) => Number(b.parts.join('+') === key) - Number(a.parts.join('+') === key))
   }
+
+  // Build set of known Norwegian words for NoWaC compound discovery
+  // Use lemma.txt for base forms only (not all inflected forms from fullformsliste)
+  const knownWords = new Set<string>()
+  const lemmaText = rowsFrom(archiveText(ORDBANK_ARCHIVE, 'lemma.txt', 'latin1'))
+  for (const row of lemmaText.rows) {
+    const word = normalize(row[lemmaText.columns.get('GRUNNFORM') ?? -1] ?? '')
+    if (LETTERS.test(word) && word.length >= NOWAC_MIN_PART_LENGTH) knownWords.add(word)
+  }
+  // Add NST lemmas as known words too
+  const nstMember = 'NSTs norske leksikon/nor030224NST.pron/nor030224NST.pron'
+  const nstLines = archiveText(NST_ARCHIVE, nstMember, 'latin1').split(/\r?\n/)
+  for (const line of nstLines) {
+    const fields = line.split(';')
+    const word = normalize(fields[0] ?? '')
+    if (LETTERS.test(word) && word.length >= NOWAC_MIN_PART_LENGTH) knownWords.add(word)
+  }
+
+  // Build set of known compound heads from existing analyses
+  // A word must already appear as a head in Ordbank/NST to be accepted as a compound head
+  const knownCompoundHeads = new Set<string>()
+  for (const analyses of ordbank.analyses.values()) {
+    for (const analysis of analyses) {
+      for (const key of analysis.outgoingKeys) knownCompoundHeads.add(key)
+    }
+  }
+
+  // Also build set of words that are already complete words in fullformsliste
+  // (to avoid treating simple words as compounds)
+  const fullforms = rowsFrom(archiveText(ORDBANK_ARCHIVE, 'fullformsliste.txt', 'latin1'))
+  const existingWordForms = new Set<string>()
+  for (const row of fullforms.rows) {
+    const word = normalize(row[fullforms.columns.get('OPPSLAG') ?? -1] ?? '')
+    if (LETTERS.test(word)) existingWordForms.add(word)
+  }
+
+  // Build set of heads that are also standalone Norwegian nouns (in fullformsliste with subst tag)
+  // This filters out heads like 'ion' that only appear in compound analyses
+  const standaloneNounHeads = new Set<string>()
+  for (const row of fullforms.rows) {
+    const word = normalize(row[fullforms.columns.get('OPPSLAG') ?? -1] ?? '')
+    const pos = row[fullforms.columns.get('TAG') ?? -1] ?? ''
+    if (LETTERS.test(word) && pos.startsWith('subst')) standaloneNounHeads.add(word)
+  }
+
+  // Build set of known modifiers from existing analyses (incomingKeys)
+  // A modifier must already be used in an Ordbank/NST compound to be accepted
+  const knownModifiers = new Set<string>()
+  for (const analyses of ordbank.analyses.values()) {
+    for (const analysis of analyses) {
+      for (const key of analysis.incomingKeys) knownModifiers.add(key)
+    }
+  }
+
+  // Discover compounds from NoWaC raw tokens (source #4 in hierarchy)
+  // TODO: When UiB Ordbank API key is obtained, insert source #3 here:
+  //   const uibDiscovered = await discoverFromUiBOrdbank(knownWords, ordbank.analyses)
+  const nowacDiscovery = await discoverFromNowac(knownWords, knownCompoundHeads, knownModifiers, standaloneNounHeads, existingWordForms, ordbank.analyses)
+
   const candidates = new Set<string>(ordbank.nounLemmas)
   for (const [word, analyses] of ordbank.analyses) {
     candidates.add(word)
@@ -417,6 +648,8 @@ async function build(): Promise<void> {
       eieslandExpectedRows: EXPECTED_EIESELAND_ROWS,
       eieslandMatchedRows: eiesland.matched,
       nstAddedCompounds: nstAdded,
+      nowacDiscoveryCandidates: nowacDiscovery.candidates,
+      nowacDiscoveryAdded: nowacDiscovery.added,
       nowacApplied: true,
       checksums: {
         ordbank: checksum(ORDBANK_ARCHIVE),
@@ -424,6 +657,7 @@ async function build(): Promise<void> {
         eiesland: checksum(EIESELAND_PATH),
         nb1gram: checksum(NB_ARCHIVE),
         nowacLemmaFrequency: checksum(NOWAC_LEMMA_FREQUENCY),
+        nowacRawTokens: existsSync(NOWAC_RAW_TOKENS) ? checksum(NOWAC_RAW_TOKENS) : null,
       },
     },
     nodes,
@@ -445,7 +679,8 @@ async function build(): Promise<void> {
 
   console.log(`Ordbank: ${ordbank.rows} rows; ${ordbank.analyses.size} canonical spellings.`)
   console.log(`NST: ${nstAdded} additional compounds. Eiesland: ${eiesland.rows} rows, ${eiesland.matched} matched rows.`)
-  console.log(`NoWaC: ${nowac.size} validated noun lemmas matched from the precomputed frequency list.`)
+  console.log(`NoWaC discovery: ${nowacDiscovery.candidates} candidates evaluated, ${nowacDiscovery.added} compounds inferred from raw tokens.`)
+  console.log(`NoWaC lemma: ${nowac.size} validated noun lemmas matched from the precomputed frequency list.`)
   console.log(`Graph: ${nodes.length} nodes and ${edges.length} compound spellings (${edges.reduce((sum, edge) => sum + edge.analyses.length, 0)} analyses).`)
   console.log(`Rich build artifact: ${readFileSync(RICH_OUTPUT).byteLength} bytes.`)
 }

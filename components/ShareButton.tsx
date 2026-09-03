@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { PuzzleDifficulty, ShareStatus } from '@/types'
+import { buildOgImageUrl, buildShareText, buildShareUrl } from '@/lib/share'
 
 interface ShareButtonProps {
   puzzleNumber?: number
@@ -13,13 +14,9 @@ interface ShareButtonProps {
   goalWord: string
   isDaily: boolean
   difficulty?: PuzzleDifficulty
+  bestPath?: string[]
+  pathsFound?: number
   compact?: boolean
-}
-
-const difficultyLabels: Record<PuzzleDifficulty, string> = {
-  easy: 'Lett',
-  medium: 'Middels',
-  hard: 'Vanskelig',
 }
 
 export default function ShareButton({
@@ -31,88 +28,17 @@ export default function ShareButton({
   goalWord,
   isDaily,
   difficulty,
+  bestPath,
+  pathsFound,
   compact = false,
 }: ShareButtonProps) {
   const [copied, setCopied] = useState(false)
 
-  // Generate share URL with puzzle info
-  const generateShareUrl = useCallback(() => {
-    const baseUrl = 'https://hivelink.buzz/'
-    const params = new URLSearchParams()
-    
-    if (isDaily && puzzleNumber) {
-      // For daily puzzles, just include puzzle number
-      params.set('puzzle', puzzleNumber.toString())
-    } else {
-      // For practice puzzles, include start/goal words and difficulty
-      params.set('start', startWord.toLowerCase())
-      params.set('goal', goalWord.toLowerCase())
-      if (difficulty) {
-        params.set('difficulty', difficulty)
-      }
-    }
-    
-    return `${baseUrl}?${params.toString()}`
-  }, [isDaily, puzzleNumber, startWord, goalWord, difficulty])
-
-  // Generate OG image URL for social sharing
-  const generateOgImageUrl = useCallback(() => {
-    // Use relative URL so it works in both dev and production
-    const baseUrl = '/api/og'
-    const params = new URLSearchParams()
-    
-    params.set('status', status)
-    params.set('start', startWord)
-    params.set('goal', goalWord)
-    params.set('words', wordsUsed.toString())
-    params.set('layers', layers.toString())
-    
-    if (isDaily && puzzleNumber) {
-      params.set('puzzle', puzzleNumber.toString())
-    } else if (difficulty) {
-      params.set('difficulty', difficulty)
-    }
-    
-    return `${baseUrl}?${params.toString()}`
-  }, [status, startWord, goalWord, wordsUsed, layers, isDaily, puzzleNumber, difficulty])
-
-  const generateShareText = useCallback(() => {
-    // Status emoji and text
-    const statusConfig = {
-      won: { emoji: '🏆', text: 'Løst!' },
-      'gave-up': { emoji: '❌', text: 'Ga opp' },
-      playing: { emoji: '⏳', text: 'Summer fortsatt...' },
-    }
-    const { emoji: statusEmoji, text: statusText } = statusConfig[status]
-    
-    // Simple emoji chain: 🐝 → result
-    const chainViz = `🐝 → ${statusEmoji}`
-    
-    // Header: puzzle number for daily, difficulty for practice
-    const header = isDaily
-      ? `🍯 HiveLink #${puzzleNumber}`
-      : `🍯 HiveLink Øvelse (${difficultyLabels[difficulty || 'medium']})`
-
-    // Generate shareable URL
-    const shareUrl = generateShareUrl()
-
-    const text = `${header}
-
-${chainViz} ${statusText}
-
-${startWord} → ${goalWord}
-
-📝 ${wordsUsed} ord | 📊 ${layers} lag
-
-Spill: ${shareUrl}`
-
-    return text
-  }, [puzzleNumber, wordsUsed, layers, status, startWord, goalWord, isDaily, difficulty, generateShareUrl])
-
   const handleShare = useCallback(async () => {
-    const text = generateShareText()
-    const shareUrl = generateShareUrl()
-    const imageUrl = generateOgImageUrl()
+    const options = { puzzleNumber, wordsUsed, layers, status, startWord, goalWord, isDaily, difficulty, bestPath, pathsFound }
+    const text = buildShareText(options)
+    const shareUrl = buildShareUrl(options)
+    const imageUrl = buildOgImageUrl(options)
 
     // Try native share with image first (mobile)
     if (navigator.share) {
@@ -159,7 +85,7 @@ Spill: ${shareUrl}`
     } catch (err) {
       console.error('Failed to copy:', err)
     }
-  }, [generateShareText, generateShareUrl, generateOgImageUrl, isDaily, puzzleNumber])
+  }, [puzzleNumber, wordsUsed, layers, status, startWord, goalWord, isDaily, difficulty, bestPath, pathsFound])
 
   // Compact mode for TopBar - just an icon button
   if (compact) {

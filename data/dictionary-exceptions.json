@@ -1,5 +1,11 @@
 {
-  "allow": [],
+  "allow": [
+    {
+      "word": "leieandel",
+      "parts": ["leie", "andel"],
+      "reason": "Confirmed valid compound: leie (rent) + andel (share). Both parts exist in Ordbank. Missing from all sources — verified via NoWaC analysis and UiB API gap."
+    }
+  ],
   "deny": [],
   "preferredAnalyses": []
 }

@@ -6,7 +6,8 @@ import { generateHint } from '@/lib/hints'
 import type { GraphNode, PuzzleDifficulty } from '@/types'
 
 interface HintButtonProps {
-  onHintReceived: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
+  onHintReceived: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low'; stepsToGoal?: number }) => void
+  onHintEmpty?: () => void
   disabled?: boolean
   className?: string
   nodes?: GraphNode[]
@@ -15,11 +16,12 @@ interface HintButtonProps {
   difficulty?: PuzzleDifficulty
 }
 
-export default function HintButton({ onHintReceived, disabled, className, nodes, goalWord, selectedNodeId, difficulty }: HintButtonProps) {
+export default function HintButton({ onHintReceived, onHintEmpty, disabled, className, nodes, goalWord, selectedNodeId, difficulty }: HintButtonProps) {
   const [loading, setLoading] = useState(false)
 
   const handleGetHint = async () => {
     if (!nodes || nodes.length === 0 || !goalWord) {
+      onHintEmpty?.()
       return
     }
 
@@ -30,9 +32,11 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
         onHintReceived(hint)
       } else {
         console.warn('No valid hints found for the current board')
+        onHintEmpty?.()
       }
     } catch (error) {
       console.error('Error generating hint:', error)
+      onHintEmpty?.()
     } finally {
       setLoading(false)
     }

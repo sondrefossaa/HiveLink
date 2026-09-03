@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { MotionToggle } from './MotionToggle'
 import ShareButton from './ShareButton'
-import PlayerNameInput from './PlayerNameInput'
 import { getPlayerStats } from '@/lib/player-id'
 import type { PuzzleDifficulty, PuzzleMode } from '@/types'
 
@@ -27,6 +25,8 @@ interface TopBarProps {
   goalWord: string
   startTime: number
   isComplete: boolean
+  bestPath?: string[]
+  onShowPaths?: () => void
   onShowLeaderboard?: () => void
 }
 
@@ -54,6 +54,8 @@ export default function TopBar({
   goalWord,
   startTime,
   isComplete,
+  bestPath,
+  onShowPaths,
   onShowLeaderboard,
 }: TopBarProps) {
   const [currentStreak, setCurrentStreak] = useState(0)
@@ -103,28 +105,11 @@ export default function TopBar({
                 </h1>
               </div>
 
-              <div
-                className="hidden lg:flex items-center gap-2 min-w-0 text-sm font-semibold"
-                aria-label={`Fra ${startWord} til ${goalWord}`}
-              >
-                <span className="max-w-28 truncate text-hive-yellow">{startWord}</span>
-                <span className="text-gray-500" aria-hidden="true">→</span>
-                <span className={`max-w-28 truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>
-                  {goalWord}
-                </span>
-              </div>
-
               <div className="flex items-center gap-2 text-sm">
                 {isDaily ? (
-                  <>
-                    <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
-                      🐝 {currentStreak} dagers rekke
-                    </span>
-                    <div className="flex md:hidden items-center gap-1.5">
-                      <span className="text-gray-400">Hei,</span>
-                      <PlayerNameInput className="text-sm" />
-                    </div>
-                  </>
+                  <span className="bg-hive-graphite/80 px-3 py-1 rounded-full text-hive-yellow font-medium">
+                    🐝 {currentStreak} dagers rekke
+                  </span>
                 ) : (
                   <span className="bg-hive-yellow/10 text-hive-yellow px-3 py-1 rounded-full font-medium">
                     Øvelse
@@ -132,18 +117,10 @@ export default function TopBar({
                 )}
               </div>
 
-              {/* Player Name and Date */}
+              {/* Date */}
               <div className="hidden md:flex items-center gap-2 text-sm">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gray-400">Hei,</span>
-                  <PlayerNameInput className="text-sm" />
-                </div>
-                
                 {formattedDate && isDaily && (
-                  <>
-                    <span className="text-gray-500">·</span>
-                    <span className="text-gray-400">{formattedDate}</span>
-                  </>
+                  <span className="text-gray-400">{formattedDate}</span>
                 )}
               </div>
             </div>
@@ -180,6 +157,30 @@ export default function TopBar({
                     Lag
                   </div>
                 </div>
+
+                {pathsFound > 0 && (
+                  <>
+                    <div className="w-px h-8 bg-hive-graphite" />
+                    <button
+                      type="button"
+                      onClick={onShowPaths}
+                      className="text-center hover:text-hive-yellow transition-colors"
+                      aria-label="Vis stier funnet"
+                    >
+                      <motion.div
+                        key={pathsFound}
+                        initial={{ scale: 1.2 }}
+                        animate={{ scale: 1 }}
+                        className="text-lg sm:text-xl font-bold text-hive-yellow"
+                      >
+                        {pathsFound}
+                      </motion.div>
+                      <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
+                        Stier
+                      </div>
+                    </button>
+                  </>
+                )}
 
                 {parValue && (
                   <>
@@ -279,6 +280,8 @@ export default function TopBar({
                   goalWord={goalWord}
                   isDaily={isDaily}
                   difficulty={difficulty}
+                  bestPath={bestPath}
+                  pathsFound={pathsFound}
                   compact
                 />
               </div>
@@ -287,17 +290,6 @@ export default function TopBar({
 
           {/* Mobile Controls */}
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
-            <motion.div
-              initial={{ opacity: 0, y: -6 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center justify-center gap-2 min-w-0 text-sm font-semibold"
-              aria-label={`Fra ${startWord} til ${goalWord}`}
-            >
-              <span className="truncate text-hive-yellow">{startWord}</span>
-              <span className="text-gray-500" aria-hidden="true">→</span>
-              <span className={`truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>{goalWord}</span>
-            </motion.div>
-
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-gray-400 uppercase tracking-wide text-[10px]">Modus</span>
@@ -357,6 +349,16 @@ export default function TopBar({
                     />
                   </svg>
                   Ledertavle
+                </button>
+              )}
+
+              {pathsFound > 0 && (
+                <button
+                  type="button"
+                  onClick={onShowPaths}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 text-green-400 text-xs font-medium hover:bg-green-500/25 transition-colors"
+                >
+                  {pathsFound} {pathsFound === 1 ? 'sti' : 'stier'}
                 </button>
               )}
             </div>

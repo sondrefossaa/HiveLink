@@ -73,25 +73,6 @@ const traceHexagon = (ctx: CanvasRenderingContext2D, x: number, y: number, size:
   ctx.closePath()
 }
 
-const tracePill = (
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number
-): void => {
-  const radius = height / 2
-  ctx.beginPath()
-  ctx.moveTo(x + radius, y)
-  ctx.lineTo(x + width - radius, y)
-  ctx.arcTo(x + width, y, x + width, y + radius, radius)
-  ctx.arcTo(x + width, y + height, x + width - radius, y + height, radius)
-  ctx.lineTo(x + radius, y + height)
-  ctx.arcTo(x, y + height, x, y + height - radius, radius)
-  ctx.arcTo(x, y, x + radius, y, radius)
-  ctx.closePath()
-}
-
 export function renderGraph(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
@@ -290,48 +271,27 @@ export function renderGraph(
     ctx.fillStyle = '#FFFFFF'
     ctx.fillText(label, x, y)
 
-    if (node.isStart || node.isGoal || node.isReused) {
+    if (node.isReused && !node.isGoal) {
       const screen = camera.worldToScreen(x, y)
       const screenRadius = size * k
 
       ctx.save()
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-      if (node.isStart || node.isGoal) {
-        const badge = node.isStart ? 'START' : 'MÅL'
-        ctx.font = '700 10px Inter, system-ui, sans-serif'
-        const badgeWidth = ctx.measureText(badge).width + 14
-        const badgeHeight = 20
-        const badgeX = screen.x - badgeWidth / 2
-        const badgeY = screen.y - screenRadius - badgeHeight - 7
-        tracePill(ctx, badgeX, badgeY, badgeWidth, badgeHeight)
-        ctx.fillStyle = node.isGoal && isGoalCompleted ? '#166534' : '#33270A'
-        ctx.fill()
-        ctx.strokeStyle = node.isGoal && isGoalCompleted ? '#4ade80' : '#F4B400'
-        ctx.lineWidth = 1
-        ctx.stroke()
-        ctx.fillStyle = node.isGoal && isGoalCompleted ? '#dcfce7' : '#F4B400'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(badge, screen.x, badgeY + badgeHeight / 2 + 0.5)
-      }
-
-      if (node.isReused && !node.isGoal) {
-        const badgeX = screen.x + screenRadius * 0.72
-        const badgeY = screen.y - screenRadius * 0.72
-        ctx.beginPath()
-        ctx.arc(badgeX, badgeY, 9, 0, Math.PI * 2)
-        ctx.fillStyle = '#33270A'
-        ctx.fill()
-        ctx.strokeStyle = '#F4B400'
-        ctx.lineWidth = 1
-        ctx.stroke()
-        ctx.font = '700 10px Inter, system-ui, sans-serif'
-        ctx.fillStyle = '#F4B400'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('↻', badgeX, badgeY + 0.5)
-      }
+      const badgeX = screen.x + screenRadius * 0.72
+      const badgeY = screen.y - screenRadius * 0.72
+      ctx.beginPath()
+      ctx.arc(badgeX, badgeY, 9, 0, Math.PI * 2)
+      ctx.fillStyle = '#33270A'
+      ctx.fill()
+      ctx.strokeStyle = '#F4B400'
+      ctx.lineWidth = 1
+      ctx.stroke()
+      ctx.font = '700 10px Inter, system-ui, sans-serif'
+      ctx.fillStyle = '#F4B400'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('↻', badgeX, badgeY + 0.5)
 
       ctx.restore()
     }

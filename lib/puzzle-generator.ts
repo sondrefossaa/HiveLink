@@ -517,15 +517,15 @@ function findSeededChainAtDepth(
  * Uses a seeded random number generator to ensure the same puzzle
  * is generated for the same date, even across different servers.
  * 
- * Uses the medium graph with easy-tier noun endpoints.
- * Step length follows the medium 3-4 step range.
+ * Uses the easy graph with easy-tier noun endpoints.
+ * Step length follows the easy 2-3 step range.
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
   // For daily puzzles, prefer canonical words but allow filtered common words if needed
   // This ensures familiar, recognizable words while allowing suffix chain building
   
   // Start with canonical words, then add filtered common words from database if available
-  const baseEnvironment = await getEnvironment('medium')
+  const baseEnvironment = await getEnvironment('easy')
   let environment = baseEnvironment
   
   // If we have wordEntries provided, merge in common words (words whose parts are all common)
@@ -561,8 +561,8 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   const seed = dateToSeed(date)
   const random = createSeededRandom(seed)
   
-  // Daily puzzles are always medium difficulty
-  const range = DIFFICULTY_LENGTHS.medium
+  // Daily puzzles are always easy difficulty
+  const range = DIFFICULTY_LENGTHS.easy
   const startKeys = [...new Set(environment.words.flatMap(entry => getEndpointKeys(entry.incomingKeys, 'easy')))]
     .filter(key => environment.incomingIndex.has(key))
   seededShuffleInPlace(startKeys, random)
@@ -570,6 +570,13 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   for (const startKey of startKeys) {
     const result = findSeededChainAtDepth(startKey, options.minSteps ?? range.min, range.max, random, environment, 'easy')
     if (!result) continue
+    // Skip puzzles with a trivial one-word bridge: a single dictionary
+    // word starting with startKey and ending with the goal would let the
+    // player win in one step (and previously auto-completed via
+    // outgoing-key equality, e.g. any `*bord` winning a `bord` goal).
+    const hasDirectBridge = (environment.incomingIndex.get(startKey) ?? [])
+      .some((candidate) => candidate.outgoingKeys.includes(result.goalKey))
+    if (hasDirectBridge) continue
     selected = { startKey, ...result }
     break
   }

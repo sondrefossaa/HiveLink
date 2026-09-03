@@ -4,7 +4,7 @@ import type { GraphEdge } from '@/types'
 import { Camera } from './camera'
 import { renderGraph, hitTestNode, type DragOverride } from './renderer'
 
-const CAMERA_TRANSITION_MS = 450
+const CAMERA_TRANSITION_MS = 600
 const CLICK_SLOP_PX = 6
 const REVEAL_MARGIN_PX = 80
 // Padding factor for spine-centered fit (matches fitTransform's 18% side padding)
@@ -45,13 +45,14 @@ export class GraphController {
   private pinchState: { dist: number; k: number; midX: number; midY: number } | null = null
   private downPos: { x: number; y: number } | null = null
   private downMoved = false
-  private viewportInitialized = false
 
   private resizeObserver: ResizeObserver
   private raf = 0
   private running = false
   private dirty = true
   private disposed = false
+  private lastWidth = 0
+  private lastHeight = 0
 
   constructor(container: HTMLElement, onNodeSelect: (id: string) => void) {
     this.container = container
@@ -137,6 +138,13 @@ export class GraphController {
     k = this.camera.clampZoom(k)
 
     this.camera.animateTo(k, spineX, spineY, animate ? CAMERA_TRANSITION_MS : 0)
+    this.invalidate()
+  }
+
+  zoomBy(factor: number): void {
+    const cx = this.camera.width / 2
+    const cy = this.camera.height / 2
+    this.camera.zoomAt(cx, cy, factor)
     this.invalidate()
   }
 
@@ -245,17 +253,28 @@ export class GraphController {
     const height = rect.height
     if (width <= 0 || height <= 0) return
 
-    const prevCenter = this.viewportInitialized
-      ? this.camera.centerWorld()
-      : { x: 0, y: 0 }
+    // Skip no-op resize callbacks (common with ResizeObserver)
+    if (width === this.lastWidth && height === this.lastHeight) return
+    this.lastWidth = width
+    this.lastHeight = height
 
     this.dpr = window.devicePixelRatio || 1
     this.canvas.width = Math.max(1, Math.round(width * this.dpr))
     this.canvas.height = Math.max(1, Math.round(height * this.dpr))
     this.camera.setViewport(width, height)
-    this.camera.centerAt(prevCenter.x, prevCenter.y, 0)
-    this.viewportInitialized = true
-    this.invalidate()
+
+    // Don't cancel an in-flight camera animation — let it finish with the
+    // updated viewport dimensions. Only re-fit when nothing is animating.
+    if (this.camera.isAnimating()) {
+      this.invalidate()
+      return
+    }
+
+    if (this.state) {
+      this.fitAll(false)
+    } else {
+      this.invalidate()
+    }
   }
 
   // ---- Interactions ----

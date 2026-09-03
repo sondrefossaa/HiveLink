@@ -1,8 +1,44 @@
 import type { GraphEdge, GraphNode, NodeConnection } from '@/types'
 
-export const OCCURRENCE_TREE_STATE_VERSION = 2
+export const OCCURRENCE_TREE_STATE_VERSION = 3
 
 const normalizedWord = (word: string): string => word.normalize('NFC').toLocaleLowerCase('nb-NO')
+
+export function ensureGoalPreview(nodes: GraphNode[], goalWord: string): GraphNode[] {
+  // Single shared goal: exactly one floating marker, never parented and
+  // never duplicated. Legacy saves may contain completed `goal-<id>`
+  // duplicates with a parentId — collapse them to one floating node that
+  // preserves completion so old wins are not lost.
+  const goalNodes = nodes.filter((node) => node.isGoal)
+  const floating = goalNodes.find((node) => !node.parentId)
+  const wasComplete = goalNodes.some((node) => node.isCompleted)
+  const withoutGoals = nodes.filter((node) => !node.isGoal)
+
+  if (floating) {
+    const deduped: GraphNode[] = [
+      ...withoutGoals,
+      wasComplete && !floating.isCompleted
+        ? { ...floating, isCompleted: true }
+        : floating,
+    ]
+    // If there were legacy duplicates, their count changed — return deduped.
+    // Otherwise the single preview already exists.
+    return deduped
+  }
+
+  const normalizedGoal = normalizedWord(goalWord)
+  return [...withoutGoals, {
+    id: 'goal',
+    word: goalWord,
+    parts: [goalWord],
+    incomingKeys: [normalizedGoal],
+    outgoingKeys: [normalizedGoal],
+    layer: -1,
+    isStart: false,
+    isGoal: true,
+    isCompleted: wasComplete,
+  }]
+}
 
 export function chooseOccurrenceParent(
   connections: NodeConnection[],

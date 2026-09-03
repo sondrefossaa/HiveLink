@@ -10,7 +10,7 @@ import type { DailyPuzzle } from '@/types'
 interface StoredDailyPuzzle {
   dictionaryVersion: 3
   tierPolicyVersion: 2
-  tier: 'medium'
+  tier: 'easy'
   startWord: string
   goalWord: string
   parSteps: number
@@ -43,7 +43,7 @@ export function getStoredDailyPuzzle(dateKey: string): StoredDailyPuzzle | null 
     typeof stored.parSteps !== 'number' ||
     stored.dictionaryVersion !== 3 ||
     stored.tierPolicyVersion !== 2 ||
-    stored.tier !== 'medium' ||
+    stored.tier !== 'easy' ||
     !Array.isArray(stored.solutionPath)
     || !Array.isArray(stored.solutionAnalysisIds)
   ) {

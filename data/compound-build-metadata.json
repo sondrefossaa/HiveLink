@@ -6,13 +6,16 @@
     "eieslandExpectedRows": 60865,
     "eieslandMatchedRows": 5149,
     "nstAddedCompounds": 50278,
+    "nowacDiscoveryCandidates": 20066,
+    "nowacDiscoveryAdded": 20066,
     "nowacApplied": true,
     "checksums": {
       "ordbank": "57d91cb3f17b85befa50a3b56fcaed9800ca665b39486fe97b668add914d5f60",
       "nst": "cef2a5f9690d058331f0f814f175109887bcdc7415e802e1523043b9c36e455b",
       "eiesland": "e46c12b8be66780252a0dfaeebea550203c2e8426d7c95a6ac33d352cc75d81f",
       "nb1gram": "d6524958dba7f87fddd6e3f6480593625afa885ae9cc75e478ab812fc5960b5b",
-      "nowacLemmaFrequency": "2facd2552affacfbe3337062d47d8a6d7af86039a00efca88e4550c351c689da"
+      "nowacLemmaFrequency": "2facd2552affacfbe3337062d47d8a6d7af86039a00efca88e4550c351c689da",
+      "nowacRawTokens": "cd14daad723ab5201447ec239882cac5132df8420874aa72c8374de066eef3cb"
     }
   },
   "frequencyPolicy": {
@@ -51,30 +54,30 @@
   "graphStatistics": [
     {
       "tier": "easy",
-      "nodes": 3555,
-      "nounEndpoints": 3494,
-      "compounds": 1807,
-      "analyses": 1807,
-      "activeKeys": 1524,
-      "largestWeakComponent": 1233
+      "nodes": 3745,
+      "nounEndpoints": 3627,
+      "compounds": 2031,
+      "analyses": 2044,
+      "activeKeys": 1650,
+      "largestWeakComponent": 1364
     },
     {
       "tier": "medium",
-      "nodes": 7666,
-      "nounEndpoints": 7496,
-      "compounds": 9670,
-      "analyses": 9672,
-      "activeKeys": 4232,
-      "largestWeakComponent": 4021
+      "nodes": 8077,
+      "nounEndpoints": 7830,
+      "compounds": 11036,
+      "analyses": 11195,
+      "activeKeys": 4618,
+      "largestWeakComponent": 4387
     },
     {
       "tier": "hard",
-      "nodes": 12834,
-      "nounEndpoints": 10576,
-      "compounds": 31681,
-      "analyses": 31686,
-      "activeKeys": 8418,
-      "largestWeakComponent": 8260
+      "nodes": 13573,
+      "nounEndpoints": 11084,
+      "compounds": 36563,
+      "analyses": 38110,
+      "activeKeys": 9268,
+      "largestWeakComponent": 9140
     }
   ]
 }

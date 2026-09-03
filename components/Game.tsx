@@ -12,6 +12,7 @@ import MiniMap from './MiniMap'
 import HowToPlay, { useFirstVisitTutorial } from './HowToPlay'
 import LeaderboardModal from './LeaderboardModal'
 import type { GameStats } from '@/types'
+import type { GraphHandle } from './Graph'
 
 // Dynamically import Graph to avoid SSR issues with canvas
 const Graph = dynamic(() => import('./Graph'), {
@@ -53,7 +54,6 @@ export default function Game() {
   const [showGiveUp, setShowGiveUp] = useState(false)
   const [newPathToast, setNewPathToast] = useState(false)
   const [showLeaderboard, setShowLeaderboard] = useState(false)
-  const [layoutVersion, setLayoutVersion] = useState(0)
   const { showTutorial, setShowTutorial } = useFirstVisitTutorial()
   const prevPathCountRef = useRef(0)
   const hasShownVictoryRef = useRef(false)
@@ -64,9 +64,10 @@ export default function Game() {
   const prevModeRef = useRef(mode)
   const [hintValue, setHintValue] = useState<string | null>(null)
   const [showHintToast, setShowHintToast] = useState(false)
+  const graphControlRef = useRef<GraphHandle | null>(null)
 
   // Handle hint received - autofill the input
-  const handleHintReceived = useCallback((hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => {
+  const handleHintReceived = useCallback((hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low'; stepsToGoal?: number }) => {
     // Set the hint value to autofill the input
     setHintValue(hint.suggestedWord)
     // Show a toast notification
@@ -197,22 +198,6 @@ export default function Game() {
     setShowGiveUp(false)
   }, [gameState])
 
-  // Handle layout refresh
-  const handleRefreshLayout = useCallback(() => {
-    setLayoutVersion((v) => v + 1)
-  }, [])
-
-  // Auto-trigger layout rebalance when nodes are added (after initial load)
-  const prevNodeCountRef = useRef(gameState.nodes.length)
-  useEffect(() => {
-    const currentNodeCount = gameState.nodes.length
-    if (currentNodeCount > prevNodeCountRef.current && prevNodeCountRef.current > 0) {
-      // New node was added - trigger rebalance
-      setLayoutVersion((v) => v + 1)
-    }
-    prevNodeCountRef.current = currentNodeCount
-  }, [gameState.nodes.length])
-
   // Loading state
   if (puzzleLoading) {
     return (
@@ -264,6 +249,9 @@ export default function Game() {
 
   if (!puzzle) return null
 
+  // Stable key for graph remount on puzzle switch (resets controller, camera, animation state)
+  const puzzleKey = puzzle.isDaily ? `daily-${puzzle.date}` : `practice-${puzzle.id}`
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Top bar */}
@@ -285,6 +273,8 @@ export default function Game() {
         goalWord={puzzle.goalWord}
         startTime={gameState.startTime}
         isComplete={gameState.isComplete}
+        bestPath={gameState.allPaths[0]}
+        onShowPaths={gameState.allPaths.length > 0 ? () => setShowVictory(true) : undefined}
         onShowLeaderboard={isDailyPuzzle ? () => setShowLeaderboard(true) : undefined}
       />
 
@@ -294,6 +284,8 @@ export default function Game() {
         <div className="absolute inset-0 pb-32 pt-24 lg:pt-16 transition-[padding] duration-300 ease-in-out">
           {gameState.nodes.length > 0 ? (
             <Graph
+              key={puzzleKey}
+              controlRef={graphControlRef}
               nodes={gameState.nodes}
               edges={gameState.edges}
               selectedNodeId={gameState.selectedNodeId}
@@ -301,7 +293,6 @@ export default function Game() {
               isComplete={gameState.isComplete}
               winningPath={gameState.winningPath}
               winningPathNodeIds={gameState.winningPathNodeIds}
-              layoutVersion={layoutVersion}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -335,24 +326,59 @@ export default function Game() {
           </div>
         )}
 
+        {/* Zoom & center controls */}
+        <div className="fixed bottom-56 lg:bottom-48 right-4 z-40 flex flex-col gap-2">
+          <button
+            onClick={() => graphControlRef.current?.zoomIn()}
+            className="w-10 h-10 rounded-full bg-hive-graphite/80 hover:bg-hive-slate/80
+                       backdrop-blur-sm text-hive-yellow flex items-center justify-center
+                       transition-colors border border-hive-slate/50"
+            aria-label="Zoom inn"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+            </svg>
+          </button>
+          <button
+            onClick={() => graphControlRef.current?.fitAll()}
+            className="w-10 h-10 rounded-full bg-hive-graphite/80 hover:bg-hive-slate/80
+                       backdrop-blur-sm text-hive-yellow flex items-center justify-center
+                       transition-colors border border-hive-slate/50"
+            aria-label="Sentrer graf"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => graphControlRef.current?.zoomOut()}
+            className="w-10 h-10 rounded-full bg-hive-graphite/80 hover:bg-hive-slate/80
+                       backdrop-blur-sm text-hive-yellow flex items-center justify-center
+                       transition-colors border border-hive-slate/50"
+            aria-label="Zoom ut"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" d="M5 12h14" />
+            </svg>
+          </button>
+        </div>
+
       </main>
 
-      {/* Input bar */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 pb-6 bg-gradient-to-t from-hive-dark via-hive-dark/95 to-transparent backdrop-blur-sm z-30">
-        <InputBar
-          onSubmit={gameState.addWord}
-          isLoading={gameState.isLoading}
-          isDisabled={gameState.isComplete && !gameState.allowExploration}
-          error={gameState.error}
-          selectedNode={selectedNode}
-          onHintReceived={handleHintReceived}
-          goalWord={puzzle.goalWord}
-          nodes={gameState.nodes}
-          difficulty={puzzle.isDaily ? 'medium' : puzzle.difficulty}
-          externalValue={hintValue}
-          onExternalValueSet={() => setHintValue(null)}
-        />
-      </div>
+      {/* Input bar (InputBar is itself fixed; no wrapper so it can't cover buttons) */}
+      <InputBar
+        onSubmit={gameState.addWord}
+        isLoading={gameState.isLoading}
+        isDisabled={gameState.isComplete && !gameState.allowExploration}
+        error={gameState.error}
+        selectedNode={selectedNode}
+        onHintReceived={handleHintReceived}
+        goalWord={puzzle.goalWord}
+        nodes={gameState.nodes}
+        difficulty={puzzle.isDaily ? 'easy' : puzzle.difficulty}
+        externalValue={hintValue}
+        onExternalValueSet={() => setHintValue(null)}
+      />
 
       {/* Victory modal */}
       <VictoryModal
@@ -395,7 +421,7 @@ export default function Game() {
       {gameState.isComplete && (
         <button
           onClick={() => setShowVictory(true)}
-          className="fixed bottom-48 lg:bottom-32 left-4 z-30 w-10 h-10 rounded-full
+          className="fixed bottom-56 lg:bottom-48 left-4 z-40 w-10 h-10 rounded-full
                      bg-hive-yellow/90 hover:bg-hive-gold backdrop-blur-sm
                      text-hive-dark flex items-center justify-center transition-colors
                      border border-hive-gold/50 shadow-hive-glow"
@@ -410,7 +436,7 @@ export default function Game() {
       {/* Help button */}
       <button
         onClick={() => setShowTutorial(true)}
-        className="fixed bottom-36 lg:bottom-20 left-4 z-30 w-10 h-10 rounded-full
+        className="fixed bottom-44 lg:bottom-36 left-4 z-40 w-10 h-10 rounded-full
                    bg-hive-graphite/80 hover:bg-hive-slate/80 backdrop-blur-sm
                    text-hive-yellow flex items-center justify-center transition-colors
                    border border-hive-slate/50"

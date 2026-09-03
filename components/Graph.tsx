@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, forwardRef, type MutableRefObject } from 'react'
 import type { GraphProps } from '@/types'
 import {
   computeGraphLayout,
@@ -21,56 +21,66 @@ const maxZoomFor = (nodeCount: number): number => {
   return 3
 }
 
-function Graph({
-  nodes,
-  edges,
-  selectedNodeId,
-  onNodeSelect,
-  isComplete,
-  winningPath,
-  winningPathNodeIds = [],
-  layoutVersion = 0,
-}: GraphProps) {
+export interface GraphHandle {
+  fitAll: () => void
+  zoomIn: () => void
+  zoomOut: () => void
+}
+
+const ZOOM_STEP = 1.4
+
+const Graph = forwardRef<GraphHandle, GraphProps & { controlRef?: MutableRefObject<GraphHandle | null> }>(function Graph(
+  {
+    nodes,
+    edges,
+    selectedNodeId,
+    onNodeSelect,
+    isComplete,
+    winningPath,
+    winningPathNodeIds = [],
+    controlRef,
+  }: GraphProps & { controlRef?: MutableRefObject<GraphHandle | null> },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const controllerRef = useRef<GraphController | null>(null)
   const onNodeSelectRef = useRef(onNodeSelect)
   const prevNodeIdsRef = useRef<Set<string> | null>(null)
   const prevWordIdsRef = useRef<Set<string> | null>(null)
   const prevOrientationRef = useRef<'horizontal' | 'vertical'>('horizontal')
-  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical' | null>(null)
 
   useEffect(() => {
     onNodeSelectRef.current = onNodeSelect
   })
 
-  // Track orientation from the container width
-  useEffect(() => {
+  // Measure container width once before first paint to avoid horizontal-first flash
+  useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
-    const update = () => {
-      const rect = container.getBoundingClientRect()
-      setOrientation(rect.width < 768 ? 'vertical' : 'horizontal')
-    }
-    update()
-    const observer = new ResizeObserver(update)
-    observer.observe(container)
-    return () => observer.disconnect()
+    const rect = container.getBoundingClientRect()
+    setOrientation(rect.width < 768 ? 'vertical' : 'horizontal')
   }, [])
 
-  // Compute the layout and feed the animation manager (runs once per layout change)
+  // Compute the layout (pure — no side effects)
   const layout = useMemo(() => {
-    const result = computeGraphLayout(nodes, edges, orientation)
+    if (!orientation) return null
+    return computeGraphLayout(nodes, edges, orientation)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, orientation])
+
+  // Feed the animation manager after layout commits (not inside useMemo)
+  useLayoutEffect(() => {
+    if (!layout) return
     getAnimationManager().updateTargets(
-      result.nodes.map((node) => ({
+      layout.nodes.map((node) => ({
         id: node.id,
         targetX: node.targetX,
         targetY: node.targetY,
         parentId: node.parentId,
       }))
     )
-    return result
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodes, edges, orientation, layoutVersion])
+  }, [layout])
 
   const maxZoom = useMemo(() => maxZoomFor(nodes.length), [nodes.length])
 
@@ -107,7 +117,7 @@ function Graph({
   // Nodes directly connected to any completed goal occurrence.
   const goalNeighbors = useMemo(() => {
     const set = new Set<string>()
-    const goalIds = new Set(nodes.filter((node) => node.isGoal && node.parentId).map((node) => node.id))
+    const goalIds = new Set(nodes.filter((node) => node.isGoal && node.isCompleted).map((node) => node.id))
     edges.forEach((edge) => {
       const sourceId = resolveEdgeEndpoint(edge.source)
       const targetId = resolveEdgeEndpoint(edge.target)
@@ -118,7 +128,8 @@ function Graph({
   }, [nodes, edges])
 
   const visibleEdges = useMemo(() => {
-    return computeVisibleEdges(edges, layout.nodeMeta, orientation)
+    if (!layout) return []
+    return computeVisibleEdges(edges, layout.nodeMeta, orientation!)
   }, [edges, layout, orientation])
 
   // Create the controller once
@@ -135,8 +146,40 @@ function Graph({
     }
   }, [])
 
+  // Expose camera control methods to parent
+  useImperativeHandle(ref, () => ({
+    fitAll() {
+      controllerRef.current?.fitAll(true)
+    },
+    zoomIn() {
+      controllerRef.current?.zoomBy(ZOOM_STEP)
+    },
+    zoomOut() {
+      controllerRef.current?.zoomBy(1 / ZOOM_STEP)
+    },
+  }))
+
+  // next/dynamic() swallows `ref` (its wrapper only exposes `retry`), so the
+  // same handle is also published through this plain prop, which dynamic
+  // passes through untouched.
+  useEffect(() => {
+    if (!controlRef) return
+    controlRef.current = {
+      fitAll() {
+        controllerRef.current?.fitAll(true)
+      },
+      zoomIn() {
+        controllerRef.current?.zoomBy(ZOOM_STEP)
+      },
+      zoomOut() {
+        controllerRef.current?.zoomBy(1 / ZOOM_STEP)
+      },
+    }
+  })
+
   // Sync props into the controller on every render
   useEffect(() => {
+    if (!layout || !orientation) return
     controllerRef.current?.sync({
       layout,
       edges: visibleEdges,
@@ -153,7 +196,7 @@ function Graph({
   // Camera: fit on launch/orientation change/puzzle switch, hybrid reveal on graph growth
   useEffect(() => {
     const controller = controllerRef.current
-    if (!controller) return
+    if (!controller || !layout || !orientation) return
 
     const ids = new Set(nodes.map((node) => node.id))
     const wordIds = new Set(
@@ -190,6 +233,18 @@ function Graph({
     prevOrientationRef.current = orientation
   }, [layout, nodes, orientation])
 
+  // Don't render the canvas until orientation is measured
+  if (!orientation) {
+    return (
+      <div
+        ref={containerRef}
+        data-graph-container
+        className="w-full h-full relative overflow-hidden bg-transparent"
+        style={{ minHeight: '400px' }}
+      />
+    )
+  }
+
   return (
     <div
       ref={containerRef}
@@ -198,6 +253,6 @@ function Graph({
       style={{ minHeight: '400px' }}
     />
   )
-}
+})
 
 export default memo(Graph)

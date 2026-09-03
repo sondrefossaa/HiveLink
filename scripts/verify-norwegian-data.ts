@@ -24,7 +24,7 @@ const graphStats = JSON.parse(readFileSync(join(ROOT, 'data', 'compound-graph-st
 const daily = JSON.parse(readFileSync(join(ROOT, 'data', 'daily-puzzles.json'), 'utf8')) as Record<string, {
   dictionaryVersion: number
   tierPolicyVersion: number
-  tier: 'medium'
+  tier: 'easy'
   startWord: string
   goalWord: string
   parSteps: number
@@ -137,7 +137,7 @@ function shortestSteps(start: string, goal: string, maxTier?: number): number | 
 }
 
 for (const [date, puzzle] of Object.entries(daily)) {
-  if (puzzle.dictionaryVersion !== 3 || puzzle.tierPolicyVersion !== 2 || puzzle.tier !== 'medium') {
+  if (puzzle.dictionaryVersion !== 3 || puzzle.tierPolicyVersion !== 2 || puzzle.tier !== 'easy') {
     fail(`${date}: unsupported dictionary policy`)
   }
   if (!LETTERS.test(puzzle.startWord) || !LETTERS.test(puzzle.goalWord)) fail(`${date}: invalid endpoint`)
@@ -156,7 +156,7 @@ for (const [date, puzzle] of Object.entries(daily)) {
     outgoing = new Set(analysis.outgoingKeys)
   }
   if (!outgoing.has(puzzle.goalWord)) fail(`${date}: solution does not reach ${puzzle.goalWord}`)
-  const par = shortestSteps(puzzle.startWord, puzzle.goalWord, 1)
+  const par = shortestSteps(puzzle.startWord, puzzle.goalWord, 0)
   if (par !== puzzle.parSteps) fail(`${date}: expected par ${puzzle.parSteps}, found ${par}`)
   const absolute = shortestSteps(puzzle.startWord, puzzle.goalWord)
   if (absolute !== null && absolute > puzzle.parSteps) fail(`${date}: full-graph optimum exceeds tier par`)

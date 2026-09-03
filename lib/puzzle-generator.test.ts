@@ -42,10 +42,10 @@ for (const difficulty of ['easy', 'medium', 'hard'] as const) {
   })
 }
 
-test('daily intended paths use the medium frequency policy', async () => {
+test('daily intended paths use the easy frequency policy', async () => {
   const puzzle = await generateDailyPuzzle(new Date('2026-09-03T00:00:00Z'))
-  assert.ok(puzzle.parSteps >= 3 && puzzle.parSteps <= 4)
-  await assertFrequencyGatedPath('medium', puzzle.startWord, puzzle.solutionPath, puzzle.solutionAnalysisIds)
+  assert.ok(puzzle.parSteps >= 2 && puzzle.parSteps <= 3)
+  await assertFrequencyGatedPath('easy', puzzle.startWord, puzzle.solutionPath, puzzle.solutionAnalysisIds)
 })
 
 test('rare structural compounds remain playable but are excluded from generated hard paths', async () => {

@@ -18,7 +18,7 @@ interface InputBarProps {
   isDisabled: boolean
   error: string | null
   selectedNode: GraphNode | null
-  onHintReceived?: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
+  onHintReceived?: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low'; stepsToGoal?: number }) => void
   goalWord?: string
   nodes?: GraphNode[]
   difficulty?: PuzzleDifficulty
@@ -41,6 +41,7 @@ export default function InputBar({
 }: InputBarProps) {
   const [input, setInput] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
+  const [hintMessage, setHintMessage] = useState<string | null>(null)
   const [placementNotice, setPlacementNotice] = useState<string | null>(null)
   const [shake, setShake] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -80,6 +81,14 @@ export default function InputBar({
     }
   }, [localError])
 
+  // Clear hint message after a delay (same timing as errors)
+  useEffect(() => {
+    if (hintMessage) {
+      const timer = setTimeout(() => setHintMessage(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [hintMessage])
+
   useEffect(() => {
     if (!placementNotice) return
     const timer = setTimeout(() => setPlacementNotice(null), 3000)
@@ -94,6 +103,15 @@ export default function InputBar({
       setTimeout(() => setShake(false), 500)
     }
   }, [error])
+
+  const handleHintReceived = (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low'; stepsToGoal?: number }) => {
+    setHintMessage(null)
+    onHintReceived?.(hint)
+  }
+
+  const handleHintEmpty = () => {
+    setHintMessage('Ingen gode ord funnet')
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -115,6 +133,7 @@ export default function InputBar({
     }
 
     setLocalError(null)
+    setHintMessage(null)
 
     const result = await onSubmit(trimmed)
 
@@ -162,13 +181,13 @@ export default function InputBar({
     <motion.div
       initial={{ y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="fixed bottom-0 left-0 right-0 z-40"
+      className="fixed bottom-0 left-0 right-0 z-40 pointer-events-none"
       style={{ touchAction: 'pan-x pan-y' }}
     >
       {/* Gradient background */}
       <div className="absolute inset-0 bg-gradient-to-t from-hive-dark via-hive-dark/95 to-transparent pointer-events-none" />
 
-      <div className="relative max-w-2xl mx-auto px-4 pb-6 pt-8">
+      <div className="relative max-w-2xl mx-auto px-4 pb-6 pt-8 pointer-events-none">
         {/* Selected node indicator */}
         <AnimatePresence>
           {selectedNode && !selectedNode.isGoal && (
@@ -219,10 +238,26 @@ export default function InputBar({
           )}
         </AnimatePresence>
 
+        {/* Hint message - same pill shape/placement as the error, but yellow */}
+        <AnimatePresence>
+          {hintMessage && !displayError && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="mb-3 text-center"
+            >
+              <span id="compound-word-hint" role="status" className="text-sm text-yellow-300 bg-yellow-500/10 px-3 py-1 rounded-full">
+                {hintMessage}
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Input form */}
         <form
           onSubmit={handleSubmit}
-          className="relative"
+          className="relative pointer-events-auto"
           autoComplete="off"
           data-1p-ignore
           data-lpignore="true"
@@ -239,13 +274,15 @@ export default function InputBar({
               className={`relative flex items-center gap-2 p-2 rounded-2xl w-full
                        bg-hive-charcoal/90 backdrop-blur-sm
                        border-2 transition-colors duration-200
-                       ${isDisabled ? 'border-hive-graphite' : 'border-hive-graphite focus-within:border-hive-yellow'}
-                       ${displayError ? 'border-red-500/50' : ''}`}
+                        ${isDisabled ? 'border-hive-graphite' : 'border-hive-graphite focus-within:border-hive-yellow'}
+                        ${displayError ? 'border-red-500/50' : ''}
+                        ${!displayError && hintMessage ? 'border-yellow-500/50' : ''}`}
             >
               {/* Hint button - only show when not disabled and hint handler is available */}
               {!isDisabled && onHintReceived && (
                 <HintButton
-                  onHintReceived={onHintReceived}
+                  onHintReceived={handleHintReceived}
+                  onHintEmpty={handleHintEmpty}
                   className="flex-shrink-0"
                   nodes={nodes}
                   goalWord={goalWord}
@@ -288,8 +325,8 @@ export default function InputBar({
                          placeholder:text-gray-500 focus:outline-none
                          disabled:text-gray-500 disabled:cursor-not-allowed"
                 aria-label="Skriv inn sammensatt ord"
-                aria-invalid={Boolean(displayError)}
-                aria-describedby={displayError ? 'compound-word-error' : 'compound-word-help'}
+                aria-invalid={Boolean(displayError || hintMessage)}
+                aria-describedby={displayError ? 'compound-word-error' : hintMessage ? 'compound-word-hint' : 'compound-word-help'}
               />
 
               <motion.button

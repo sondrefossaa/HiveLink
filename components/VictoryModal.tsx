@@ -7,6 +7,7 @@ import ShareButton from './ShareButton'
 import type { GameStats, PuzzleDifficulty } from '@/types'
 import { useMotionPreference } from '@/hooks/useMotionPreference'
 import { getScores } from '@/lib/player-id'
+import { buildOgImageUrl } from '@/lib/share'
 
 interface VictoryModalProps {
   isOpen: boolean
@@ -23,35 +24,6 @@ interface VictoryModalProps {
   startWord: string
   goalWord: string
   difficulty?: PuzzleDifficulty
-}
-
-// Helper to generate OG image URL
-function generateOgImageUrl(
-  status: 'won' | 'gave-up' | 'playing',
-  startWord: string,
-  goalWord: string,
-  wordsUsed: number,
-  layers: number,
-  isDaily: boolean,
-  puzzleNumber?: number,
-  difficulty?: PuzzleDifficulty
-) {
-  const baseUrl = '/api/og'
-  const params = new URLSearchParams()
-  
-  params.set('status', status)
-  params.set('start', startWord)
-  params.set('goal', goalWord)
-  params.set('words', wordsUsed.toString())
-  params.set('layers', layers.toString())
-  
-  if (isDaily && puzzleNumber) {
-    params.set('puzzle', puzzleNumber.toString())
-  } else if (difficulty) {
-    params.set('difficulty', difficulty)
-  }
-  
-  return `${baseUrl}?${params.toString()}`
 }
 
 export default function VictoryModal({
@@ -130,16 +102,18 @@ export default function VictoryModal({
   }, [isOpen, showPathsFoundNotice, pathsFound])
 
   // Get the OG image URL
-  const ogImageUrl = generateOgImageUrl(
-    'won',
+  const ogImageUrl = buildOgImageUrl({
+    status: 'won',
     startWord,
     goalWord,
-    stats.wordsUsed,
-    stats.layersExplored,
+    wordsUsed: stats.wordsUsed,
+    layers: stats.layersExplored,
     isDaily,
     puzzleNumber,
-    difficulty
-  )
+    difficulty,
+    bestPath: path,
+    pathsFound,
+  })
 
   // Copy image to clipboard
   const handleCopyImage = useCallback(async () => {
@@ -470,7 +444,7 @@ export default function VictoryModal({
                 className="w-full py-2 text-sm text-gray-400 hover:text-white
                           flex items-center justify-center gap-2 transition-colors"
               >
-                <span>{showDetails ? 'Skjul' : 'Vis'} stien din</span>
+                <span>{showDetails ? 'Skjul' : 'Vis'} {pathsFound === 1 ? 'stien din' : 'stiene dine'}</span>
                 <motion.svg
                   animate={{ rotate: showDetails ? 180 : 0 }}
                   className="w-4 h-4"
@@ -600,6 +574,8 @@ export default function VictoryModal({
                   goalWord={goalWord}
                   isDaily={isDaily}
                   difficulty={difficulty}
+                  bestPath={path}
+                  pathsFound={pathsFound}
                 />
               </div>
               <div className="flex flex-col gap-3">

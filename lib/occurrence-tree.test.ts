@@ -3,6 +3,7 @@ import test from 'node:test'
 import type { GraphEdge, GraphNode, NodeConnection } from '@/types'
 import {
   chooseOccurrenceParent,
+  ensureGoalPreview,
   isDistinctWordPath,
   traceOccurrencePath,
 } from './occurrence-tree'
@@ -155,4 +156,44 @@ test('lays out duplicate occurrences as separate non-overlapping tree branches',
   assert.notEqual(layout.nodeMeta.get('goal-left')?.targetY, layout.nodeMeta.get('goal-right')?.targetY)
   assert.equal(layout.nodeMeta.get('goal-left')?.parentId, 'left')
   assert.equal(layout.nodeMeta.get('goal-right')?.parentId, 'right')
+})
+
+test('collapses legacy parented goal duplicates to a single floating goal', () => {
+  const start = node('start', 'fot', 0)
+  const middle = node('middle', 'fotball', 1, 'start')
+  const completedGoal: GraphNode = {
+    ...node('goal', 'ball', 2, 'middle'),
+    isGoal: true,
+    isCompleted: true,
+  }
+
+  const restored = ensureGoalPreview([start, middle, completedGoal], 'ball')
+  const goals = restored.filter((candidate) => candidate.isGoal)
+
+  assert.equal(restored.length, 3)
+  assert.equal(goals.length, 1)
+  assert.equal(goals[0].word, 'ball')
+  assert.equal(goals[0].parentId, undefined)
+  assert.equal(goals[0].isCompleted, true)
+})
+
+test('keeps the single shared goal one layer beyond the deepest word after completion', () => {
+  const start = node('start', 'fot', 0)
+  const winningWord = node('winner', 'fotball', 1, 'start')
+  const deeperWord = node('deeper', 'ballong', 3, 'winner')
+  const sharedGoal: GraphNode = {
+    ...node('goal', 'ball', -1),
+    isGoal: true,
+    isCompleted: true,
+  }
+
+  const layout = computeGraphLayout(
+    [start, winningWord, deeperWord, sharedGoal],
+    []
+  )
+
+  const goals = [start, winningWord, deeperWord, sharedGoal].filter((n) => n.isGoal)
+  assert.equal(goals.length, 1)
+  assert.equal(layout.nodeMeta.get(sharedGoal.id)?.computedLayer, 4)
+  assert.equal(layout.goalNodeId, sharedGoal.id)
 })

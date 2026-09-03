@@ -16,7 +16,7 @@ const INPUT = join(ROOT, 'data', 'compound-build.json')
 const OUTPUT = join(ROOT, 'public', 'dictionary', 'compound-words.json')
 const STATS_OUTPUT = join(ROOT, 'data', 'compound-graph-stats.json')
 const METADATA_OUTPUT = join(ROOT, 'data', 'compound-build-metadata.json')
-const SOURCE_MASK: Record<string, number> = { ordbank: 1, nst: 2, eiesland: 4, manual: 8 }
+const SOURCE_MASK: Record<string, number> = { ordbank: 1, nst: 2, eiesland: 4, manual: 8, nowac: 16 }
 
 interface Metric { count: number; rank: number | null; percentile: number }
 interface FrequencyEvidence { nb?: number; nowacLemma?: number; eiesland?: number }

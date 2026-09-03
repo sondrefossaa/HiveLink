@@ -297,7 +297,8 @@ export const resolveEdgeEndpoint = (endpoint: string | GraphNode): string => res
  * Build a tree-style layout.
  *
  * Layers and parentId come from the occurrence tree. The unattached target
- * goal stays one layer beyond the deepest word until the first path reaches it.
+ * goal stays one layer beyond the deepest word while completed goal occurrences
+ * remain attached to the paths that found them.
  */
 export function computeGraphLayout(
   nodes: GraphNode[],
@@ -306,7 +307,7 @@ export function computeGraphLayout(
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
   const goalNodes = nodes.filter((node) => node.isGoal)
-  const goalNode = goalNodes.find((node) => node.id === 'goal') ?? goalNodes[0]
+  const goalNode = goalNodes.find((node) => !node.parentId) ?? goalNodes[0]
   if (!startNode) {
     // Defensive: no start node (should not happen) - empty layout
     return {
@@ -336,18 +337,22 @@ export function computeGraphLayout(
     incoming.get(targetId)!.push(sourceId)
   })
 
-  // Layer assignment: placed occurrences are authoritative. Only the initial,
-  // unattached goal preview floats beyond the deepest placed word.
+  // Layer assignment: placed occurrences are authoritative. The unattached goal
+  // preview floats beyond the deepest word, not beyond completed goal leaves.
   const layerOf = new Map<string, number>()
   let maxLayer = 0
+  let deepestWordLayer = 0
   nodes.forEach((node) => {
     if (node.isGoal && !node.parentId) return
     const layer = node.layer >= 0 ? node.layer : 0
     layerOf.set(node.id, layer)
     if (layer > maxLayer) maxLayer = layer
+    if (!node.isGoal && layer > deepestWordLayer) deepestWordLayer = layer
   })
   goalNodes.filter((node) => !node.parentId).forEach((node) => {
-    layerOf.set(node.id, maxLayer + 1)
+    const previewLayer = deepestWordLayer + 1
+    layerOf.set(node.id, previewLayer)
+    if (previewLayer > maxLayer) maxLayer = previewLayer
   })
   const goalLayer = goalNodes.reduce(
     (deepest, node) => Math.max(deepest, layerOf.get(node.id) ?? maxLayer + 1),

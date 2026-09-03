@@ -1,17 +1,72 @@
 /**
- * Hint generation logic (client-side utilities)
- * Server-side hint generation is handled in the API route
+ * Goal-directed hint generation (client-side)
+ *
+ * Instead of ranking candidates by frequency alone, we compute the shortest
+ * path from each candidate to the goal using BFS.  The hint always suggests
+ * a word that brings the player as close as possible to the goal.
  */
 
 import type { GraphNode, PuzzleDifficulty } from '@/types'
 import { findSuffixConnections } from './compound-utils'
-import { getEnvironment } from './dictionary'
+import { getEnvironment, type WordEnvironment } from './dictionary'
 
 export interface HintResult {
   suggestedWord: string
   sharedPart: string
   parentWord: string
   confidence: 'high' | 'medium' | 'low'
+  stepsToGoal?: number
+}
+
+const MAX_PATH_DEPTH = 15
+
+/**
+ * BFS shortest-path from `startKeys` to `goalWord`.
+ *
+ * Follows the same compound-word chain rules the game uses:
+ *   1. From a set of keys, look up all compound words that *start* with any
+ *      of those keys via `environment.incomingIndex`.
+ *   2. Each such word exposes `outgoingKeys` (its last part(s)).
+ *   3. If any outgoing key equals `goalWord`, we are done.
+ *   4. Otherwise enqueue the outgoing keys and repeat.
+ *
+ * Returns the number of compound-word steps needed, or `null` when the goal
+ * is unreachable within `maxDepth` hops.
+ */
+function findShortestPathToGoal(
+  startKeys: string[],
+  goalWord: string,
+  environment: WordEnvironment,
+  usedWords: Set<string>,
+  maxDepth: number = MAX_PATH_DEPTH,
+): number | null {
+  const goalLower = goalWord.toLowerCase()
+
+  // Fast path: does any start key already match the goal?
+  if (startKeys.some(k => k.toLowerCase() === goalLower)) return 0
+
+  const queue: Array<{ key: string; depth: number }> = startKeys.map(key => ({ key, depth: 0 }))
+  const visited = new Set<string>(startKeys.map(k => k.toLowerCase()))
+
+  for (let i = 0; i < queue.length; i++) {
+    const { key, depth } = queue[i]
+    if (depth >= maxDepth) continue
+
+    const candidates = environment.incomingIndex.get(key) ?? []
+    for (const candidate of candidates) {
+      if (usedWords.has(candidate.word)) continue
+
+      for (const nextKey of candidate.outgoingKeys) {
+        const nextLower = nextKey.toLowerCase()
+        if (nextLower === goalLower) return depth + 1
+        if (visited.has(nextLower)) continue
+        visited.add(nextLower)
+        queue.push({ key: nextKey, depth: depth + 1 })
+      }
+    }
+  }
+
+  return null
 }
 
 /**
@@ -28,8 +83,8 @@ export function getHintSourceNode(
   const selectedNode = selectedNodeId
     ? nodes.find(n => n.id === selectedNodeId)
     : null
-  
-  return selectedNode || 
+
+  return selectedNode ||
     nodes
       .filter(n => !n.isGoal && !n.isStart)
       .sort((a, b) => b.layer - a.layer)[0] ||
@@ -43,17 +98,25 @@ export function getHintSourceNode(
 export function formatHintMessage(hint: HintResult): string {
   if (hint.confidence === 'high') {
     return `Prøv "${hint.suggestedWord}" — det deler "${hint.sharedPart}" med "${hint.parentWord}"`
-  } else if (hint.confidence === 'medium') {
-    return `Vurder "${hint.suggestedWord}" — det kobler via "${hint.sharedPart}"`
-  } else {
-    return `Du kan prøve "${hint.suggestedWord}"`
   }
+  if (hint.stepsToGoal != null && hint.stepsToGoal <= 2) {
+    return `"${hint.suggestedWord}" bringer deg nærmere målet (${hint.stepsToGoal} steg igjen)`
+  }
+  if (hint.confidence === 'medium') {
+    return `Vurder "${hint.suggestedWord}" — det kobler via "${hint.sharedPart}"`
+  }
+  return `Du kan prøve "${hint.suggestedWord}"`
 }
 
 /**
  * Generate the best hint for the current game state.
- * Fully client-side: loads the compact static dictionary on demand.
- * Returns null when no valid hint exists.
+ *
+ * Scoring priorities:
+ *   1. Shortest remaining path to goal  (primary — goal-directed)
+ *   2. Word frequency                   (tiebreaker — prefer common words)
+ *   3. Transition salience              (secondary tiebreaker)
+ *
+ * Candidates that cannot reach the goal at all are discarded.
  */
 export async function generateHint(options: {
   nodes: GraphNode[]
@@ -77,60 +140,71 @@ export async function generateHint(options: {
     : [])
 
   const goalWordLower = goalWord.toLowerCase()
+  const usedWords = new Set(nodes.map(n => n.word.toLowerCase()))
 
-  // Find compound words that can extend from source node's last part.
-  // Rule: new word's FIRST part must match source node's LAST part.
+  const environment = await getEnvironment(difficulty)
+
+  // Collect unique candidate words (cap per key to keep BFS cost bounded)
+  const words = [...new Map(sourceKeys.flatMap(key =>
+    (environment.incomingIndex.get(key) ?? []).slice(0, 200)
+  ).map(entry => [entry.analysisId, entry])).values()]
+
   const candidateWords: Array<{
     word: string
     parts: string[]
     sharedPart: string
-    hasGoalPart: boolean
     confidence: 'high' | 'medium' | 'low'
     score: number
+    stepsToGoal: number
   }> = []
 
-  const environment = await getEnvironment(difficulty)
-  const words = [...new Map(sourceKeys.flatMap(key => (environment.incomingIndex.get(key) ?? []).slice(0, 200))
-    .map(entry => [entry.analysisId, entry])).values()]
-
   for (const wordEntry of words) {
-    const wordParts = wordEntry.parts
+    // Skip already-used words
+    if (usedWords.has(wordEntry.word.toLowerCase())) continue
 
-    // Skip if word is already used
-    if (nodes.some(n => n.word.toLowerCase() === wordEntry.word.toLowerCase())) {
-      continue
-    }
+    // Verify it can connect to existing graph nodes
+    const connectionResult = findSuffixConnections(
+      wordEntry.word, wordEntry.parts, nodes, wordEntry.incomingKeys,
+    )
+    if (!connectionResult.canConnect) continue
 
-    // Check if this word can connect via suffix chaining
-    const connectionResult = findSuffixConnections(wordEntry.word, wordParts, nodes, wordEntry.incomingKeys)
-
-    if (!connectionResult.canConnect) {
-      continue
-    }
-
-    // Verify it connects from the source node
+    // Must connect specifically from the source node
     const sourceConnection = connectionResult.connections.find(
-      conn => conn.node.id === sourceNode.id
+      conn => conn.node.id === sourceNode.id,
     )
     if (!sourceConnection) continue
 
-    // Check if word's last part matches goal word
-    const hasGoalPart = wordEntry.outgoingKeys.includes(goalWordLower)
-    const incomingIndex = wordEntry.incomingKeys.indexOf(sourceConnection.sharedPart)
-    const transitionSalience = incomingIndex >= 0 ? wordEntry.incomingSalience[incomingIndex] : 0
+    // Compute remaining distance from this candidate to the goal
+    const pathToGoal = findShortestPathToGoal(
+      wordEntry.outgoingKeys,
+      goalWordLower,
+      environment,
+      usedWords,
+    )
 
-    // Calculate score (higher is better)
-    let score = wordEntry.frequency * 100 + transitionSalience * 25
-    if (hasGoalPart) score += 1000 // Highest priority - word leads to goal
-    score += sourceNode.layer * 10 // Prefer words from higher layers
+    // Discard candidates that cannot reach the goal at all
+    if (pathToGoal === null) continue
+
+    // Transition salience for this specific junction
+    const incomingIndex = wordEntry.incomingKeys.indexOf(sourceConnection.sharedPart)
+    const transitionSalience = incomingIndex >= 0
+      ? wordEntry.incomingSalience[incomingIndex]
+      : 0
+
+    // Score: path-length dominates, frequency breaks ties
+    const score = -pathToGoal * 100_000
+      + wordEntry.frequency * 100
+      + transitionSalience * 25
+
+    const hasGoalPart = pathToGoal <= 1
 
     candidateWords.push({
       word: wordEntry.word,
-      parts: wordParts,
+      parts: wordEntry.parts,
       sharedPart: sourceConnection.sharedPart,
-      hasGoalPart,
       confidence: hasGoalPart ? 'high' : 'medium',
       score,
+      stepsToGoal: pathToGoal,
     })
   }
 
@@ -138,7 +212,7 @@ export async function generateHint(options: {
     return null
   }
 
-  // Sort by score (highest first) - prioritizes words that lead to goal
+  // Sort by score (highest first) — shortest path wins
   candidateWords.sort((a, b) => b.score - a.score)
 
   const bestHint = candidateWords[0]
@@ -148,6 +222,6 @@ export async function generateHint(options: {
     sharedPart: bestHint.sharedPart,
     parentWord: sourceNode.word,
     confidence: bestHint.confidence,
+    stepsToGoal: bestHint.stepsToGoal,
   }
 }
-

@@ -11,10 +11,12 @@ import { normalizeNo } from '@/lib/norwegian-dictionary'
 import {
   OCCURRENCE_TREE_STATE_VERSION,
   chooseOccurrenceParent,
+  ensureGoalPreview,
   isDistinctWordPath,
   traceOccurrencePath,
 } from '@/lib/occurrence-tree'
 import { quickValidate } from '@/lib/quick-validation'
+import { reachesGoalWord } from '@/lib/goal'
 import { validateCompoundWord } from '@/lib/validation'
 import {
   getSavedGameState,
@@ -124,7 +126,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       savedState.nodes &&
       savedState.nodes.length > 0
     ) {
-      setNodes(savedState.nodes)
+      setNodes(ensureGoalPreview(savedState.nodes, puzzle.goalWord))
       setEdges(savedState.edges || [])
       setWordsUsed(savedState.wordsUsed || 0)
       setMaxLayer(savedState.maxLayer || 0)
@@ -320,43 +322,65 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         sharedPart: parentConnection.sharedPart,
       }]
 
+      // The goal is reached only when the explicitly typed word literally
+      // ends with the goal word. Dictionary outgoing-key equality is not
+      // sufficient (e.g. `sentralbord` must not complete a `besitter` goal
+      // by inferring `bordbesitter` the player never typed).
       const goalWord = normalizeNo(puzzle.goalWord)
-      const reachesGoal = selectedAnalysis.outgoingKeys.includes(goalWord)
+      const reachesGoal = reachesGoalWord(normalized, puzzle.goalWord)
       let nextNodes = [...nodes, newNode]
       let completedPath: ReturnType<typeof traceOccurrencePath> = null
 
       if (reachesGoal) {
-        const targetGoal = nodes.find((node) => node.isGoal && !node.parentId)
-        const goalNode: GraphNode = targetGoal
-          ? {
-              ...targetGoal,
-              layer: newLayer + 1,
-              parentId: newNode.id,
-              isCompleted: true,
-            }
-          : {
-              id: `goal-${generateNodeId()}`,
-              word: puzzle.goalWord,
-              parts: [goalWord],
-              incomingKeys: [goalWord],
-              outgoingKeys: [goalWord],
-              layer: newLayer + 1,
-              isStart: false,
-              isGoal: true,
-              isCompleted: true,
-              parentId: newNode.id,
-            }
+        // Single shared goal node: the goal stays a floating marker (no
+        // parentId) so every winning path converges on the same node via
+        // its own edge, instead of spawning `goal-<id>` duplicates.
+        // Drop any legacy parented goal duplicates from earlier versions.
+        nextNodes = nextNodes.filter((node) => !(node.isGoal && node.parentId))
+        let goalNode = nextNodes.find((node) => node.isGoal)
 
-        nextNodes = targetGoal
-          ? nextNodes.map((node) => node.id === targetGoal.id ? goalNode : node)
-          : [...nextNodes, goalNode]
-        newEdges.push({
-          id: generateEdgeId(newNode.id, goalNode.id),
-          source: newNode.id,
-          target: goalNode.id,
-          sharedPart: goalWord,
-        })
-        completedPath = traceOccurrencePath(goalNode.id, nextNodes)
+        if (!goalNode) {
+          goalNode = {
+            id: 'goal',
+            word: puzzle.goalWord,
+            parts: [goalWord],
+            incomingKeys: [goalWord],
+            outgoingKeys: [goalWord],
+            layer: -1,
+            isStart: false,
+            isGoal: true,
+            isCompleted: true,
+          }
+          nextNodes = [...nextNodes, goalNode]
+        } else if (!goalNode.isCompleted) {
+          goalNode = { ...goalNode, isCompleted: true }
+          nextNodes = nextNodes.map((node) =>
+            node.id === goalNode!.id ? goalNode! : node
+          )
+        }
+
+        const goalEdgeId = generateEdgeId(newNode.id, goalNode.id)
+        if (
+          !edges.some((edge) => edge.id === goalEdgeId) &&
+          !newEdges.some((edge) => edge.id === goalEdgeId)
+        ) {
+          newEdges.push({
+            id: goalEdgeId,
+            source: newNode.id,
+            target: goalNode.id,
+            sharedPart: goalWord,
+          })
+        }
+
+        // Trace back to start through the typed word, then append the
+        // shared goal marker virtually (it has no single parentId).
+        const pathToWord = traceOccurrencePath(newNode.id, nextNodes)
+        if (pathToWord) {
+          completedPath = {
+            nodeIds: [...pathToWord.nodeIds, goalNode.id],
+            words: [...pathToWord.words, goalNode.word],
+          }
+        }
       }
 
       setNodes(nextNodes)

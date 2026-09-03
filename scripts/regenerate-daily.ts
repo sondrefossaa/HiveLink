@@ -20,7 +20,7 @@ const DATA_FILE = path.join(__dirname, '..', 'data', 'daily-puzzles.json')
 interface StoredDailyPuzzle {
   dictionaryVersion: 3
   tierPolicyVersion: 2
-  tier: 'medium'
+  tier: 'easy'
   startWord: string
   goalWord: string
   parSteps: number
@@ -85,7 +85,7 @@ async function main() {
       stored[dateKey] = {
         dictionaryVersion: 3,
         tierPolicyVersion: 2,
-        tier: 'medium',
+        tier: 'easy',
         startWord: puzzle.startWord,
         goalWord: puzzle.goalWord,
         parSteps: puzzle.parSteps,
