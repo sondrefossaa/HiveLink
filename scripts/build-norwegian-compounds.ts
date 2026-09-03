@@ -1,6 +1,6 @@
-import { execFileSync, spawn } from 'child_process'
+import { execFileSync } from 'child_process'
 import { createInterface } from 'readline'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { createReadStream, existsSync, readFileSync, writeFileSync } from 'fs'
 import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { createGunzip } from 'zlib'
@@ -8,13 +8,13 @@ import { createHash } from 'crypto'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCES_DIR = join(ROOT, 'sources')
+const NEW_SOURCES_DIR = join(ROOT, 'newsrc')
 const RAW_DIR = join(ROOT, 'data', 'raw')
 const ORDBANK_ARCHIVE = join(SOURCES_DIR, '20220201_norsk_ordbank_nob_2005.tar.gz')
 const NST_ARCHIVE = join(SOURCES_DIR, 'no.leksikon.tar.gz')
 const EIESELAND_PATH = join(SOURCES_DIR, 'eiseland.txt')
 const NB_ARCHIVE = join(RAW_DIR, 'nb-1gram', '1gram_nob_f1_abc.zip')
-const NOWAC_ARCHIVE = join(SOURCES_DIR, 'nowac-1.1.tar')
-const NOWAC_CACHE = join(RAW_DIR, 'nowac-candidate-frequency.json')
+const NOWAC_LEMMA_FREQUENCY = join(NEW_SOURCES_DIR, 'nowac-1.1.lemmas.freq.gz')
 const RICH_OUTPUT = join(ROOT, 'data', 'compound-build.json')
 const METADATA_OUTPUT = join(ROOT, 'data', 'compound-build-metadata.json')
 const EXCEPTIONS_PATH = join(ROOT, 'data', 'dictionary-exceptions.json')
@@ -22,7 +22,6 @@ const LETTERS = /^[a-zæøå]+$/u
 const EXPECTED_EIESELAND_ROWS = 60_865
 const SOURCE_MASK = { ordbank: 1, nst: 2, eiesland: 4, manual: 8 } as const
 
-type Tier = 0 | 1 | 2 // easy, medium, hard
 type Source = keyof typeof SOURCE_MASK
 
 interface Analysis {
@@ -44,8 +43,12 @@ interface FrequencyMetric {
 }
 
 interface NoWacMetric {
-  surfaceCount: number
   lemmaCount: number
+}
+interface FrequencyEvidence {
+  nb?: number
+  nowacLemma?: number
+  eiesland?: number
 }
 
 interface NodeRecord {
@@ -54,9 +57,9 @@ interface NodeRecord {
   nounVerified: boolean
   nb: FrequencyMetric
   nowac?: NoWacMetric
+  frequency: FrequencyEvidence
   inDegree: number
   outDegree: number
-  tier: Tier
 }
 
 interface EdgeRecord {
@@ -65,7 +68,7 @@ interface EdgeRecord {
   nb: FrequencyMetric
   nowac?: NoWacMetric
   eieslandCount: number
-  tier: Tier
+  frequency: FrequencyEvidence
   analyses: Analysis[]
 }
 
@@ -295,45 +298,29 @@ function lowerBound(values: number[], target: number): number {
   return low
 }
 
-async function buildNowacCache(candidates: Set<string>): Promise<Map<string, NoWacMetric>> {
-  if (!process.argv.includes('--with-nowac')) {
-    if (!existsSync(NOWAC_CACHE)) return new Map()
-    return new Map(Object.entries(JSON.parse(readFileSync(NOWAC_CACHE, 'utf8')) as Record<string, NoWacMetric>))
+async function loadNowacLemmaFrequency(candidates: Set<string>): Promise<Map<string, NoWacMetric>> {
+  if (!existsSync(NOWAC_LEMMA_FREQUENCY)) {
+    throw new Error(`Missing NoWaC lemma frequency list: ${NOWAC_LEMMA_FREQUENCY}`)
   }
-  if (!existsSync(NOWAC_ARCHIVE)) throw new Error(`Missing optional NoWaC archive: ${NOWAC_ARCHIVE}`)
-  const tar = spawn('tar', ['-xOf', NOWAC_ARCHIVE, 'nowac-1.1.gz'])
-  const completed = new Promise<number | null>(resolve => tar.on('close', resolve))
-  const lines = createInterface({ input: tar.stdout.pipe(createGunzip()), crlfDelay: Infinity })
+  const lines = createInterface({
+    input: createReadStream(NOWAC_LEMMA_FREQUENCY).pipe(createGunzip()),
+    crlfDelay: Infinity,
+  })
   const counts = new Map<string, NoWacMetric>()
   for await (const line of lines) {
-    const [rawSurface, rawLemma] = line.split('\t')
-    const surface = normalize(rawSurface ?? '')
-    const lemma = normalize(rawLemma ?? '')
-    if (candidates.has(surface)) {
-      const metric = counts.get(surface) ?? { surfaceCount: 0, lemmaCount: 0 }
-      metric.surfaceCount++
-      counts.set(surface, metric)
-    }
-    if (candidates.has(lemma)) {
-      const metric = counts.get(lemma) ?? { surfaceCount: 0, lemmaCount: 0 }
-      metric.lemmaCount++
-      counts.set(lemma, metric)
-    }
+    const match = line.match(/^\s*(\d+)\s+(.+?)\t([^\t]+)$/)
+    if (!match || !match[3].startsWith('subst_')) continue
+    const lemma = normalize(match[2])
+    if (!LETTERS.test(lemma) || !candidates.has(lemma)) continue
+    const metric = counts.get(lemma) ?? { lemmaCount: 0 }
+    metric.lemmaCount += Number(match[1])
+    counts.set(lemma, metric)
   }
-  const exitCode = await completed
-  if (exitCode !== 0) throw new Error(`NoWaC stream failed with exit code ${exitCode}`)
-  writeFileSync(NOWAC_CACHE, `${JSON.stringify(Object.fromEntries(counts))}\n`)
   return counts
 }
 
-function derivedTier(percentile: number, attested: boolean, degree = 1): Tier {
-  if (percentile >= 2 / 3 && degree > 0) return 0
-  if (attested || percentile >= 1 / 3) return 1
-  return 2
-}
-
 async function build(): Promise<void> {
-  for (const path of [ORDBANK_ARCHIVE, NST_ARCHIVE, EIESELAND_PATH, NB_ARCHIVE]) {
+  for (const path of [ORDBANK_ARCHIVE, NST_ARCHIVE, EIESELAND_PATH, NB_ARCHIVE, NOWAC_LEMMA_FREQUENCY]) {
     if (!existsSync(path)) throw new Error(`Missing required source: ${path}`)
   }
   const ordbank = loadOrdbank()
@@ -372,7 +359,7 @@ async function build(): Promise<void> {
     }
   }
   const nb = loadNbFrequency(candidates)
-  const nowac = await buildNowacCache(candidates)
+  const nowac = await loadNowacLemmaFrequency(candidates)
 
   const inDegree = new Map<string, number>()
   const outDegree = new Map<string, number>()
@@ -388,70 +375,60 @@ async function build(): Promise<void> {
   )).sort((a, b) => a.localeCompare(b, 'nb'))
   const nodes: NodeRecord[] = nodeWords.map((word, id) => {
     const metric = nb.get(word) ?? { count: 0, rank: null, percentile: 0 }
-    const degree = (inDegree.get(word) ?? 0) + (outDegree.get(word) ?? 0)
     return {
       id,
       word,
       nounVerified: ordbank.nounLemmas.has(word),
       nb: metric,
       ...(nowac.has(word) ? { nowac: nowac.get(word) } : {}),
+      frequency: {
+        ...(metric.count > 0 ? { nb: metric.count } : {}),
+        ...(nowac.has(word) ? { nowacLemma: nowac.get(word)!.lemmaCount } : {}),
+      },
       inDegree: inDegree.get(word) ?? 0,
       outDegree: outDegree.get(word) ?? 0,
-      tier: derivedTier(metric.percentile, metric.count > 0, degree),
     }
   })
-  const nodeByWord = new Map(nodes.map(node => [node.word, node]))
   const edges: EdgeRecord[] = [...ordbank.analyses]
     .sort(([a], [b]) => a.localeCompare(b, 'nb'))
     .map(([word, analyses], id) => {
       const metric = nb.get(word) ?? { count: 0, rank: null, percentile: 0 }
       const eieslandCount = eiesland.counts.get(word) ?? 0
-      const endpointTier = Math.max(...analyses.flatMap(analysis =>
-        [...analysis.incomingKeys, ...analysis.outgoingKeys].map(key => nodeByWord.get(key)?.tier ?? 2)
-      )) as Tier
       return {
         id,
         word,
         nb: metric,
         ...(nowac.has(word) ? { nowac: nowac.get(word) } : {}),
         eieslandCount,
-        tier: Math.max(derivedTier(metric.percentile, metric.count > 0 || eieslandCount > 0), endpointTier) as Tier,
+        frequency: {
+          ...(metric.count > 0 ? { nb: metric.count } : {}),
+          ...(nowac.has(word) ? { nowacLemma: nowac.get(word)!.lemmaCount } : {}),
+          ...(eieslandCount > 0 ? { eiesland: eieslandCount } : {}),
+        },
         analyses,
       }
     })
 
   const rich = {
-    version: 2,
+    version: 3,
     sourceIntegrity: {
       ordbankRows: ordbank.rows,
       eieslandRows: eiesland.rows,
       eieslandExpectedRows: EXPECTED_EIESELAND_ROWS,
       eieslandMatchedRows: eiesland.matched,
       nstAddedCompounds: nstAdded,
-      nowacApplied: nowac.size > 0,
+      nowacApplied: true,
       checksums: {
         ordbank: checksum(ORDBANK_ARCHIVE),
         nst: checksum(NST_ARCHIVE),
         eiesland: checksum(EIESELAND_PATH),
         nb1gram: checksum(NB_ARCHIVE),
+        nowacLemmaFrequency: checksum(NOWAC_LEMMA_FREQUENCY),
       },
     },
-    tierPolicy: {
-      derived: true,
-      nodeAndEdgePercentiles: { easy: 2 / 3, medium: 1 / 3, hard: 0 },
-      note: 'Eligibility uses retained percentile distributions and graph degree. Graph statistics below support later policy adjustment without source loss.',
-    },
-    graphStatistics: [0, 1, 2].map(maxTier => ({
-      tier: ['easy', 'medium', 'hard'][maxTier],
-      nodes: nodes.filter(node => node.tier <= maxTier).length,
-      nounEndpoints: nodes.filter(node => node.tier <= maxTier && node.nounVerified).length,
-      compounds: edges.filter(edge => edge.tier <= maxTier).length,
-      analyses: edges.filter(edge => edge.tier <= maxTier).reduce((sum, edge) => sum + edge.analyses.length, 0),
-    })),
-    nodes: nodes.map(node => ({ ...node, tier: ['easy', 'medium', 'hard'][node.tier] })),
+    nodes,
     compounds: edges.map(edge => ({
       ...edge,
-      tier: ['easy', 'medium', 'hard'][edge.tier],
       analyses: edge.analyses.map(analysis => ({
         ...analysis,
         sources: [...analysis.sources].sort(),
@@ -463,15 +440,13 @@ async function build(): Promise<void> {
   writeFileSync(METADATA_OUTPUT, `${JSON.stringify({
     version: rich.version,
     sourceIntegrity: rich.sourceIntegrity,
-    tierPolicy: rich.tierPolicy,
-    graphStatistics: rich.graphStatistics,
+    note: 'Run data:derive to calculate frequency policy and graph statistics.',
   }, null, 2)}\n`)
 
-  const tierCounts = (records: Array<{ tier: Tier }>) => [0, 1, 2].map(tier => records.filter(record => record.tier <= tier).length)
   console.log(`Ordbank: ${ordbank.rows} rows; ${ordbank.analyses.size} canonical spellings.`)
   console.log(`NST: ${nstAdded} additional compounds. Eiesland: ${eiesland.rows} rows, ${eiesland.matched} matched rows.`)
+  console.log(`NoWaC: ${nowac.size} validated noun lemmas matched from the precomputed frequency list.`)
   console.log(`Graph: ${nodes.length} nodes and ${edges.length} compound spellings (${edges.reduce((sum, edge) => sum + edge.analyses.length, 0)} analyses).`)
-  console.log(`Cumulative easy/medium/hard nodes: ${tierCounts(nodes).join('/')}; edges: ${tierCounts(edges).join('/')}.`)
   console.log(`Rich build artifact: ${readFileSync(RICH_OUTPUT).byteLength} bytes.`)
 }
 

@@ -1,36 +1,64 @@
 {
-  "version": 1,
-  "thresholds": {
-    "easyPercentile": 0.6666666666666666,
-    "mediumPercentile": 0.3333333333333333
+  "version": 2,
+  "frequencyPolicyVersion": 2,
+  "thresholds": [
+    {
+      "difficulty": "easy",
+      "absoluteFamiliarity": 0.84,
+      "normalizedSalience": 0.98,
+      "endpointFamiliarity": 0.7
+    },
+    {
+      "difficulty": "medium",
+      "absoluteFamiliarity": 0.65,
+      "normalizedSalience": 0.9,
+      "endpointFamiliarity": 0.45
+    },
+    {
+      "difficulty": "hard",
+      "absoluteFamiliarity": 0.4,
+      "normalizedSalience": 0.7,
+      "endpointFamiliarity": 0.25
+    }
+  ],
+  "sourceCoverage": {
+    "nodes": {
+      "nb": 20726,
+      "nowacLemma": 15122
+    },
+    "compounds": {
+      "nb": 82426,
+      "nowacLemma": 75063,
+      "eiesland": 4979
+    }
   },
   "tiers": [
     {
       "tier": "easy",
-      "nodes": 14132,
-      "nounEndpoints": 7589,
-      "compounds": 19449,
-      "analyses": 19449,
-      "activeKeys": 6576,
-      "largestWeakComponent": 6433
+      "nodes": 3555,
+      "nounEndpoints": 3494,
+      "compounds": 1807,
+      "analyses": 1807,
+      "activeKeys": 1524,
+      "largestWeakComponent": 1233
     },
     {
       "tier": "medium",
-      "nodes": 20726,
-      "nounEndpoints": 10962,
-      "compounds": 81583,
-      "analyses": 81591,
-      "activeKeys": 17193,
-      "largestWeakComponent": 17069
+      "nodes": 7666,
+      "nounEndpoints": 7496,
+      "compounds": 9670,
+      "analyses": 9672,
+      "activeKeys": 4232,
+      "largestWeakComponent": 4021
     },
     {
       "tier": "hard",
-      "nodes": 26137,
-      "nounEndpoints": 13198,
-      "compounds": 127524,
-      "analyses": 127538,
-      "activeKeys": 26137,
-      "largestWeakComponent": 25987
+      "nodes": 12834,
+      "nounEndpoints": 10576,
+      "compounds": 31681,
+      "analyses": 31686,
+      "activeKeys": 8418,
+      "largestWeakComponent": 8260
     }
   ]
 }

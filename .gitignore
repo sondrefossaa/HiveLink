@@ -44,6 +44,7 @@ scripts/*.csv
 scripts/*.tsv
 /sources/*.tar
 /sources/*.tar.gz
+/newsrc/
 /data/raw/nb-1gram/
 /data/raw/nowac-candidate-frequency.json
 /data/compound-build.json

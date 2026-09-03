@@ -1,9 +1,12 @@
 import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
+import { weakestEdgeScore } from '@/lib/frequency-policy'
 import {
   createEnvironment,
+  getEligibleIncomingKeys,
   findMatchingKey,
   getEndpointKeys,
   getEnvironment,
+  getFullEnvironment,
   toWordEntry,
   type WordEntry,
   type WordEnvironment,
@@ -29,9 +32,9 @@ interface DailyPuzzleOptions {
 }
 
 const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }> = {
-  easy: { min: 4, max: 6 },
-  medium: { min: 5, max: 8 },
-  hard: { min: 7, max: 12 },
+  easy: { min: 2, max: 3 },
+  medium: { min: 3, max: 4 },
+  hard: { min: 4, max: 5 },
 }
 
 const MAX_CHAIN_ATTEMPTS = 800 // Increased for suffix chaining which is more restrictive
@@ -88,12 +91,11 @@ function seededRandomInt(min: number, max: number, random: () => number): number
   return Math.floor(random() * (max - min + 1)) + min
 }
 
-function shuffleInPlace<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[array[i], array[j]] = [array[j], array[i]]
-  }
+function weightedShuffleInPlace(array: WordEntry[]): WordEntry[] {
   return array
+    .map(entry => ({ entry, key: -Math.log(Math.max(Math.random(), Number.EPSILON)) / Math.exp(entry.frequency * 6) }))
+    .sort((left, right) => left.key - right.key)
+    .map(value => value.entry)
 }
 
 function seededShuffleInPlace<T>(array: T[], random: () => number): T[] {
@@ -104,8 +106,17 @@ function seededShuffleInPlace<T>(array: T[], random: () => number): T[] {
   return array
 }
 
+function seededWeightedShuffle(array: WordEntry[], random: () => number): WordEntry[] {
+  return array
+    .map(entry => ({ entry, key: -Math.log(Math.max(random(), Number.EPSILON)) / Math.exp(entry.frequency * 6) }))
+    .sort((left, right) => left.key - right.key)
+    .map(value => value.entry)
+}
+
 function pickRandomStart(environment: WordEnvironment, difficulty: PuzzleDifficulty): WordEntry {
-  const layeredWords = environment.words.filter((entry) => getEndpointKeys(entry.incomingKeys, difficulty).length > 0)
+  const layeredWords = environment.words.filter((entry) =>
+    getEndpointKeys(getEligibleIncomingKeys(entry, difficulty), difficulty).length > 0
+  )
   const pool = layeredWords.length > 0 ? layeredWords : environment.words
 
   if (pool.length === 0) {
@@ -121,7 +132,7 @@ function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEn
   ).map(entry => [entry.word, entry])).values()]
   if (candidates.length === 0) return null
 
-  const shuffled = shuffleInPlace([...candidates])
+  const shuffled = weightedShuffleInPlace([...candidates])
   for (const candidate of shuffled) {
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
@@ -174,7 +185,7 @@ function startAndGoalSharePart(chain: WordEntry[], endpointDifficulty: PuzzleDif
     return false
   }
   
-  const startWord = getEndpointKeys(chain[0].incomingKeys, endpointDifficulty).at(-1)
+  const startWord = getEndpointKeys(getEligibleIncomingKeys(chain[0], endpointDifficulty), endpointDifficulty).at(-1)
   const goalWord = getEndpointKeys(chain.at(-1)!.outgoingKeys, endpointDifficulty).at(-1)
   if (!startWord || !goalWord) return true
   
@@ -241,7 +252,7 @@ function findWordEntry(word: string, environment: WordEnvironment): WordEntry | 
 
 // Practice puzzles load the compact static dictionary without a database.
 async function loadPracticeEnvironment(): Promise<WordEnvironment> {
-  return getEnvironment('hard')
+  return getFullEnvironment()
 }
 
 export async function generatePracticePuzzle(
@@ -311,8 +322,8 @@ export async function generatePracticePuzzle(
         continue
       }
 
-      const effectiveMinSteps = difficulty === 'medium' ? Math.max(2, minSteps) : Math.max(1, minSteps)
-      const startKey = getEndpointKeys(candidate[0].incomingKeys, difficulty).at(-1)
+      const effectiveMinSteps = Math.max(range.min, minSteps)
+      const startKey = getEndpointKeys(getEligibleIncomingKeys(candidate[0], difficulty), difficulty).at(-1)
       const goalKey = getEndpointKeys(candidate.at(-1)!.outgoingKeys, difficulty).at(-1)
       if (!startKey || !goalKey) continue
       const shortest = findShortestChain(startKey, goalKey, environment)
@@ -350,7 +361,7 @@ export async function generatePracticePuzzle(
   // Start and goal are simple words (single part):
   // - Start = first part of first compound word in chain
   // - Goal = last part of last compound word in chain
-  const startWord = getEndpointKeys(chain[0].incomingKeys, difficulty).at(-1)!
+  const startWord = getEndpointKeys(getEligibleIncomingKeys(chain[0], difficulty), difficulty).at(-1)!
   const goalWord = getEndpointKeys(chain.at(-1)!.outgoingKeys, difficulty).at(-1)!
   
   // Start and goal are always single words (parts = [word])
@@ -377,7 +388,9 @@ export async function generatePracticePuzzle(
 
 // Seeded versions for daily puzzle generation
 function pickSeededRandomStart(random: () => number, environment: WordEnvironment, endpointDifficulty: PuzzleDifficulty): WordEntry {
-  const layeredWords = environment.words.filter((entry) => getEndpointKeys(entry.incomingKeys, endpointDifficulty).length > 0)
+  const layeredWords = environment.words.filter((entry) =>
+    getEndpointKeys(getEligibleIncomingKeys(entry, endpointDifficulty), endpointDifficulty).length > 0
+  )
   const pool = layeredWords.length > 0 ? layeredWords : environment.words
 
   if (pool.length === 0) {
@@ -398,7 +411,7 @@ function pickSeededNextWord(
   ).map(entry => [entry.word, entry])).values()]
   if (candidates.length === 0) return null
 
-  const shuffled = seededShuffleInPlace([...candidates], random)
+  const shuffled = seededWeightedShuffle([...candidates], random)
   for (const candidate of shuffled) {
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
@@ -476,9 +489,7 @@ function findSeededChainAtDepth(
     }
   }
 
-  while (goals.length > 0) {
-    const goalIndex = seededRandomInt(0, goals.length - 1, random)
-    const goalKey = goals.splice(goalIndex, 1)[0]
+  const paths = goals.flatMap(goalKey => {
     const chain: WordEntry[] = []
     let key = goalKey
     while (key !== startKey) {
@@ -487,9 +498,16 @@ function findSeededChainAtDepth(
       chain.unshift(step.entry)
       key = step.previousKey
     }
-    if (key === startKey && new Set(chain.map(entry => entry.word)).size === chain.length) {
-      return { goalKey, chain }
-    }
+    return key === startKey && new Set(chain.map(entry => entry.word)).size === chain.length
+      ? [{ goalKey, chain, score: weakestEdgeScore(chain.map(entry => entry.frequency)) }]
+      : []
+  })
+  if (paths.length > 0) {
+    const ordered = paths
+      .map(path => ({ path, key: -Math.log(Math.max(random(), Number.EPSILON)) / Math.exp(path.score * 8) }))
+      .sort((left, right) => left.key - right.key)
+    const selected = ordered[0].path
+    return { goalKey: selected.goalKey, chain: selected.chain }
   }
   return null
 }
@@ -500,7 +518,7 @@ function findSeededChainAtDepth(
  * is generated for the same date, even across different servers.
  * 
  * Uses the medium graph with easy-tier noun endpoints.
- * Step length is medium (6-7 steps) for a good challenge.
+ * Step length follows the medium 3-4 step range.
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
   // For daily puzzles, prefer canonical words but allow filtered common words if needed
@@ -532,7 +550,7 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
     }
     
     if (merged.size > environment.words.length) {
-      environment = createEnvironment(Array.from(merged.values()))
+      environment = createEnvironment(Array.from(merged.values()), 1)
     }
   }
 
@@ -568,7 +586,7 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
     startWord,
     goalWord,
     parSteps,
-    absoluteOptimalSteps: findShortestChain(startWord, goalWord, await getEnvironment('hard'))?.length,
+    absoluteOptimalSteps: findShortestChain(startWord, goalWord, await getFullEnvironment())?.length,
     solutionPath: wordsOnly,
     solutionAnalysisIds: chain.map(entry => entry.analysisId),
   }

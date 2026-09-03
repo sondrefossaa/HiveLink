@@ -15,11 +15,14 @@ HiveLink's Norwegian dictionary is derived from the following resources:
   Language Bank under [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
   This is the primary commonness source.
   Source: https://www.nb.no/sprakbanken/ressurskatalog/oai-nb-no-sbr-35/
-- **NoWaC 1.1**, optional secondary frequency evidence. The supplied archive
-  is licensed under
+- **NoWaC 1.1**, used through its precomputed noun-lemma frequency list as the
+  primary compound-commonness signal. Diagnostic surface/token lists and the
+  full corpus are not used by normal builds. The supplied data is licensed under
   [CC BY-NC-SA 3.0](https://creativecommons.org/licenses/by-nc-sa/3.0/).
 
 The rich build artifact keeps source-specific analyses, counts, ranks, and
-provenance. Raw counts from different corpora are never added together. The
-runtime artifact uses interned string IDs and derived puzzle tiers while keeping
-the complete validated graph available for player moves.
+provenance. Raw NB, NoWaC lemma, and Eiesland counts are stored independently
+and are never added together. Source checksums are recorded in
+`data/compound-build-metadata.json`. The runtime artifact uses interned string
+IDs and generation-only frequency tiers while keeping the complete validated
+graph available for player moves.

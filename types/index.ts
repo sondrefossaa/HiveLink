@@ -164,7 +164,11 @@ export interface CompoundWord {
     insert?: string;
     deleteFromLeft?: string;
   };
-  frequency?: number;
+  frequency?: {
+    nb?: number;
+    nowacLemma?: number;
+    eiesland?: number;
+  };
 }
 
 export interface CompactCompoundDictionary {

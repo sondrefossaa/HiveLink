@@ -8,8 +8,8 @@ import { generateDailyPuzzle } from '@/lib/puzzle-generator'
 import type { DailyPuzzle } from '@/types'
 
 interface StoredDailyPuzzle {
-  dictionaryVersion: 2
-  tierPolicyVersion: 1
+  dictionaryVersion: 3
+  tierPolicyVersion: 2
   tier: 'medium'
   startWord: string
   goalWord: string
@@ -41,8 +41,8 @@ export function getStoredDailyPuzzle(dateKey: string): StoredDailyPuzzle | null 
     typeof stored.startWord !== 'string' ||
     typeof stored.goalWord !== 'string' ||
     typeof stored.parSteps !== 'number' ||
-    stored.dictionaryVersion !== 2 ||
-    stored.tierPolicyVersion !== 1 ||
+    stored.dictionaryVersion !== 3 ||
+    stored.tierPolicyVersion !== 2 ||
     stored.tier !== 'medium' ||
     !Array.isArray(stored.solutionPath)
     || !Array.isArray(stored.solutionAnalysisIds)

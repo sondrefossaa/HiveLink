@@ -107,8 +107,8 @@ hivelink/
 All game data lives in the repo:
 
 - **`public/dictionary/compound-words.json`** — the deferred, compact runtime graph used for exact validation, hints, and generation.
-- **`data/compound-build.json`** — ignored rich build artifact with analyses, provenance, and source-specific frequency evidence.
-- **`data/compound-graph-stats.json`** — derived easy/medium/hard graph sizes and connectivity.
+- **`data/compound-build.json`** — ignored rich build artifact with analyses, provenance, and independent NB, NoWaC lemma, and Eiesland counts.
+- **`data/compound-graph-stats.json`** — derived frequency-policy thresholds, source coverage, tier sizes, and connectivity.
 - **`data/daily-puzzles.json`** — pre-generated daily puzzles with tier-based par and optional full-graph optimum.
 - **`localStorage`** — per-device player identity, saved game state, solved-puzzle history, streaks, and stats.
 
@@ -116,8 +116,8 @@ All game data lives in the repo:
 
 ```bash
 npm run data:words            # Download public inputs and rebuild rich + runtime artifacts
-npm run data:norwegian       # Build from local Ordbank, NST, Eiesland, and NB 1-gram sources
-npm run data:norwegian:nowac # Add optional NoWaC evidence and cache it
+npm run data:norwegian       # Build from Ordbank, NST, Eiesland, NB 1-gram, and the NoWaC lemma list
+npm run data:norwegian:nowac # Alias for the same frequency-aware build
 npm run data:derive          # Recompute tiers/runtime from retained rich data only
 npm run data:verify          # Verify sources, analyses, tiers, and pinned paths
 npm run data:puzzles          # Pre-generate daily puzzles (today → +370 days)
@@ -151,7 +151,7 @@ colors: {
 ```
 
 ### Word Validation
-The game validates words only against exact Ordbank/NST analyses in the full canonical graph. Frequency tiers affect generation, hints, and par, but every validated compound remains playable.
+The game validates words only against exact Ordbank/NST analyses in the full canonical graph. Generation and hints require both absolute compound familiarity and branching-normalized continuation salience. Intended paths are limited by their weakest edge; endpoint noun frequency is only a minimum quality gate. Every structurally validated compound remains playable regardless of generation tier.
 
 ## 🤝 Contributing
 

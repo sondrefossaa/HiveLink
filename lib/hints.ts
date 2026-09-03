@@ -116,9 +116,11 @@ export async function generateHint(options: {
 
     // Check if word's last part matches goal word
     const hasGoalPart = wordEntry.outgoingKeys.includes(goalWordLower)
+    const incomingIndex = wordEntry.incomingKeys.indexOf(sourceConnection.sharedPart)
+    const transitionSalience = incomingIndex >= 0 ? wordEntry.incomingSalience[incomingIndex] : 0
 
     // Calculate score (higher is better)
-    let score = 0
+    let score = wordEntry.frequency * 100 + transitionSalience * 25
     if (hasGoalPart) score += 1000 // Highest priority - word leads to goal
     score += sourceNode.layer * 10 // Prefer words from higher layers
 
