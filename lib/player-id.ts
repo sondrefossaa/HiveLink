@@ -22,6 +22,10 @@ export interface LocalScore {
   playerName?: string
 }
 
+export function isValidPlayerName(name: string): boolean {
+  return /^[\p{L}0-9_\s-]+$/u.test(name)
+}
+
 /**
  * Get or create an anonymous player ID
  * Stored in localStorage for persistence across sessions

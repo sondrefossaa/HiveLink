@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { GraphNode, PuzzleDifficulty } from '@/types'
+import { normalizeNo, sanitizeNorwegianWordInput } from '@/lib/norwegian-dictionary'
 import HintButton from './HintButton'
 
 interface InputBarProps {
@@ -47,7 +48,7 @@ export default function InputBar({
   // Sync external value to input (for hints)
   useEffect(() => {
     if (externalValue !== undefined && externalValue !== null) {
-      const normalizedValue = externalValue.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^a-zæøå]/gu, '')
+      const normalizedValue = sanitizeNorwegianWordInput(externalValue)
       if (normalizedValue !== input) {
         setInput(normalizedValue)
         // Focus the input when external value is set
@@ -97,7 +98,7 @@ export default function InputBar({
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
 
-    const trimmed = input.trim().toLowerCase()
+    const trimmed = normalizeNo(input)
 
     if (!trimmed) {
       setLocalError('Skriv inn et ord')
@@ -149,7 +150,7 @@ export default function InputBar({
       e.key.length === 1 &&
       !e.ctrlKey &&
       !e.metaKey &&
-      !/^\p{L}$/u.test(e.key)
+      !/^[a-zæøå]$/iu.test(e.key)
     ) {
       e.preventDefault()
     }
@@ -263,10 +264,10 @@ export default function InputBar({
                     setInput(e.target.value)
                     return
                   }
-                  setInput(e.target.value.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^\p{L}]/gu, ''))
+                  setInput(sanitizeNorwegianWordInput(e.target.value))
                 }}
                 onCompositionEnd={(e) => {
-                  setInput(e.currentTarget.value.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^\p{L}]/gu, ''))
+                  setInput(sanitizeNorwegianWordInput(e.currentTarget.value))
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder={isDisabled ? 'Puslespill fullført!' : 'Skriv inn et sammensatt ord for å fortsette...'}

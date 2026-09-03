@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "tsx --test lib/*.test.ts",
+    "test:norwegian": "tsx --test lib/norwegian-dictionary.test.ts",
     "test:tree": "tsx --test lib/occurrence-tree.test.ts",
     "data:puzzles": "tsx scripts/regenerate-daily.ts",
     "data:words": "tsx scripts/import-compound-words.ts",

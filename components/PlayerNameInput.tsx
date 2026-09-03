@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getPlayerName, setPlayerName, updateAllScoreNames } from '@/lib/player-id'
+import { getPlayerName, isValidPlayerName, setPlayerName, updateAllScoreNames } from '@/lib/player-id'
 
 interface PlayerNameInputProps {
   onNameSet?: (name: string) => void
@@ -35,7 +35,7 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
       return
     }
     
-    if (!/^[\p{L}0-9_\s-]+$/u.test(trimmed)) {
+    if (!isValidPlayerName(trimmed)) {
       setError('Bare bokstaver, tall, mellomrom, bindestreker og understreker er tillatt')
       return
     }
