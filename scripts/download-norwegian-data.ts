@@ -5,19 +5,12 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const RAW_DIR = join(__dirname, '..', 'data', 'raw')
+const NB_DIR = join(RAW_DIR, 'nb-1gram')
 
 const SOURCES = [
   {
-    name: 'leddanalyse.txt',
-    url: 'https://github.com/tobiasvl/norsk-ordbank/raw/main/nob/leddanalyse.txt',
-  },
-  {
-    name: 'fullformsliste.txt',
-    url: 'https://github.com/tobiasvl/norsk-ordbank/raw/main/nob/fullformsliste.txt',
-  },
-  {
-    name: 'no_50k.txt',
-    url: 'https://github.com/hermitdave/FrequencyWords/raw/master/content/2018/no/no_50k.txt',
+    name: 'nb-1gram/1gram_nob_f1_abc.zip',
+    url: 'https://www.nb.no/sbfil/tekst/1gram_nob_f1_abc.zip',
   },
 ]
 
@@ -25,6 +18,7 @@ function download() {
   if (!existsSync(RAW_DIR)) {
     mkdirSync(RAW_DIR, { recursive: true })
   }
+  if (!existsSync(NB_DIR)) mkdirSync(NB_DIR, { recursive: true })
 
   for (const src of SOURCES) {
     const dest = join(RAW_DIR, src.name)

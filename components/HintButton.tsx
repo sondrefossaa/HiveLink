@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { generateHint } from '@/lib/hints'
-import type { GraphNode } from '@/types'
+import type { GraphNode, PuzzleDifficulty } from '@/types'
 
 interface HintButtonProps {
   onHintReceived: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
@@ -12,9 +12,10 @@ interface HintButtonProps {
   nodes?: GraphNode[]
   goalWord?: string
   selectedNodeId?: string | null
+  difficulty?: PuzzleDifficulty
 }
 
-export default function HintButton({ onHintReceived, disabled, className, nodes, goalWord, selectedNodeId }: HintButtonProps) {
+export default function HintButton({ onHintReceived, disabled, className, nodes, goalWord, selectedNodeId, difficulty }: HintButtonProps) {
   const [loading, setLoading] = useState(false)
 
   const handleGetHint = async () => {
@@ -24,7 +25,7 @@ export default function HintButton({ onHintReceived, disabled, className, nodes,
 
     setLoading(true)
     try {
-      const hint = generateHint({ nodes, goalWord, selectedNodeId: selectedNodeId ?? null })
+      const hint = await generateHint({ nodes, goalWord, selectedNodeId: selectedNodeId ?? null, difficulty })
       if (hint) {
         onHintReceived(hint)
       } else {

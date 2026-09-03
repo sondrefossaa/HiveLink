@@ -1,24 +1,26 @@
 import type { PuzzleDifficulty, PracticePuzzle } from '@/types'
-import { parseCompoundWord, RUNTIME_SPLIT_CONTEXT } from '@/lib/compound-utils'
-import { canChain as canChainSplit } from '@/lib/word-splitting'
 import {
   createEnvironment,
-  DEFAULT_ENVIRONMENT,
+  findMatchingKey,
+  getEndpointKeys,
+  getEnvironment,
   toWordEntry,
   type WordEntry,
   type WordEnvironment,
 } from '@/lib/dictionary'
-import { isCommonWord } from '@/lib/norwegian-dictionary'
 
 interface GeneratedPuzzle extends PracticePuzzle {
   solutionPath: string[]
+  solutionAnalysisIds: number[]
 }
 
 interface DailyPuzzleResult {
   startWord: string
   goalWord: string
-  optimalSteps: number
+  parSteps: number
+  absoluteOptimalSteps?: number
   solutionPath: string[]
+  solutionAnalysisIds: number[]
 }
 
 interface DailyPuzzleOptions {
@@ -33,6 +35,31 @@ const DIFFICULTY_LENGTHS: Record<PuzzleDifficulty, { min: number; max: number }>
 }
 
 const MAX_CHAIN_ATTEMPTS = 800 // Increased for suffix chaining which is more restrictive
+
+function findShortestChain(
+  startKey: string,
+  goalKey: string,
+  environment: WordEnvironment
+): WordEntry[] | null {
+  const queue: Array<{ key: string; path: WordEntry[] }> = [{ key: startKey, path: [] }]
+  const bestDepth = new Map<string, number>([[startKey, 0]])
+
+  for (let queueIndex = 0; queueIndex < queue.length; queueIndex++) {
+    const current = queue[queueIndex]
+    for (const candidate of environment.incomingIndex.get(current.key) ?? []) {
+      if (current.path.some(entry => entry.word === candidate.word)) continue
+      const path = [...current.path, candidate]
+      if (candidate.outgoingKeys.includes(goalKey)) return path
+
+      for (const nextKey of candidate.outgoingKeys) {
+        if ((bestDepth.get(nextKey) ?? Infinity) <= path.length) continue
+        bestDepth.set(nextKey, path.length)
+        queue.push({ key: nextKey, path })
+      }
+    }
+  }
+  return null
+}
 
 // Seeded random number generator (Mulberry32)
 function createSeededRandom(seed: number): () => number {
@@ -77,8 +104,8 @@ function seededShuffleInPlace<T>(array: T[], random: () => number): T[] {
   return array
 }
 
-function pickRandomStart(environment: WordEnvironment): WordEntry {
-  const layeredWords = environment.words.filter((entry) => new Set(entry.parts).size >= 2)
+function pickRandomStart(environment: WordEnvironment, difficulty: PuzzleDifficulty): WordEntry {
+  const layeredWords = environment.words.filter((entry) => getEndpointKeys(entry.incomingKeys, difficulty).length > 0)
   const pool = layeredWords.length > 0 ? layeredWords : environment.words
 
   if (pool.length === 0) {
@@ -89,20 +116,17 @@ function pickRandomStart(environment: WordEnvironment): WordEntry {
 }
 
 function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEnvironment): WordEntry | null {
-  // Suffix chaining rule: candidate's FIRST part must match current's LAST part
-  const currentLastPart = current.parts.length > 0 ? current.parts[current.parts.length - 1].toLowerCase() : null
-  if (!currentLastPart) return null
-
-  const candidates = environment.partIndex.get(currentLastPart)
-  if (!candidates) return null
+  const candidates = [...new Map(current.outgoingKeys.flatMap(key =>
+    environment.incomingIndex.get(key) ?? []
+  ).map(entry => [entry.word, entry])).values()]
+  if (candidates.length === 0) return null
 
   const shuffled = shuffleInPlace([...candidates])
   for (const candidate of shuffled) {
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
 
-    // Verify suffix chaining via doubled-consonant boundary variants
-    if (!canChainSplit(current.parts, candidate.parts, RUNTIME_SPLIT_CONTEXT)) continue
+    if (!findMatchingKey(current.outgoingKeys, candidate.incomingKeys)) continue
 
     used.add(candidate.word)
     return candidate
@@ -111,38 +135,32 @@ function pickNextWord(current: WordEntry, used: Set<string>, environment: WordEn
   return null
 }
 
-function attemptBuildChain(targetLength: number, environment: WordEnvironment): WordEntry[] | null {
+function attemptBuildChain(targetLength: number, environment: WordEnvironment, endpointDifficulty: PuzzleDifficulty): WordEntry[] | null {
   if (environment.words.length === 0) {
     return null
   }
 
-  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
-    const chain: WordEntry[] = []
-    const used = new Set<string>()
-    const start = pickRandomStart(environment)
-    chain.push(start)
-    used.add(start.word)
+  const chain: WordEntry[] = []
+  const used = new Set<string>()
+  const start = pickRandomStart(environment, endpointDifficulty)
+  chain.push(start)
+  used.add(start.word)
 
-    let success = true
+  let success = true
 
-    while (chain.length < targetLength) {
-      const next = pickNextWord(chain[chain.length - 1], used, environment)
-      if (!next) {
-        success = false
-        break
-      }
-      chain.push(next)
+  while (chain.length < targetLength) {
+    const next = pickNextWord(chain[chain.length - 1], used, environment)
+    if (!next) {
+      success = false
+      break
     }
-
-    if (success && chain.length === targetLength) {
-      return chain
-    }
+    chain.push(next)
   }
 
-  return null
+  return success && chain.length === targetLength ? chain : null
 }
 
-function startAndGoalSharePart(chain: WordEntry[]): boolean {
+function startAndGoalSharePart(chain: WordEntry[], endpointDifficulty: PuzzleDifficulty): boolean {
   if (chain.length < 1) {
     return false
   }
@@ -156,8 +174,9 @@ function startAndGoalSharePart(chain: WordEntry[]): boolean {
     return false
   }
   
-  const startWord = firstCompound.parts[0].toLowerCase()
-  const goalWord = lastCompound.parts[lastCompound.parts.length - 1].toLowerCase()
+  const startWord = getEndpointKeys(chain[0].incomingKeys, endpointDifficulty).at(-1)
+  const goalWord = getEndpointKeys(chain.at(-1)!.outgoingKeys, endpointDifficulty).at(-1)
+  if (!startWord || !goalWord) return true
   
   return startWord === goalWord
 }
@@ -166,19 +185,16 @@ function startAndGoalSharePart(chain: WordEntry[]): boolean {
 // With suffix chaining: a word exists that starts with start word and ends with goal word
 function directBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
   // Extract actual start and goal words (first part of start, last part of goal)
-  const startWord = start.parts.length > 0 ? start.parts[0].toLowerCase() : start.word.toLowerCase()
-  const goalWord = goal.parts.length > 0 ? goal.parts[goal.parts.length - 1].toLowerCase() : goal.word.toLowerCase()
+  const startWord = start.startKeys.at(-1)
+  const goalWord = goal.goalKeys.at(-1)
+  if (!startWord || !goalWord) return true
   
   // Check if there's a compound word that starts with startWord and ends with goalWord
   // This would be a trivial one-word solution: startWord + ... + goalWord = compound
   for (const candidate of environment.words) {
     if (candidate.parts.length < 2) continue
     
-    const candidateFirstPart = candidate.parts[0].toLowerCase()
-    const candidateLastPart = candidate.parts[candidate.parts.length - 1].toLowerCase()
-    
-    // Check if this word directly bridges start to goal
-    if (candidateFirstPart === startWord && candidateLastPart === goalWord) {
+    if (candidate.incomingKeys.includes(startWord) && candidate.outgoingKeys.includes(goalWord)) {
       return true
     }
   }
@@ -191,8 +207,9 @@ function directBridgeExists(start: WordEntry, goal: WordEntry, environment: Word
 // Where: start == word1's first part, word1's last part == word2's first part, word2's last part == goal
 function twoStepBridgeExists(start: WordEntry, goal: WordEntry, environment: WordEnvironment): boolean {
   // Extract actual start and goal words (first part of start, last part of goal)
-  const startWord = start.parts.length > 0 ? start.parts[0].toLowerCase() : start.word.toLowerCase()
-  const goalWord = goal.parts.length > 0 ? goal.parts[goal.parts.length - 1].toLowerCase() : goal.word.toLowerCase()
+  const startWord = start.startKeys.at(-1)
+  const goalWord = goal.goalKeys.at(-1)
+  if (!startWord || !goalWord) return true
   
   // Check for two-step bridge: startWord -> word1 -> word2 -> goalWord
   // word1 must start with startWord
@@ -200,22 +217,14 @@ function twoStepBridgeExists(start: WordEntry, goal: WordEntry, environment: Wor
   for (const word1 of environment.words) {
     if (word1.parts.length < 2) continue
     
-    const word1FirstPart = word1.parts[0].toLowerCase()
-    const word1LastPart = word1.parts[word1.parts.length - 1].toLowerCase()
-    
-    // word1 must start with startWord
-    if (word1FirstPart !== startWord) continue
+    if (!word1.incomingKeys.includes(startWord)) continue
     
     // Now find word2 that starts with word1's last part and ends with goalWord
     for (const word2 of environment.words) {
       if (word2.word === word1.word) continue
       if (word2.parts.length < 2) continue
       
-      const word2FirstPart = word2.parts[0].toLowerCase()
-      const word2LastPart = word2.parts[word2.parts.length - 1].toLowerCase()
-      
-      // word2 must start with word1's last part and end with goalWord
-      if (word2FirstPart === word1LastPart && word2LastPart === goalWord) {
+      if (findMatchingKey(word1.outgoingKeys, word2.incomingKeys) && word2.outgoingKeys.includes(goalWord)) {
         return true // Two-step bridge found: startWord -> word1 -> word2 -> goalWord
       }
     }
@@ -230,9 +239,9 @@ function findWordEntry(word: string, environment: WordEnvironment): WordEntry | 
   return environment.words.find((entry) => entry.word === normalized) || null
 }
 
-// Practice puzzles use the bundled dictionary directly - no database needed.
+// Practice puzzles load the compact static dictionary without a database.
 async function loadPracticeEnvironment(): Promise<WordEnvironment> {
-  return DEFAULT_ENVIRONMENT
+  return getEnvironment('hard')
 }
 
 export async function generatePracticePuzzle(
@@ -245,13 +254,8 @@ export async function generatePracticePuzzle(
 
   // If start and goal words are provided (shared puzzle), create a fixed puzzle
   if (sharedStartWord && sharedGoalWord) {
-    const fallbackEnvironment = fullEnvironment === DEFAULT_ENVIRONMENT ? null : DEFAULT_ENVIRONMENT
-    const startEntry =
-      findWordEntry(sharedStartWord, fullEnvironment) ||
-      (fallbackEnvironment ? findWordEntry(sharedStartWord, fallbackEnvironment) : null)
-    const goalEntry =
-      findWordEntry(sharedGoalWord, fullEnvironment) ||
-      (fallbackEnvironment ? findWordEntry(sharedGoalWord, fallbackEnvironment) : null)
+    const startEntry = findWordEntry(sharedStartWord, fullEnvironment)
+    const goalEntry = findWordEntry(sharedGoalWord, fullEnvironment)
     
     if (!startEntry || !goalEntry) {
       throw new Error(`Invalid shared puzzle words: ${sharedStartWord} -> ${sharedGoalWord}`)
@@ -274,10 +278,11 @@ export async function generatePracticePuzzle(
       difficulty,
       startWord,
       goalWord,
-      optimalSteps: 5, // Default optimal steps for shared puzzles
+      parSteps: 5,
       isDaily: false,
       mode: 'practice',
       solutionPath: [startWord, goalWord], // Minimal path
+      solutionAnalysisIds: [],
       startParts,
       goalParts,
       wordParts,
@@ -290,50 +295,30 @@ export async function generatePracticePuzzle(
 
   let chain: WordEntry[] | null = null
   // For medium practice, try canonical words first, then fall back to full environment if needed
-  const environmentsToTry =
-    difficulty === 'easy'
-      ? [DEFAULT_ENVIRONMENT, fullEnvironment]
-      : difficulty === 'medium'
-        ? [DEFAULT_ENVIRONMENT, fullEnvironment] // Allow full environment as fallback for medium
-        : [fullEnvironment]
+  const environmentsToTry = [await getEnvironment(difficulty)]
 
   for (const environment of environmentsToTry) {
     for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
       const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
-      const candidate = attemptBuildChain(lengthChoice, environment)
+      const candidate = attemptBuildChain(lengthChoice, environment, difficulty)
       if (!candidate) {
         continue
       }
 
       // Only check for trivial puzzles (start == goal) for hard difficulty
       // Allow medium to have start == goal if chain is long enough
-      if (difficulty === 'hard' && startAndGoalSharePart(candidate)) {
+      if (difficulty === 'hard' && startAndGoalSharePart(candidate, difficulty)) {
         continue
       }
 
-      // Enforce minimum steps: optimalSteps = chain.length - 1
-      // For medium, allow at least 2 steps (chain of 3 words) - very lenient for suffix chaining
-      const candidateOptimalSteps = Math.max(1, candidate.length - 1)
       const effectiveMinSteps = difficulty === 'medium' ? Math.max(2, minSteps) : Math.max(1, minSteps)
-      if (candidateOptimalSteps < effectiveMinSteps) {
-        continue
-      }
+      const startKey = getEndpointKeys(candidate[0].incomingKeys, difficulty).at(-1)
+      const goalKey = getEndpointKeys(candidate.at(-1)!.outgoingKeys, difficulty).at(-1)
+      if (!startKey || !goalKey) continue
+      const shortest = findShortestChain(startKey, goalKey, environment)
+      if (!shortest || shortest.length < effectiveMinSteps || shortest.length > range.max) continue
 
-      // For medium difficulty, skip bridge detection - accept any valid chain
-      // Only check bridges for hard difficulty
-      if (difficulty === 'hard') {
-        const chainSteps = candidate.length - 1
-        // Prevent trivial one-word bridge for very short chains
-        if (chainSteps <= 3 && directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-          continue
-        }
-        // Prevent trivial two-step bridge for very short chains
-        if (chainSteps <= 2 && twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-          continue
-        }
-      }
-
-      chain = candidate
+      chain = shortest
       break
     }
 
@@ -347,14 +332,14 @@ export async function generatePracticePuzzle(
   }
 
   const wordsOnly = chain.map((entry) => entry.word)
-  const optimalSteps = Math.max(1, chain.length - 1)
+  const parSteps = chain.length
   const seed = `practice-${difficulty}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}`
 
   const normalizedChain = chain.map((entry) => ({
     word: entry.word,
-    parts: entry.parts.length ? [...entry.parts] : parseCompoundWord(entry.word),
+    parts: [...entry.parts],
   }))
 
   const wordParts: Record<string, string[]> = {}
@@ -365,11 +350,8 @@ export async function generatePracticePuzzle(
   // Start and goal are simple words (single part):
   // - Start = first part of first compound word in chain
   // - Goal = last part of last compound word in chain
-  const firstCompound = normalizedChain[0]
-  const lastCompound = normalizedChain[normalizedChain.length - 1]
-  
-  const startWord = firstCompound.parts.length > 0 ? firstCompound.parts[0] : firstCompound.word
-  const goalWord = lastCompound.parts.length > 0 ? lastCompound.parts[lastCompound.parts.length - 1] : lastCompound.word
+  const startWord = getEndpointKeys(chain[0].incomingKeys, difficulty).at(-1)!
+  const goalWord = getEndpointKeys(chain.at(-1)!.outgoingKeys, difficulty).at(-1)!
   
   // Start and goal are always single words (parts = [word])
   const startParts = [startWord]
@@ -381,10 +363,12 @@ export async function generatePracticePuzzle(
     difficulty,
     startWord,
     goalWord,
-    optimalSteps,
+    parSteps,
+    absoluteOptimalSteps: findShortestChain(startWord, goalWord, fullEnvironment)?.length,
     isDaily: false,
     mode: 'practice',
     solutionPath: wordsOnly,
+    solutionAnalysisIds: chain.map(entry => entry.analysisId),
     startParts,
     goalParts,
     wordParts,
@@ -392,8 +376,8 @@ export async function generatePracticePuzzle(
 }
 
 // Seeded versions for daily puzzle generation
-function pickSeededRandomStart(random: () => number, environment: WordEnvironment): WordEntry {
-  const layeredWords = environment.words.filter((entry) => new Set(entry.parts).size >= 2)
+function pickSeededRandomStart(random: () => number, environment: WordEnvironment, endpointDifficulty: PuzzleDifficulty): WordEntry {
+  const layeredWords = environment.words.filter((entry) => getEndpointKeys(entry.incomingKeys, endpointDifficulty).length > 0)
   const pool = layeredWords.length > 0 ? layeredWords : environment.words
 
   if (pool.length === 0) {
@@ -409,20 +393,17 @@ function pickSeededNextWord(
   random: () => number,
   environment: WordEnvironment
 ): WordEntry | null {
-  // Suffix chaining rule: candidate's FIRST part must match current's LAST part
-  const currentLastPart = current.parts.length > 0 ? current.parts[current.parts.length - 1].toLowerCase() : null
-  if (!currentLastPart) return null
-
-  const candidates = environment.partIndex.get(currentLastPart)
-  if (!candidates) return null
+  const candidates = [...new Map(current.outgoingKeys.flatMap(key =>
+    environment.incomingIndex.get(key) ?? []
+  ).map(entry => [entry.word, entry])).values()]
+  if (candidates.length === 0) return null
 
   const shuffled = seededShuffleInPlace([...candidates], random)
   for (const candidate of shuffled) {
     if (candidate.word === current.word) continue
     if (used.has(candidate.word)) continue
 
-    // Verify suffix chaining via doubled-consonant boundary variants
-    if (!canChainSplit(current.parts, candidate.parts, RUNTIME_SPLIT_CONTEXT)) continue
+    if (!findMatchingKey(current.outgoingKeys, candidate.incomingKeys)) continue
 
     used.add(candidate.word)
     return candidate
@@ -434,35 +415,82 @@ function pickSeededNextWord(
 function attemptSeededBuildChain(
   targetLength: number,
   random: () => number,
-  environment: WordEnvironment
+  environment: WordEnvironment,
+  endpointDifficulty: PuzzleDifficulty
 ): WordEntry[] | null {
   if (environment.words.length === 0) {
     return null
   }
 
-  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
-    const chain: WordEntry[] = []
-    const used = new Set<string>()
-    const start = pickSeededRandomStart(random, environment)
-    chain.push(start)
-    used.add(start.word)
+  const chain: WordEntry[] = []
+  const used = new Set<string>()
+  const start = pickSeededRandomStart(random, environment, endpointDifficulty)
+  chain.push(start)
+  used.add(start.word)
 
-    let success = true
+  let success = true
 
-    while (chain.length < targetLength) {
-      const next = pickSeededNextWord(chain[chain.length - 1], used, random, environment)
-      if (!next) {
-        success = false
-        break
-      }
-      chain.push(next)
+  while (chain.length < targetLength) {
+    const next = pickSeededNextWord(chain[chain.length - 1], used, random, environment)
+    if (!next) {
+      success = false
+      break
     }
+    chain.push(next)
+  }
 
-    if (success && chain.length === targetLength) {
-      return chain
+  return success && chain.length === targetLength ? chain : null
+}
+
+function findSeededChainAtDepth(
+  startKey: string,
+  minDepth: number,
+  maxDepth: number,
+  random: () => number,
+  environment: WordEnvironment,
+  endpointDifficulty: PuzzleDifficulty
+): { goalKey: string; chain: WordEntry[] } | null {
+  const queue: Array<{ key: string; depth: number }> = [{ key: startKey, depth: 0 }]
+  const seen = new Set([startKey])
+  const predecessor = new Map<string, { previousKey: string; entry: WordEntry }>()
+  const goals: string[] = []
+
+  for (let index = 0; index < queue.length; index++) {
+    const current = queue[index]
+    if (current.depth >= maxDepth) continue
+    for (const entry of environment.incomingIndex.get(current.key) ?? []) {
+      for (const nextKey of entry.outgoingKeys) {
+        if (seen.has(nextKey)) continue
+        const depth = current.depth + 1
+        seen.add(nextKey)
+        predecessor.set(nextKey, { previousKey: current.key, entry })
+        queue.push({ key: nextKey, depth })
+        if (
+          depth >= minDepth &&
+          nextKey !== startKey &&
+          getEndpointKeys([nextKey], endpointDifficulty).length > 0
+        ) {
+          goals.push(nextKey)
+        }
+      }
     }
   }
 
+  while (goals.length > 0) {
+    const goalIndex = seededRandomInt(0, goals.length - 1, random)
+    const goalKey = goals.splice(goalIndex, 1)[0]
+    const chain: WordEntry[] = []
+    let key = goalKey
+    while (key !== startKey) {
+      const step = predecessor.get(key)
+      if (!step) break
+      chain.unshift(step.entry)
+      key = step.previousKey
+    }
+    if (key === startKey && new Set(chain.map(entry => entry.word)).size === chain.length) {
+      return { goalKey, chain }
+    }
+  }
   return null
 }
 
@@ -471,8 +499,7 @@ function attemptSeededBuildChain(
  * Uses a seeded random number generator to ensure the same puzzle
  * is generated for the same date, even across different servers.
  * 
- * Uses only the canonical/common compound words (from compound-words.json)
- * to ensure daily puzzles use familiar, recognizable words.
+ * Uses the medium graph with easy-tier noun endpoints.
  * Step length is medium (6-7 steps) for a good challenge.
  */
 export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOptions = {}): Promise<DailyPuzzleResult> {
@@ -480,7 +507,7 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   // This ensures familiar, recognizable words while allowing suffix chain building
   
   // Start with canonical words, then add filtered common words from database if available
-  const baseEnvironment = DEFAULT_ENVIRONMENT
+  const baseEnvironment = await getEnvironment('medium')
   let environment = baseEnvironment
   
   // If we have wordEntries provided, merge in common words (words whose parts are all common)
@@ -490,8 +517,7 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
       .map((entry) => toWordEntry(entry.word, entry.parts, 'runtime'))
       .filter((entry): entry is WordEntry => {
         if (!entry || entry.parts.length < 2) return false
-        // Only include if ALL parts are common Norwegian words
-        return entry.parts.every(part => isCommonWord(part))
+        return entry.source === 'canonical'
       })
     
     // Merge with canonical words
@@ -519,64 +545,31 @@ export async function generateDailyPuzzle(date: Date, options: DailyPuzzleOption
   
   // Daily puzzles are always medium difficulty
   const range = DIFFICULTY_LENGTHS.medium
-  const targetLength = seededRandomInt(range.min, range.max, random)
-  const lengthOptions = Array.from(new Set([targetLength, range.max, range.min])).filter(Boolean)
-
-  let chain: WordEntry[] | null = null
-
-  for (let attempt = 0; attempt < MAX_CHAIN_ATTEMPTS; attempt++) {
-    const lengthChoice = lengthOptions[attempt % lengthOptions.length] ?? targetLength
-    const candidate = attemptSeededBuildChain(lengthChoice, random, environment)
-    if (!candidate) {
-      continue
-    }
-
-    // For medium difficulty, avoid puzzles where start and goal share a part
-    if (startAndGoalSharePart(candidate)) {
-      continue
-    }
-
-    // Enforce minimum steps for daily; allow override from options
-    const minSteps = options.minSteps ?? 5
-    const candidateOptimalSteps = Math.max(1, candidate.length - 1)
-    if (candidateOptimalSteps < minSteps) {
-      continue
-    }
-
-    // Prevent trivial one-word bridge between start and goal
-    if (directBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-      continue
-    }
-
-    // Prevent trivial two-step bridge (same as medium practice)
-    if (twoStepBridgeExists(candidate[0], candidate[candidate.length - 1], environment)) {
-      continue
-    }
-
-    chain = candidate
+  const startKeys = [...new Set(environment.words.flatMap(entry => getEndpointKeys(entry.incomingKeys, 'easy')))]
+    .filter(key => environment.incomingIndex.has(key))
+  seededShuffleInPlace(startKeys, random)
+  let selected: { startKey: string; goalKey: string; chain: WordEntry[] } | null = null
+  for (const startKey of startKeys) {
+    const result = findSeededChainAtDepth(startKey, options.minSteps ?? range.min, range.max, random, environment, 'easy')
+    if (!result) continue
+    selected = { startKey, ...result }
     break
   }
 
-  if (!chain) {
+  if (!selected) {
     throw new Error('Unable to generate a valid daily puzzle')
   }
 
+  const { startKey: startWord, goalKey: goalWord, chain } = selected
   const wordsOnly = chain.map((entry) => entry.word)
-  const optimalSteps = Math.max(1, chain.length - 1)
-
-  // Start and goal are simple words:
-  // - Start = first part of first compound word in chain
-  // - Goal = last part of last compound word in chain
-  const firstCompound = chain[0]
-  const lastCompound = chain[chain.length - 1]
-  
-  const startWord = firstCompound.parts.length > 0 ? firstCompound.parts[0] : firstCompound.word
-  const goalWord = lastCompound.parts.length > 0 ? lastCompound.parts[lastCompound.parts.length - 1] : lastCompound.word
+  const parSteps = chain.length
 
   return {
     startWord,
     goalWord,
-    optimalSteps,
+    parSteps,
+    absoluteOptimalSteps: findShortestChain(startWord, goalWord, await getEnvironment('hard'))?.length,
     solutionPath: wordsOnly,
+    solutionAnalysisIds: chain.map(entry => entry.analysisId),
   }
 }

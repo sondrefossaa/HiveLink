@@ -7,8 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:tree": "tsx --test lib/occurrence-tree.test.ts",
     "data:puzzles": "tsx scripts/regenerate-daily.ts",
     "data:words": "tsx scripts/import-compound-words.ts",
+    "data:norwegian": "tsx scripts/build-norwegian-compounds.ts && tsx scripts/derive-compound-runtime.ts",
+    "data:norwegian:nowac": "tsx scripts/build-norwegian-compounds.ts --with-nowac && tsx scripts/derive-compound-runtime.ts",
+    "data:derive": "tsx scripts/derive-compound-runtime.ts",
+    "data:verify": "tsx scripts/verify-norwegian-data.ts",
     "icons": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {

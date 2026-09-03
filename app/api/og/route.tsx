@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const statusConfig: Record<string, { emoji: string; title: string; subtitle: string; subtitleColor: string }> = {
       won: { emoji: '🏆', title: 'Puslespill løst!', subtitle: 'Utmerket!', subtitleColor: '#4ade80' },
       'gave-up': { emoji: '🔄', title: 'Prøv igjen!', subtitle: 'Du får dette til', subtitleColor: '#fbbf24' },
-      playing: { emoji: '🐝', title: 'Pågående', subtitle: 'Hummer fortsatt...', subtitleColor: '#F4B400' },
+      playing: { emoji: '🐝', title: 'Pågående', subtitle: 'Summer fortsatt...', subtitleColor: '#F4B400' },
     }
     const statusInfo = statusConfig[status] || statusConfig.playing
 

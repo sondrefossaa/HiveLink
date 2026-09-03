@@ -28,6 +28,7 @@ function Graph({
   onNodeSelect,
   isComplete,
   winningPath,
+  winningPathNodeIds = [],
   layoutVersion = 0,
 }: GraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -76,37 +77,42 @@ function Graph({
   // Winning edge IDs (edges on the winning path, before and after completion)
   const winningEdgeIds = useMemo(() => {
     const chain = new Set<string>()
+    if (winningPathNodeIds.length >= 2) {
+      for (let i = 0; i < winningPathNodeIds.length - 1; i++) {
+        const fromId = winningPathNodeIds[i]
+        const toId = winningPathNodeIds[i + 1]
+        const connectingEdge = edges.find((edge) => {
+          const sourceId = resolveEdgeEndpoint(edge.source)
+          const targetId = resolveEdgeEndpoint(edge.target)
+          return sourceId === fromId && targetId === toId
+        })
+        if (connectingEdge) chain.add(connectingEdge.id)
+      }
+      return chain
+    }
+
     if (winningPath.length < 2) return chain
 
-    const wordToNode = new Map(nodes.map((node) => [node.word.toLowerCase(), node.id]))
     for (let i = 0; i < winningPath.length - 1; i++) {
-      const fromId = wordToNode.get(winningPath[i].toLowerCase())
-      const toId = wordToNode.get(winningPath[i + 1].toLowerCase())
-      if (!fromId || !toId) continue
-
       const connectingEdge = edges.find((edge) => {
-        const sourceId = resolveEdgeEndpoint(edge.source)
-        const targetId = resolveEdgeEndpoint(edge.target)
-        return (
-          (sourceId === fromId && targetId === toId) ||
-          (sourceId === toId && targetId === fromId)
-        )
+        const source = nodes.find((node) => node.id === resolveEdgeEndpoint(edge.source))
+        const target = nodes.find((node) => node.id === resolveEdgeEndpoint(edge.target))
+        return source?.word === winningPath[i] && target?.word === winningPath[i + 1]
       })
       if (connectingEdge) chain.add(connectingEdge.id)
     }
     return chain
-  }, [edges, nodes, winningPath])
+  }, [edges, nodes, winningPath, winningPathNodeIds])
 
-  // Nodes directly connected to the goal node (green highlight)
+  // Nodes directly connected to any completed goal occurrence.
   const goalNeighbors = useMemo(() => {
     const set = new Set<string>()
-    const goalNode = nodes.find((node) => node.id === 'goal') ?? nodes.find((node) => node.isGoal)
-    if (!goalNode) return set
+    const goalIds = new Set(nodes.filter((node) => node.isGoal && node.parentId).map((node) => node.id))
     edges.forEach((edge) => {
       const sourceId = resolveEdgeEndpoint(edge.source)
       const targetId = resolveEdgeEndpoint(edge.target)
-      if (sourceId === goalNode.id) set.add(targetId)
-      else if (targetId === goalNode.id) set.add(sourceId)
+      if (goalIds.has(sourceId)) set.add(targetId)
+      else if (goalIds.has(targetId)) set.add(sourceId)
     })
     return set
   }, [nodes, edges])

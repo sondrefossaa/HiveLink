@@ -2,11 +2,17 @@
 
 import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import type { GraphNode } from '@/types'
+import type { GraphNode, PuzzleDifficulty } from '@/types'
 import HintButton from './HintButton'
 
 interface InputBarProps {
-  onSubmit: (word: string) => Promise<{ success: boolean; error?: string }>
+  onSubmit: (word: string) => Promise<{
+    success: boolean
+    error?: string
+    parentId?: string
+    parentWord?: string
+    reused?: boolean
+  }>
   isLoading: boolean
   isDisabled: boolean
   error: string | null
@@ -14,6 +20,7 @@ interface InputBarProps {
   onHintReceived?: (hint: { suggestedWord: string; sharedPart: string; parentWord: string; confidence: 'high' | 'medium' | 'low' }) => void
   goalWord?: string
   nodes?: GraphNode[]
+  difficulty?: PuzzleDifficulty
   externalValue?: string | null
   onExternalValueSet?: () => void
 }
@@ -27,18 +34,20 @@ export default function InputBar({
   onHintReceived,
   goalWord,
   nodes,
+  difficulty,
   externalValue,
   onExternalValueSet,
 }: InputBarProps) {
   const [input, setInput] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
+  const [placementNotice, setPlacementNotice] = useState<string | null>(null)
   const [shake, setShake] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Sync external value to input (for hints)
   useEffect(() => {
     if (externalValue !== undefined && externalValue !== null) {
-      const normalizedValue = externalValue.toLowerCase().replace(/[^a-z]/g, '')
+      const normalizedValue = externalValue.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^a-zæøå]/gu, '')
       if (normalizedValue !== input) {
         setInput(normalizedValue)
         // Focus the input when external value is set
@@ -55,9 +64,9 @@ export default function InputBar({
     }
   }, [externalValue, input, onExternalValueSet])
 
-  // Focus input on mount
+  // Keep desktop keyboard flow fast without forcing open the mobile keyboard.
   useEffect(() => {
-    if (inputRef.current && !isDisabled) {
+    if (inputRef.current && !isDisabled && window.matchMedia('(pointer: fine)').matches) {
       inputRef.current.focus()
     }
   }, [isDisabled])
@@ -69,6 +78,12 @@ export default function InputBar({
       return () => clearTimeout(timer)
     }
   }, [localError])
+
+  useEffect(() => {
+    if (!placementNotice) return
+    const timer = setTimeout(() => setPlacementNotice(null), 3000)
+    return () => clearTimeout(timer)
+  }, [placementNotice])
 
   // Sync with external error
   useEffect(() => {
@@ -104,17 +119,25 @@ export default function InputBar({
 
     if (result.success) {
       setInput('')
+      if (result.parentWord && result.parentId !== selectedNode?.id) {
+        setPlacementNotice(`Koblet automatisk fra «${result.parentWord}»`)
+      } else if (result.reused) {
+        setPlacementNotice('Ordet ble gjenbrukt i en ny gren')
+      }
     } else {
       setLocalError(result.error || 'Ugyldig ord')
       setShake(true)
       setTimeout(() => setShake(false), 500)
     }
 
-    // Always refocus input after submission
-    inputRef.current?.focus()
+    if (window.matchMedia('(pointer: fine)').matches) {
+      inputRef.current?.focus()
+    }
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return
+
     // Prevent Enter key from bubbling to other elements (like hint button)
     if (e.key === 'Enter') {
       e.stopPropagation()
@@ -126,7 +149,7 @@ export default function InputBar({
       e.key.length === 1 &&
       !e.ctrlKey &&
       !e.metaKey &&
-      !/^[a-zA-Z]$/.test(e.key)
+      !/^\p{L}$/u.test(e.key)
     ) {
       e.preventDefault()
     }
@@ -155,13 +178,27 @@ export default function InputBar({
               className="mb-3 text-center"
             >
               <span className="text-sm text-gray-400">
-                Koble fra:{' '}
+                Foretrukket gren:{' '}
                 <span className="text-hive-yellow font-medium">{selectedNode.word}</span>
                 <span className="text-gray-500 ml-2">
                   ({selectedNode.parts.join(' + ')})
                 </span>
               </span>
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {placementNotice && (
+            <motion.p
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 6 }}
+              className="mb-3 text-center text-sm text-hive-yellow"
+              role="status"
+            >
+              {placementNotice}
+            </motion.p>
           )}
         </AnimatePresence>
 
@@ -174,7 +211,7 @@ export default function InputBar({
               exit={{ opacity: 0, y: 10 }}
               className="mb-3 text-center"
             >
-              <span className="text-sm text-red-400 bg-red-500/10 px-3 py-1 rounded-full">
+              <span id="compound-word-error" role="alert" className="text-sm text-red-400 bg-red-500/10 px-3 py-1 rounded-full">
                 {displayError}
               </span>
             </motion.div>
@@ -182,7 +219,15 @@ export default function InputBar({
         </AnimatePresence>
 
         {/* Input form */}
-        <form onSubmit={handleSubmit} className="relative">
+        <form
+          onSubmit={handleSubmit}
+          className="relative"
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-bwignore
+          data-form-type="other"
+        >
           <motion.div
             animate={shake ? { x: [-10, 10, -10, 10, 0] } : {}}
             transition={{ duration: 0.4 }}
@@ -204,14 +249,25 @@ export default function InputBar({
                   nodes={nodes}
                   goalWord={goalWord}
                   selectedNodeId={selectedNode?.id || null}
+                  difficulty={difficulty}
                 />
               )}
               <input
                 ref={inputRef}
-                autoFocus
+                id="compound-word"
+                name="compound-word"
                 type="text"
                 value={input}
-                onChange={(e) => setInput(e.target.value.toLowerCase().replace(/[^a-z]/g, ''))}
+                onChange={(e) => {
+                  if ((e.nativeEvent as InputEvent).isComposing) {
+                    setInput(e.target.value)
+                    return
+                  }
+                  setInput(e.target.value.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^\p{L}]/gu, ''))
+                }}
+                onCompositionEnd={(e) => {
+                  setInput(e.currentTarget.value.normalize('NFC').toLocaleLowerCase('nb-NO').replace(/[^\p{L}]/gu, ''))
+                }}
                 onKeyDown={handleKeyDown}
                 placeholder={isDisabled ? 'Puslespill fullført!' : 'Skriv inn et sammensatt ord for å fortsette...'}
                 disabled={isDisabled}
@@ -220,10 +276,19 @@ export default function InputBar({
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
+                inputMode="text"
+                enterKeyHint="go"
+                maxLength={30}
+                data-1p-ignore
+                data-lpignore="true"
+                data-bwignore
+                data-form-type="other"
                 className="flex-1 min-w-0 bg-transparent text-white text-lg px-2 sm:px-4 py-2
                          placeholder:text-gray-500 focus:outline-none
                          disabled:text-gray-500 disabled:cursor-not-allowed"
                 aria-label="Skriv inn sammensatt ord"
+                aria-invalid={Boolean(displayError)}
+                aria-describedby={displayError ? 'compound-word-error' : 'compound-word-help'}
               />
 
               <motion.button
@@ -264,15 +329,15 @@ export default function InputBar({
           </motion.div>
 
           {/* Hint text */}
-          <p className="mt-3 text-center text-xs text-gray-500">
-            Skriv inn et ord som begynner med siste del av{' '}
-            <span className="text-hive-yellow">
-              {selectedNode ? selectedNode.word : 'startordet'}
-            </span>
+          <p id="compound-word-help" className="mt-3 text-center text-xs text-gray-400">
+            {selectedNode && !selectedNode.isGoal ? (
+              <>Ordet kobles fra <span className="text-hive-yellow">{selectedNode.word}</span> når det passer, ellers velges korteste gren.</>
+            ) : (
+              <>HiveLink velger automatisk den korteste grenen som passer.</>
+            )}
           </p>
         </form>
       </div>
     </motion.div>
   )
 }
-

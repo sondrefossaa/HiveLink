@@ -1,6 +1,6 @@
 // scripts/import-compound-words.ts
 // Norwegian compound word import pipeline.
-// Runs the three build scripts in sequence.
+// Downloads the pinned sources and builds the reviewed gameplay artifact.
 
 import { execSync } from 'child_process'
 import { dirname } from 'path'
@@ -15,6 +15,6 @@ function run(script: string) {
 
 run('download-norwegian-data.ts')
 run('build-norwegian-compounds.ts')
-run('build-norwegian-dictionary.ts')
+run('derive-compound-runtime.ts')
 
 console.log('\n✓ Norwegian data pipeline complete!')

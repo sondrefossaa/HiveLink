@@ -256,7 +256,7 @@ export default function VictoryModal({
 
   // Calculate performance rating
   const getPerformanceRating = useCallback(() => {
-    const optimal = stats.optimalSteps || stats.wordsUsed
+    const optimal = stats.parSteps || stats.wordsUsed
     const ratio = stats.wordsUsed / optimal
 
   if (ratio <= 1) return { emoji: '👑', text: 'Dronningbie!', color: 'text-yellow-400' }
@@ -443,21 +443,21 @@ export default function VictoryModal({
                   )}
                   {personalStats && personalStats.totalGames > 0 && (
                     <div className="text-xs text-gray-500 text-center mt-2">
-                      På tvers av {personalStats.totalGames} løste puslespill
+                      Basert på {personalStats.totalGames} løste puslespill
                     </div>
                   )}
                 </motion.div>
               )}
 
               {/* Optimal comparison */}
-              {stats.optimalSteps && stats.wordsUsed > stats.optimalSteps && (
+              {stats.parSteps && stats.wordsUsed > stats.parSteps && (
                 <motion.p
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 0.6 }}
                   className="text-center text-sm text-gray-400 mb-6"
                 >
-                  Optimal løsning: {stats.optimalSteps} ord
+                  Par: {stats.parSteps} ord
                 </motion.p>
               )}
 
@@ -526,7 +526,7 @@ export default function VictoryModal({
                       {allPaths.length > 0 && (
                         <div className="text-center text-sm text-gray-400 pt-2">
                           {allPaths.length === 1 
-                            ? 'Fortsett å utforske for å finne flere stier!' 
+                            ? 'Fortsett å utforske for å finne flere stier!'
                             : `${allPaths.length} unike stier oppdaget!`}
                         </div>
                       )}

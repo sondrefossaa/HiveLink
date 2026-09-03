@@ -26,7 +26,7 @@ butterfly → flytrap → trapdoor → doorbell
 - Node.js 18+
 - npm
 
-No database or remote services required — the app runs fully client-side with bundled JSON data and works offline as a PWA.
+No database or remote services are required. The compact dictionary is loaded as a cached static artifact when the game needs it.
 
 ### Installation
 
@@ -81,18 +81,21 @@ hivelink/
 │   ├── useGameState.ts     # Game state management
 │   └── usePuzzle.ts        # Puzzle resolution (local)
 ├── lib/
-│   ├── dictionary.ts       # Bundled dictionary access
+│   ├── dictionary.ts       # Deferred compact dictionary access
 │   ├── daily-puzzle.ts     # Daily puzzle resolution (bundled + deterministic fallback)
 │   ├── puzzle-generator.ts # Seeded puzzle generation
-│   ├── validation.ts       # Word validation (bundled dictionary + Datamuse fallback)
+│   ├── validation.ts       # Exact canonical word validation
 │   ├── hints.ts            # Client-side hint generation
 │   ├── compound-utils.ts   # Word parsing
 │   └── player-id.ts        # Player identity, scores & stats (localStorage)
 ├── data/
-│   ├── compound-words.json # Compound word dictionary
-│   └── daily-puzzles.json  # Pre-generated daily puzzles
+│   ├── compound-graph-stats.json # Derived tier and connectivity report
+│   └── daily-puzzles.json        # Pre-generated daily puzzles
+├── public/dictionary/
+│   └── compound-words.json # Compact ID-based runtime graph
 ├── scripts/
-│   ├── import-compound-words.ts  # Grow the dictionary (writes data/compound-words.json)
+│   ├── build-norwegian-compounds.ts # Import rich lexical source data
+│   ├── derive-compound-runtime.ts   # Derive tiers and compact runtime graph
 │   ├── regenerate-daily.ts       # Pre-generate daily puzzles (writes data/daily-puzzles.json)
 │   └── generate-icons.ts         # Regenerate PWA icons
 └── types/
@@ -103,22 +106,27 @@ hivelink/
 
 All game data lives in the repo:
 
-- **`data/compound-words.json`** — the compound word dictionary. Bundled with the app and used for validation, hints, and puzzle generation.
-- **`data/daily-puzzles.json`** — pre-generated daily puzzles (date → start/goal/optimal steps). Pins each day's puzzle; dates not present fall back to deterministic date-seeded generation in the browser.
+- **`public/dictionary/compound-words.json`** — the deferred, compact runtime graph used for exact validation, hints, and generation.
+- **`data/compound-build.json`** — ignored rich build artifact with analyses, provenance, and source-specific frequency evidence.
+- **`data/compound-graph-stats.json`** — derived easy/medium/hard graph sizes and connectivity.
+- **`data/daily-puzzles.json`** — pre-generated daily puzzles with tier-based par and optional full-graph optimum.
 - **`localStorage`** — per-device player identity, saved game state, solved-puzzle history, streaks, and stats.
 
 ## 🧰 Data Scripts
 
 ```bash
-npm run data:words            # Fetch public word lists, extract compound words, merge into the dictionary
-npm run data:words -- --max 5000    # Cap how many new words are added
+npm run data:words            # Download public inputs and rebuild rich + runtime artifacts
+npm run data:norwegian       # Build from local Ordbank, NST, Eiesland, and NB 1-gram sources
+npm run data:norwegian:nowac # Add optional NoWaC evidence and cache it
+npm run data:derive          # Recompute tiers/runtime from retained rich data only
+npm run data:verify          # Verify sources, analyses, tiers, and pinned paths
 npm run data:puzzles          # Pre-generate daily puzzles (today → +370 days)
 npm run data:puzzles -- --force     # Regenerate existing dates too
 npm run data:puzzles -- --start 2026-09-01 --days 14
 npm run icons                 # Regenerate PWA PNG icons
 ```
 
-After changing the dictionary, run `npm run data:puzzles -- --force` to refresh future puzzles, then commit the JSON files.
+After changing the dictionary policy, run `npm run data:derive`, `npm run data:puzzles -- --force`, and `npm run data:verify`.
 
 ## 🚢 Deployment
 
@@ -143,9 +151,7 @@ colors: {
 ```
 
 ### Word Validation
-The game validates compound words using:
-1. **Bundled dictionary** (instant, offline): words in `data/compound-words.json`
-2. **Datamuse API** (fallback): external API for words not in the dictionary (requires network)
+The game validates words only against exact Ordbank/NST analyses in the full canonical graph. Frequency tiers affect generation, hints, and par, but every validated compound remains playable.
 
 ## 🤝 Contributing
 

@@ -53,7 +53,7 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                 <h3 className="text-lg font-semibold text-hive-yellow mb-2">Mål</h3>
                 <p className="text-gray-300">
                   Koble <span className="text-hive-yellow font-medium">START</span>-ordet til{' '}
-                  <span className="text-green-400 font-medium">MÅL</span>-ordet ved å lenge sammensatte ord.
+                  <span className="text-green-400 font-medium">MÅL</span>-ordet ved å lenke sammen sammensatte ord.
                 </p>
               </div>
 
@@ -67,11 +67,11 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">2</span>
-                    <span>Hvert ord du legger til må være et ekte <strong className="text-white">sammensatt ord</strong> (f.eks. fotball, ballongfly).</span>
+                    <span>Hvert ord du legger til må være et ekte <strong className="text-white">sammensatt ord</strong> (f.eks. eggeskall, skalldyr).</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">3</span>
-                    <span>Det <strong className="text-white">FØRSTE</strong> delen av det nye ordet må stemme overens med den <strong className="text-white">SISTE</strong> delen av forrige ord.</span>
+                    <span>Den <strong className="text-white">FØRSTE</strong> delen av det nye ordet må stemme overens med den <strong className="text-white">SISTE</strong> delen av forrige ord.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="w-6 h-6 rounded-full bg-hive-yellow/20 text-hive-yellow text-sm flex items-center justify-center flex-shrink-0 mt-0.5">4</span>
@@ -85,18 +85,16 @@ export default function HowToPlay({ isOpen, onClose }: HowToPlayProps) {
                 <h3 className="text-lg font-semibold text-hive-yellow mb-2">Eksempelkjede</h3>
                 <div className="bg-hive-dark/50 rounded-xl p-4">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="px-2 py-1 rounded bg-hive-yellow text-hive-dark font-medium">fot</span>
+                    <span className="px-2 py-1 rounded bg-hive-yellow text-hive-dark font-medium">egg</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">fotball</span>
+                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">eggeskall</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">ballong</span>
+                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">skalldyr</span>
                     <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-hive-graphite text-gray-300">ballongfly</span>
-                    <span className="text-hive-yellow">→</span>
-                    <span className="px-2 py-1 rounded bg-green-400/20 text-green-400 font-medium border border-green-400">fly</span>
+                    <span className="px-2 py-1 rounded bg-green-400/20 text-green-400 font-medium border border-green-400">dyr</span>
                   </div>
                   <p className="mt-3 text-xs text-gray-500">
-                    <span className="text-hive-yellow">fot</span> → fot<span className="text-hive-yellow">ball</span> → <span className="text-hive-yellow">ball</span>ong → ballong<span className="text-hive-yellow">fly</span> → <span className="text-hive-yellow">fly</span>
+                    <span className="text-hive-yellow">egg</span> → egge<span className="text-hive-yellow">skall</span> → <span className="text-hive-yellow">skall</span>dyr → <span className="text-hive-yellow">dyr</span>
                   </p>
                   <p className="mt-2 text-xs text-gray-400 italic">
                     Merk: Siste del av hvert ord blir første del av det neste!
@@ -169,4 +167,3 @@ export function useFirstVisitTutorial() {
 
   return { showTutorial, setShowTutorial }
 }
-

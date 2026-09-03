@@ -1,2 +1,3 @@
-remove vertical edges
-path lenghth logic is wrong, said path  length of 8 when it was 5
+make edges be extendible in  different "bøyninger".
+example aftenbladet = aftenblad. can extend from blad from both
+also add duplication detection then which will make afteblad after aftenbladet not add a new node

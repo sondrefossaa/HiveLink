@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "thresholds": {
+    "easyPercentile": 0.6666666666666666,
+    "mediumPercentile": 0.3333333333333333
+  },
+  "tiers": [
+    {
+      "tier": "easy",
+      "nodes": 14132,
+      "nounEndpoints": 7589,
+      "compounds": 19449,
+      "analyses": 19449,
+      "activeKeys": 6576,
+      "largestWeakComponent": 6433
+    },
+    {
+      "tier": "medium",
+      "nodes": 20726,
+      "nounEndpoints": 10962,
+      "compounds": 81583,
+      "analyses": 81591,
+      "activeKeys": 17193,
+      "largestWeakComponent": 17069
+    },
+    {
+      "tier": "hard",
+      "nodes": 26137,
+      "nounEndpoints": 13198,
+      "compounds": 127524,
+      "analyses": 127538,
+      "activeKeys": 26137,
+      "largestWeakComponent": 25987
+    }
+  ]
+}

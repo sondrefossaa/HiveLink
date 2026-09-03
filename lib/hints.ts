@@ -3,9 +3,9 @@
  * Server-side hint generation is handled in the API route
  */
 
-import type { GraphNode } from '@/types'
+import type { GraphNode, PuzzleDifficulty } from '@/types'
 import { findSuffixConnections } from './compound-utils'
-import { getWordsStartingWith } from './dictionary'
+import { getEnvironment } from './dictionary'
 
 export interface HintResult {
   suggestedWord: string
@@ -52,15 +52,16 @@ export function formatHintMessage(hint: HintResult): string {
 
 /**
  * Generate the best hint for the current game state.
- * Fully client-side: uses the bundled dictionary (no server, no ads).
+ * Fully client-side: loads the compact static dictionary on demand.
  * Returns null when no valid hint exists.
  */
-export function generateHint(options: {
+export async function generateHint(options: {
   nodes: GraphNode[]
   goalWord: string
   selectedNodeId: string | null
-}): HintResult | null {
-  const { nodes, goalWord, selectedNodeId } = options
+  difficulty?: PuzzleDifficulty
+}): Promise<HintResult | null> {
+  const { nodes, goalWord, selectedNodeId, difficulty = 'medium' } = options
 
   if (nodes.length === 0 || !goalWord) {
     return null
@@ -71,11 +72,9 @@ export function generateHint(options: {
     return null
   }
 
-  // Get the last part from the source node (for suffix chaining)
-  const sourceParts = sourceNode.parts
-  const sourceLastPart = sourceParts.length > 0
-    ? sourceParts[sourceParts.length - 1].toLowerCase()
-    : sourceNode.word.toLowerCase()
+  const sourceKeys = sourceNode.outgoingKeys ?? (sourceNode.isStart
+    ? [sourceNode.word.toLowerCase()]
+    : [])
 
   const goalWordLower = goalWord.toLowerCase()
 
@@ -90,7 +89,9 @@ export function generateHint(options: {
     score: number
   }> = []
 
-  const words = getWordsStartingWith(sourceLastPart, 200)
+  const environment = await getEnvironment(difficulty)
+  const words = [...new Map(sourceKeys.flatMap(key => (environment.incomingIndex.get(key) ?? []).slice(0, 200))
+    .map(entry => [entry.analysisId, entry])).values()]
 
   for (const wordEntry of words) {
     const wordParts = wordEntry.parts
@@ -101,7 +102,7 @@ export function generateHint(options: {
     }
 
     // Check if this word can connect via suffix chaining
-    const connectionResult = findSuffixConnections(wordEntry.word, wordParts, nodes)
+    const connectionResult = findSuffixConnections(wordEntry.word, wordParts, nodes, wordEntry.incomingKeys)
 
     if (!connectionResult.canConnect) {
       continue
@@ -114,10 +115,7 @@ export function generateHint(options: {
     if (!sourceConnection) continue
 
     // Check if word's last part matches goal word
-    const wordLastPart = wordParts.length > 0
-      ? wordParts[wordParts.length - 1].toLowerCase()
-      : wordEntry.word.toLowerCase()
-    const hasGoalPart = wordLastPart === goalWordLower
+    const hasGoalPart = wordEntry.outgoingKeys.includes(goalWordLower)
 
     // Calculate score (higher is better)
     let score = 0
@@ -127,7 +125,7 @@ export function generateHint(options: {
     candidateWords.push({
       word: wordEntry.word,
       parts: wordParts,
-      sharedPart: sourceLastPart,
+      sharedPart: sourceConnection.sharedPart,
       hasGoalPart,
       confidence: hasGoalPart ? 'high' : 'medium',
       score,

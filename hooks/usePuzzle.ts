@@ -135,7 +135,7 @@ export function usePuzzle(): UsePuzzleResult {
         date: getLocalDate(),
         startWord: 'butterfly',
         goalWord: 'moonshine',
-        optimalSteps: 6,
+        parSteps: 6,
         isDaily: true,
         mode: 'daily',
       })

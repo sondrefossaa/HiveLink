@@ -5,16 +5,21 @@
 
 import dailyPuzzlesJson from '@/data/daily-puzzles.json'
 import { generateDailyPuzzle } from '@/lib/puzzle-generator'
-import { getPartsForWord } from '@/lib/dictionary'
 import type { DailyPuzzle } from '@/types'
 
 interface StoredDailyPuzzle {
+  dictionaryVersion: 2
+  tierPolicyVersion: 1
+  tier: 'medium'
   startWord: string
   goalWord: string
-  optimalSteps: number
+  parSteps: number
+  absoluteOptimalSteps?: number
+  solutionPath: string[]
+  solutionAnalysisIds: number[]
 }
 
-const BUNDLED_DAILY_PUZZLES = dailyPuzzlesJson as Record<string, StoredDailyPuzzle>
+const BUNDLED_DAILY_PUZZLES = dailyPuzzlesJson as unknown as Record<string, StoredDailyPuzzle>
 
 // Epoch: November 27, 2024 - Puzzle #1
 const PUZZLE_EPOCH_UTC_MS = Date.UTC(2024, 10, 27)
@@ -35,7 +40,12 @@ export function getStoredDailyPuzzle(dateKey: string): StoredDailyPuzzle | null 
     !stored ||
     typeof stored.startWord !== 'string' ||
     typeof stored.goalWord !== 'string' ||
-    typeof stored.optimalSteps !== 'number'
+    typeof stored.parSteps !== 'number' ||
+    stored.dictionaryVersion !== 2 ||
+    stored.tierPolicyVersion !== 1 ||
+    stored.tier !== 'medium' ||
+    !Array.isArray(stored.solutionPath)
+    || !Array.isArray(stored.solutionAnalysisIds)
   ) {
     return null
   }
@@ -44,23 +54,17 @@ export function getStoredDailyPuzzle(dateKey: string): StoredDailyPuzzle | null 
 
 function buildDailyPuzzle(
   dateKey: string,
-  puzzle: { startWord: string; goalWord: string; optimalSteps: number }
+  puzzle: { startWord: string; goalWord: string; parSteps: number; absoluteOptimalSteps?: number; solutionPath?: string[]; solutionAnalysisIds?: number[] }
 ): DailyPuzzle {
   const startWord = puzzle.startWord.toLowerCase()
   const goalWord = puzzle.goalWord.toLowerCase()
 
   // Start and goal are simple words (single part = the word itself).
   // If they exist in the compound dictionary, use their stored parts.
-  const startParts = getPartsForWord(startWord) ?? [startWord]
-  const goalParts = getPartsForWord(goalWord) ?? [goalWord]
+  const startParts = [startWord]
+  const goalParts = [goalWord]
 
   const wordParts: Record<string, string[]> = {}
-  if (getPartsForWord(startWord)) {
-    wordParts[startWord] = startParts
-  }
-  if (getPartsForWord(goalWord)) {
-    wordParts[goalWord] = goalParts
-  }
 
   return {
     id: 0,
@@ -68,12 +72,15 @@ function buildDailyPuzzle(
     date: dateKey,
     startWord,
     goalWord,
-    optimalSteps: puzzle.optimalSteps,
+    parSteps: puzzle.parSteps,
+    absoluteOptimalSteps: puzzle.absoluteOptimalSteps,
     isDaily: true,
     mode: 'daily',
     startParts,
     goalParts,
     wordParts,
+    solutionPath: puzzle.solutionPath ? [...puzzle.solutionPath] : undefined,
+    solutionAnalysisIds: puzzle.solutionAnalysisIds ? [...puzzle.solutionAnalysisIds] : undefined,
   }
 }
 
@@ -93,7 +100,7 @@ export async function getDailyPuzzle(dateKey: string): Promise<DailyPuzzle> {
       throw new Error(`Invalid date key: ${dateKey}`)
     }
 
-    const generated = await generateDailyPuzzle(utcDate, { minSteps: 3 })
+    const generated = await generateDailyPuzzle(utcDate)
     return buildDailyPuzzle(dateKey, generated)
   } catch (error) {
     console.error(`Failed to generate daily puzzle for ${dateKey}:`, error)
@@ -101,7 +108,7 @@ export async function getDailyPuzzle(dateKey: string): Promise<DailyPuzzle> {
     return buildDailyPuzzle(dateKey, {
       startWord: 'fot',
       goalWord: 'stol',
-      optimalSteps: 4,
+      parSteps: 4,
     })
   }
 }

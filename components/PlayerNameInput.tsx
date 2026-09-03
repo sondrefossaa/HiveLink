@@ -35,7 +35,7 @@ export default function PlayerNameInput({ onNameSet, onNameUpdated, className = 
       return
     }
     
-    if (!/^[a-zA-Z0-9_\s-]+$/.test(trimmed)) {
+    if (!/^[\p{L}0-9_\s-]+$/u.test(trimmed)) {
       setError('Bare bokstaver, tall, mellomrom, bindestreker og understreker er tillatt')
       return
     }

@@ -13,8 +13,6 @@
 // 4. Reject if no valid split found
 
 import {
-  isCompoundPart,
-  isCommonWord,
   normalizeNo,
   isNorwegianWordish,
 } from './norwegian-dictionary'

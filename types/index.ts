@@ -3,11 +3,14 @@ export interface GraphNode {
   id: string;
   word: string;
   parts: string[];
+  incomingKeys?: string[];
+  outgoingKeys?: string[];
   layer: number;
   isStart: boolean;
   isGoal: boolean;
   isCompleted: boolean;
   parentId?: string;
+  isReused?: boolean;
   x?: number;
   y?: number;
   fx?: number | null;
@@ -33,6 +36,7 @@ export interface GraphProps {
   onNodeSelect: (nodeId: string) => void;
   isComplete: boolean;
   winningPath: string[];
+  winningPathNodeIds?: string[];
   layoutVersion?: number;
 }
 
@@ -50,24 +54,29 @@ export interface DailyPuzzle {
   date: string;
   startWord: string;
   goalWord: string;
-  optimalSteps: number;
+  parSteps: number;
+  absoluteOptimalSteps?: number;
   isDaily: true;
   mode: 'daily';
   startParts?: string[];
   goalParts?: string[];
   wordParts?: Record<string, string[]>;
+  solutionPath?: string[];
+  solutionAnalysisIds?: number[];
 }
 
 export interface PracticePuzzle {
   id: string;
   startWord: string;
   goalWord: string;
-  optimalSteps: number;
+  parSteps: number;
+  absoluteOptimalSteps?: number;
   difficulty: PuzzleDifficulty;
   seed: string;
   isDaily: false;
   mode: 'practice';
   solutionPath?: string[];
+  solutionAnalysisIds?: number[];
   puzzleNumber?: number;
   date?: string;
   startParts?: string[];
@@ -90,6 +99,13 @@ export interface LocalScoreInfo {
 export interface ValidationResult {
   valid: boolean;
   parts: string[];
+  incomingKeys?: string[];
+  outgoingKeys?: string[];
+  analyses?: Array<{
+    parts: string[];
+    incomingKeys: string[];
+    outgoingKeys: string[];
+  }>;
   error?: string;
   word?: string;
 }
@@ -109,7 +125,7 @@ export interface GameState {
 export interface GameStats {
   wordsUsed: number;
   layersExplored: number;
-  optimalSteps?: number;
+  parSteps?: number;
 }
 
 // Player Types
@@ -139,8 +155,23 @@ export interface ApiResponse<T> {
 export interface CompoundWord {
   word: string;
   parts: string[];
-  fuge?: string;
+  terminalParts?: string[];
+  incomingKeys?: string[];
+  outgoingKeys?: string[];
+  startKeys?: string[];
+  goalKeys?: string[];
+  boundary?: {
+    insert?: string;
+    deleteFromLeft?: string;
+  };
   frequency?: number;
+}
+
+export interface CompactCompoundDictionary {
+  v: number;
+  s: string[];
+  n: number[][];
+  a: Array<Array<number | number[]>>;
 }
 
 export interface ConnectionResult {
@@ -168,4 +199,3 @@ export interface HintResult {
   parentWord: string;
   confidence: 'high' | 'medium' | 'low';
 }
-

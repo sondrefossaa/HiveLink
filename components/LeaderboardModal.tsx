@@ -77,7 +77,7 @@ export default function LeaderboardModal({
                   Din statistikk
                 </h2>
                 <p className="text-sm text-gray-400">
-                  {puzzleNumber ? `Puzzle #${puzzleNumber}` : 'Daily puzzles'}
+                  {puzzleNumber ? `Puslespill #${puzzleNumber}` : 'Daglige puslespill'}
                   {puzzleDate ? ` · ${new Date(puzzleDate + 'T00:00:00').toLocaleDateString()}` : ''}
                 </p>
               </div>
@@ -85,7 +85,7 @@ export default function LeaderboardModal({
                 <button
                   onClick={onClose}
                   className="w-9 h-9 rounded-lg bg-hive-graphite/70 hover:bg-hive-graphite text-gray-400 hover:text-white flex items-center justify-center transition-colors"
-                  aria-label="Close stats"
+                  aria-label="Lukk statistikk"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

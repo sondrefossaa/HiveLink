@@ -3,13 +3,17 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import type { GraphNode, GraphEdge, GameState, PuzzleInstance } from '@/types'
 import {
-  parseCompoundWord,
   findSuffixConnections,
-  isGoalWord,
   generateNodeId,
   generateEdgeId,
-  findPathToNode,
 } from '@/lib/compound-utils'
+import { normalizeNo } from '@/lib/norwegian-dictionary'
+import {
+  OCCURRENCE_TREE_STATE_VERSION,
+  chooseOccurrenceParent,
+  isDistinctWordPath,
+  traceOccurrencePath,
+} from '@/lib/occurrence-tree'
 import { quickValidate } from '@/lib/quick-validation'
 import { validateCompoundWord } from '@/lib/validation'
 import {
@@ -19,9 +23,11 @@ import {
   updatePlayerStats,
   upsertScore,
   recordPathFound,
+  isPuzzleCompleted,
 } from '@/lib/player-id'
 
 interface SavedState {
+  version?: number
   nodes: GraphNode[]
   edges: GraphEdge[]
   wordsUsed: number
@@ -31,13 +37,25 @@ interface SavedState {
   startTime?: number
   finalTimeElapsed?: number
   allPaths?: string[][]
+  winningPath?: string[]
+  winningPathNodeIds?: string[]
+}
+
+interface AddWordResult {
+  success: boolean
+  error?: string
+  isNewPath?: boolean
+  parentId?: string
+  parentWord?: string
+  reused?: boolean
 }
 
 interface UseGameStateResult extends GameState {
-  addWord: (word: string) => Promise<{ success: boolean; error?: string; isNewPath?: boolean }>
+  addWord: (word: string) => Promise<AddWordResult>
   selectNode: (nodeId: string | null) => void
   reset: () => void
   winningPath: string[]
+  winningPathNodeIds: string[]
   allPaths: string[][]
   startTime: number
   finalTimeElapsed: number | null
@@ -58,55 +76,27 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [winningPath, setWinningPath] = useState<string[]>([])
+  const [winningPathNodeIds, setWinningPathNodeIds] = useState<string[]>([])
   const [allPaths, setAllPaths] = useState<string[][]>([])
   const allPathsRef = useRef<string[][]>([])
   const [startTime, setStartTime] = useState(() => Date.now())
   const [finalTimeElapsed, setFinalTimeElapsed] = useState<number | null>(null)
   const [wasRestoredComplete, setWasRestoredComplete] = useState(false)
   const scoreSubmittedRef = useRef(false)
+  const submissionInFlightRef = useRef(false)
   
   // Keep ref in sync with state
   useEffect(() => {
     allPathsRef.current = allPaths
   }, [allPaths])
 
-  // Helper to check if a path has all unique words (no duplicates within path)
+  // The goal is a marker rather than a player placement, so it may share the
+  // same label as an earlier occurrence in puzzles that intentionally loop.
   const hasUniqueWords = useCallback((path: string[]): boolean => {
-    const words = path.map(w => w.toLowerCase())
+    const words = path.slice(0, -1).map((word) => normalizeNo(word))
     const uniqueWords = new Set(words)
     return words.length === uniqueWords.size
   }, [])
-
-  // Helper to check if a path is unique (exact sequence of words from start to end)
-  const isUniquePath = useCallback((newPath: string[], existingPaths: string[][]): boolean => {
-    if (newPath.length < 2) return false
-    
-    // First ensure the path itself has no duplicate words
-    if (!hasUniqueWords(newPath)) {
-      return false
-    }
-    
-    // Get intermediate nodes (exclude start and goal)
-    const newPathIntermediate = new Set(
-      newPath.slice(1, -1).map(w => w.toLowerCase())
-    )
-    
-    // Check if any existing path shares intermediate nodes with the new path
-    for (const existingPath of existingPaths) {
-      const existingIntermediate = new Set(
-        existingPath.slice(1, -1).map(w => w.toLowerCase())
-      )
-      
-      // If paths share any intermediate nodes, they're not completely unique
-      for (const node of newPathIntermediate) {
-        if (existingIntermediate.has(node)) {
-          return false
-        }
-      }
-    }
-    
-    return true
-  }, [hasUniqueWords])
 
   // Initialize game with start and goal nodes
   useEffect(() => {
@@ -118,8 +108,22 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     const savedState = persistenceKey
       ? (getSavedGameState(persistenceKey) as SavedState | null)
       : null
+
+    setError(null)
+    setAllowExploration(false)
+    setWasRestoredComplete(false)
+    setWinningPath([])
+    setWinningPathNodeIds([])
+    setAllPaths([])
+    allPathsRef.current = []
+    setFinalTimeElapsed(null)
+    setSelectedNodeId('start')
     
-    if (savedState && savedState.nodes && savedState.nodes.length > 0) {
+    if (
+      savedState?.version === OCCURRENCE_TREE_STATE_VERSION &&
+      savedState.nodes &&
+      savedState.nodes.length > 0
+    ) {
       setNodes(savedState.nodes)
       setEdges(savedState.edges || [])
       setWordsUsed(savedState.wordsUsed || 0)
@@ -139,44 +143,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         setWasRestoredComplete(true)
         setAllowExploration(true) // Allow exploration on restored complete games
         
-        // Find the winning word node (the one that connected to the goal)
-        // It's the node with isGoal=true that isn't the original goal node, 
-        // OR find the node that has an edge to the goal
-        const goalNode = savedState.nodes.find(n => n.id === 'goal')
-        const edges = savedState.edges || []
-        
-        // Find the node that connects to the goal (has an edge with goal as source or target)
-        let winningNodeId: string | undefined
-        for (const edge of edges) {
-          const sourceId = typeof edge.source === 'string' ? edge.source : edge.source
-          const targetId = typeof edge.target === 'string' ? edge.target : edge.target
-          if (sourceId === 'goal' || targetId === 'goal') {
-            winningNodeId = sourceId === 'goal' ? targetId : sourceId
-            break
-          }
-        }
-        
-        // If no edge to goal found, find the highest layer completed node
-        if (!winningNodeId) {
-          const completedNodes = savedState.nodes
-            .filter(n => n.isCompleted && n.id !== 'goal' && n.id !== 'start')
-            .sort((a, b) => b.layer - a.layer)
-          if (completedNodes.length > 0) {
-            winningNodeId = completedNodes[0].id
-          }
-        }
-        
-        if (winningNodeId) {
-          const path = findPathToNode(winningNodeId, savedState.nodes, edges)
-          // Add the goal word at the end if not already there
-          if (goalNode && path.length > 0 && path[path.length - 1] !== goalNode.word) {
-            path.push(goalNode.word)
-          }
-          // Validate path has all unique words before restoring
-          if (hasUniqueWords(path)) {
-            setWinningPath(path)
-          }
-        }
+        setWinningPath(savedState.winningPath ?? savedState.allPaths?.[0] ?? [])
+        setWinningPathNodeIds(savedState.winningPathNodeIds ?? [])
         
         // Restore all paths if saved, filtering out any with duplicate words
         if (savedState.allPaths && savedState.allPaths.length > 0) {
@@ -199,6 +167,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       id: 'start',
       word: puzzle.startWord,
       parts: startParts,
+      incomingKeys: [normalizeNo(puzzle.startWord)],
+      outgoingKeys: [normalizeNo(puzzle.startWord)],
       layer: 0,
       isStart: true,
       isGoal: false,
@@ -209,6 +179,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       id: 'goal',
       word: puzzle.goalWord,
       parts: goalParts,
+      incomingKeys: [normalizeNo(puzzle.goalWord)],
+      outgoingKeys: [normalizeNo(puzzle.goalWord)],
       layer: -1, // Special layer for goal
       isStart: false,
       isGoal: true,
@@ -222,6 +194,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setIsComplete(false)
     setAllowExploration(false)
     setWinningPath([])
+    setWinningPathNodeIds([])
     setAllPaths([])
     allPathsRef.current = [] // Update ref immediately
     setSelectedNodeId('start')
@@ -236,6 +209,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     if (!puzzle || nodes.length === 0) return
 
     const state: SavedState = {
+      version: OCCURRENCE_TREE_STATE_VERSION,
       nodes,
       edges,
       wordsUsed,
@@ -244,202 +218,202 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       startTime,
       finalTimeElapsed: finalTimeElapsed ?? undefined,
       allPaths: allPaths.length > 0 ? allPaths : undefined,
+      winningPath: winningPath.length > 0 ? winningPath : undefined,
+      winningPathNodeIds: winningPathNodeIds.length > 0 ? winningPathNodeIds : undefined,
     }
 
     if (puzzle.isDaily) {
       saveGameState(puzzle.date, state)
     }
-  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths])
+  }, [puzzle, nodes, edges, wordsUsed, maxLayer, isComplete, startTime, finalTimeElapsed, allPaths, winningPath, winningPathNodeIds])
 
-  const addWord = useCallback(async (word: string): Promise<{ success: boolean; error?: string; isNewPath?: boolean }> => {
+  const addWord = useCallback(async (word: string): Promise<AddWordResult> => {
     if (!puzzle) {
-      return { success: false, error: 'Puzzle not loaded' }
+      return { success: false, error: 'Puslespillet er ikke lastet inn' }
     }
 
     if (isComplete && !allowExploration) {
-      return { success: false, error: 'Puzzle already completed' }
+      return { success: false, error: 'Puslespillet er allerede fullført' }
     }
 
+    if (submissionInFlightRef.current) {
+      return { success: false, error: 'Ordet sjekkes allerede' }
+    }
+
+    submissionInFlightRef.current = true
     setIsLoading(true)
     setError(null)
 
     try {
-      const normalized = word.toLowerCase().replace(/[^a-z]/g, '')
+      const normalized = normalizeNo(word)
 
       // Quick client-side validation
       const quickCheck = quickValidate(normalized)
       if (!quickCheck.valid) {
-        setError(quickCheck.error || 'Invalid word')
+        setError(quickCheck.error || 'Ugyldig ord')
         return { success: false, error: quickCheck.error }
       }
 
-      // Check if word is already used
-      if (nodes.some(n => n.word.toLowerCase() === normalized)) {
-        const err = 'Word already used'
-        setError(err)
-        return { success: false, error: err }
-      }
-
-      // Validate locally (bundled dictionary + Datamuse fallback)
+      // Validate against the full reviewed dictionary, independent of puzzle tier.
       const validation = await validateCompoundWord(normalized)
 
       if (!validation.valid) {
-        setError(validation.error || 'Not a valid compound word')
+        setError(validation.error || 'Ikke et gyldig sammensatt ord')
         return { success: false, error: validation.error }
       }
 
-      // Find ALL nodes this word can connect to via suffix chaining
-      // Rule: new word's FIRST part must match previous word's LAST part
-      const connectionResult = findSuffixConnections(normalized, validation.parts, nodes)
+      const analyses = validation.analyses?.length
+        ? validation.analyses
+        : [{
+            parts: validation.parts,
+            incomingKeys: validation.incomingKeys ?? [],
+            outgoingKeys: validation.outgoingKeys ?? [],
+          }]
+      const analysisConnections = analyses.map(analysis => ({
+        analysis,
+        result: findSuffixConnections(normalized, analysis.parts, nodes, analysis.incomingKeys),
+      }))
+      const connections = analysisConnections.flatMap(option => option.result.connections)
+      const parentConnection = chooseOccurrenceParent(
+        connections,
+        selectedNodeId,
+        nodes,
+        edges,
+        normalized
+      )
 
-      if (!connectionResult.canConnect || connectionResult.connections.length === 0) {
-        const err = 'Word must extend from the last part of an existing word'
+      if (!parentConnection) {
+        const err = connections.length > 0
+          ? 'Ordet er allerede brukt fra alle passende grener'
+          : 'Ordet må begynne med en sluttdel fra et eksisterende ord'
         setError(err)
         return { success: false, error: err }
       }
 
-      // Separate connections to goal vs non-goal nodes
-      const nonGoalConnections = connectionResult.connections.filter(c => !c.node.isGoal)
-      
-      // Check if this is the goal word itself
-      const isTheGoalWord = isGoalWord(normalized, puzzle.goalWord)
-      
-      // For goal connection: the new word's last part must match the goal word
-      // Check if we can connect to goal (new word's last part matches goal word)
-      const newLastPart = validation.parts.length > 0 
-        ? validation.parts[validation.parts.length - 1].toLowerCase()
-        : normalized.toLowerCase()
-      const goalWordLower = puzzle.goalWord.toLowerCase()
-      const canConnectToGoal = newLastPart === goalWordLower && !isTheGoalWord
-      
-      // Find goal node
-      const goalNode = nodes.find(n => n.isGoal)
-      
-      // To win, the word must:
-      // 1. Be the goal word itself, OR
-      // 2. Have its last part match goal word AND connect to at least one non-goal node
-      const connectsToGoal = canConnectToGoal && nonGoalConnections.length > 0
-      const isWinningWord = isTheGoalWord || connectsToGoal
-      
-      // Add goal connection if valid
-      if (canConnectToGoal && goalNode) {
-        connectionResult.connections.push({ 
-          node: goalNode, 
-          sharedPart: goalWordLower 
-        })
-      }
+      const selectedAnalysis = analysisConnections.find(option => option.result.connections.some(connection =>
+        connection.node.id === parentConnection.node.id && connection.sharedPart === parentConnection.sharedPart
+      ))?.analysis ?? analyses[0]
 
-      // Must have at least one non-goal connection (unless it's the goal word itself)
-      if (!isTheGoalWord && nonGoalConnections.length === 0) {
-        const err = 'Words must create a series of connections from start toward the goal'
-        setError(err)
-        return { success: false, error: err }
-      }
-
-      // Create new node - layer is one more than the minimum connected layer
-      const newLayer = connectionResult.minLayer + 1
+      const parent = parentConnection.node
+      const newLayer = parent.layer + 1
+      const reused = nodes.some(
+        (node) => !node.isGoal && normalizeNo(node.word) === normalized
+      )
       const newNode: GraphNode = {
         id: generateNodeId(),
         word: normalized,
-        parts: validation.parts,
+        parts: selectedAnalysis.parts,
+        incomingKeys: selectedAnalysis.incomingKeys,
+        outgoingKeys: selectedAnalysis.outgoingKeys,
         layer: newLayer,
         isStart: false,
-        isGoal: isWinningWord,
-        isCompleted: isWinningWord,
+        isGoal: false,
+        isCompleted: false,
+        parentId: parent.id,
+        isReused: reused,
       }
 
-      // Create edges to ALL connected nodes
-      const newEdges: GraphEdge[] = connectionResult.connections.map(conn => ({
-        id: generateEdgeId(conn.node.id, newNode.id),
-        source: conn.node.id,
+      const newEdges: GraphEdge[] = [{
+        id: generateEdgeId(parent.id, newNode.id),
+        source: parent.id,
         target: newNode.id,
-        sharedPart: conn.sharedPart,
-      }))
+        sharedPart: parentConnection.sharedPart,
+      }]
 
-      // Update state
-      setNodes(prev => {
-        const updated = [...prev]
-        // If winning, mark the goal node as completed
-        if (isWinningWord) {
-          const goalIndex = updated.findIndex(n => n.isGoal)
-          if (goalIndex >= 0) {
-            updated[goalIndex] = { ...updated[goalIndex], isCompleted: true }
-          }
-        }
-        return [...updated, newNode]
-      })
+      const goalWord = normalizeNo(puzzle.goalWord)
+      const reachesGoal = selectedAnalysis.outgoingKeys.includes(goalWord)
+      let nextNodes = [...nodes, newNode]
+      let completedPath: ReturnType<typeof traceOccurrencePath> = null
 
-      setEdges(prev => [...prev, ...newEdges])
+      if (reachesGoal) {
+        const targetGoal = nodes.find((node) => node.isGoal && !node.parentId)
+        const goalNode: GraphNode = targetGoal
+          ? {
+              ...targetGoal,
+              layer: newLayer + 1,
+              parentId: newNode.id,
+              isCompleted: true,
+            }
+          : {
+              id: `goal-${generateNodeId()}`,
+              word: puzzle.goalWord,
+              parts: [goalWord],
+              incomingKeys: [goalWord],
+              outgoingKeys: [goalWord],
+              layer: newLayer + 1,
+              isStart: false,
+              isGoal: true,
+              isCompleted: true,
+              parentId: newNode.id,
+            }
+
+        nextNodes = targetGoal
+          ? nextNodes.map((node) => node.id === targetGoal.id ? goalNode : node)
+          : [...nextNodes, goalNode]
+        newEdges.push({
+          id: generateEdgeId(newNode.id, goalNode.id),
+          source: newNode.id,
+          target: goalNode.id,
+          sharedPart: goalWord,
+        })
+        completedPath = traceOccurrencePath(goalNode.id, nextNodes)
+      }
+
+      setNodes(nextNodes)
+      setEdges([...edges, ...newEdges])
       setWordsUsed(prev => prev + 1)
       setMaxLayer(prev => Math.max(prev, newLayer))
       setSelectedNodeId(newNode.id)
 
-      if (isWinningWord) {
-        // Calculate winning path from start to the winning word
-        const path = findPathToNode(newNode.id, [...nodes, newNode], [...edges, ...newEdges])
-        // Add the goal word at the end if the winning word isn't the goal itself
-        const goalNode = nodes.find(n => n.id === 'goal')
-        if (goalNode && path.length > 0 && path[path.length - 1].toLowerCase() !== goalNode.word.toLowerCase()) {
-          path.push(goalNode.word)
-        }
-        
-        // Validate path has all unique words (no duplicates)
-        if (!hasUniqueWords(path)) {
-          // Path has duplicate words - skip it
-          return { success: true, isNewPath: false }
-        }
-        
-        // Check if this is a new unique path (by exact sequence)
+      if (completedPath && hasUniqueWords(completedPath.words)) {
         const isFirstWin = !isComplete
-        
-        // Get current paths from ref for immediate check (will be updated by useEffect after state change)
         const currentPaths = allPathsRef.current
-        const isNewPath = isFirstWin || isUniquePath(path, currentPaths)
-        
-        if (isFirstWin) {
-          setAllPaths([path])
-          allPathsRef.current = [path] // Update ref immediately
-        } else if (isNewPath) {
-          // New unique path found during exploration - keep sorted by length (shortest first)
-          setAllPaths(prev => {
-            const updated = [...prev, path]
-            const sorted = updated.sort((a, b) => a.length - b.length)
-            allPathsRef.current = sorted // Update ref immediately
-            return sorted
-          })
-          if (puzzle.isDaily) {
-            recordPathFound(puzzle.date)
-          }
+        const isNewPath = isDistinctWordPath(completedPath.words, currentPaths)
+
+        if (!isNewPath) {
+          return { success: true, isNewPath: false, parentId: parent.id, parentWord: parent.word, reused }
         }
-        
+
+        const nextPaths = [...currentPaths, completedPath.words].sort((a, b) => a.length - b.length)
+        setAllPaths(nextPaths)
+        allPathsRef.current = nextPaths
+
+        if (winningPath.length === 0 || completedPath.words.length < winningPath.length) {
+          setWinningPath(completedPath.words)
+          setWinningPathNodeIds(completedPath.nodeIds)
+        }
+
         if (isFirstWin) {
-          // First win - lock in time, mark complete, but allow continued exploration
           const elapsed = Date.now() - startTime
           setFinalTimeElapsed(elapsed)
           setIsComplete(true)
-          setAllowExploration(true) // Auto-enable exploration after first win
-          
+          setAllowExploration(true)
+
           if (puzzle.isDaily) {
+            const previouslyCompleted = isPuzzleCompleted(puzzle.date)
             markPuzzleCompleted(puzzle.date)
-            updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
+            if (!previouslyCompleted) {
+              updatePlayerStats(wordsUsed + 1, true, { isDaily: true })
+            }
           }
-          
-          setWinningPath(path)
+        } else if (puzzle.isDaily) {
+          recordPathFound(puzzle.date)
         }
-        
-        return { success: true, isNewPath }
+
+        return { success: true, isNewPath: true, parentId: parent.id, parentWord: parent.word, reused }
       }
 
-      return { success: true }
+      return { success: true, parentId: parent.id, parentWord: parent.word, reused }
     } catch (err) {
       console.error('Error adding word:', err)
-      const errorMsg = err instanceof Error ? err.message : 'Failed to add word'
+      const errorMsg = err instanceof Error ? err.message : 'Kunne ikke legge til ordet'
       setError(errorMsg)
       return { success: false, error: errorMsg }
     } finally {
+      submissionInFlightRef.current = false
       setIsLoading(false)
     }
-  }, [puzzle, nodes, edges, isComplete, wordsUsed])
+  }, [puzzle, nodes, edges, selectedNodeId, isComplete, allowExploration, winningPath, wordsUsed, startTime, hasUniqueWords])
 
   const selectNode = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId)
@@ -449,13 +423,15 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
   const reset = useCallback(() => {
     if (!puzzle) return
 
-    const startParts = parseCompoundWord(puzzle.startWord)
-    const goalParts = parseCompoundWord(puzzle.goalWord)
+    const startParts = [puzzle.startWord]
+    const goalParts = [puzzle.goalWord]
 
     const startNode: GraphNode = {
       id: 'start',
       word: puzzle.startWord,
       parts: startParts,
+      incomingKeys: [normalizeNo(puzzle.startWord)],
+      outgoingKeys: [normalizeNo(puzzle.startWord)],
       layer: 0,
       isStart: true,
       isGoal: false,
@@ -466,6 +442,8 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
       id: 'goal',
       word: puzzle.goalWord,
       parts: goalParts,
+      incomingKeys: [normalizeNo(puzzle.goalWord)],
+      outgoingKeys: [normalizeNo(puzzle.goalWord)],
       layer: -1,
       isStart: false,
       isGoal: true,
@@ -479,9 +457,16 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     setIsComplete(false)
     setAllowExploration(false)
     setWinningPath([])
+    setWinningPathNodeIds([])
+    setAllPaths([])
+    allPathsRef.current = []
     setSelectedNodeId('start')
     setError(null)
+    setWasRestoredComplete(false)
+    setStartTime(Date.now())
+    setFinalTimeElapsed(null)
     scoreSubmittedRef.current = false
+    submissionInFlightRef.current = false
 
     // Clear saved state
     if (puzzle.isDaily) {
@@ -501,11 +486,9 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     try {
       // Calculate layers from winning path (only layers used to reach goal)
       let layersToSubmit = maxLayer
-      if (winningPath.length > 0) {
-        const winningPathWords = new Set(winningPath.map(w => w.toLowerCase()))
-        const winningPathNodes = nodes.filter(n =>
-          winningPathWords.has(n.word.toLowerCase())
-        )
+      if (winningPathNodeIds.length > 0) {
+        const winningIds = new Set(winningPathNodeIds)
+        const winningPathNodes = nodes.filter((node) => winningIds.has(node.id))
         if (winningPathNodes.length > 0) {
           // Get max layer from winning path nodes (exclude goal node which has layer -1)
           const pathLayers = winningPathNodes
@@ -524,7 +507,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
         puzzleDate: puzzle.date,
         wordsUsed,
         layers: layersToSubmit,
-        pathsFound: 1,
+        pathsFound: Math.max(1, allPaths.length),
         finishedAt: new Date(finishedAtMs).toISOString(),
         elapsedMs: finalTimeElapsed ?? null,
       })
@@ -533,7 +516,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     } catch (error) {
       console.error('Error saving score:', error)
     }
-  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPath, nodes, startTime])
+  }, [puzzle, isComplete, wordsUsed, maxLayer, finalTimeElapsed, winningPathNodeIds, nodes, startTime, allPaths.length])
 
   // Auto-submit score when game is complete
   useEffect(() => {
@@ -555,6 +538,7 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     selectNode,
     reset,
     winningPath,
+    winningPathNodeIds,
     allPaths,
     startTime,
     finalTimeElapsed,
@@ -564,4 +548,3 @@ export function useGameState(puzzle: PuzzleInstance | null): UseGameStateResult 
     wasRestoredComplete,
   }
 }
-

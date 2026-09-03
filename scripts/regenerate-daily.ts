@@ -18,9 +18,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_FILE = path.join(__dirname, '..', 'data', 'daily-puzzles.json')
 
 interface StoredDailyPuzzle {
+  dictionaryVersion: 2
+  tierPolicyVersion: 1
+  tier: 'medium'
   startWord: string
   goalWord: string
-  optimalSteps: number
+  parSteps: number
+  absoluteOptimalSteps?: number
+  solutionPath: string[]
+  solutionAnalysisIds: number[]
 }
 
 function toUtcDateKey(date: Date): string {
@@ -69,20 +75,26 @@ async function main() {
     const date = new Date(startDate.getTime() + dayOffset * 24 * 60 * 60 * 1000)
     const dateKey = toUtcDateKey(date)
 
-    if (!force && stored[dateKey]) {
+    if (!force && stored[dateKey]?.dictionaryVersion === 2) {
       skipped++
       continue
     }
 
     try {
-      const puzzle = await generateDailyPuzzle(date, { minSteps: 3 })
+      const puzzle = await generateDailyPuzzle(date)
       stored[dateKey] = {
+        dictionaryVersion: 2,
+        tierPolicyVersion: 1,
+        tier: 'medium',
         startWord: puzzle.startWord,
         goalWord: puzzle.goalWord,
-        optimalSteps: puzzle.optimalSteps,
+        parSteps: puzzle.parSteps,
+        absoluteOptimalSteps: puzzle.absoluteOptimalSteps,
+        solutionPath: puzzle.solutionPath,
+        solutionAnalysisIds: puzzle.solutionAnalysisIds,
       }
       generated++
-      console.log(`${dateKey}: ${puzzle.startWord} -> ${puzzle.goalWord} (${puzzle.optimalSteps} steps)`)
+      console.log(`${dateKey}: ${puzzle.startWord} -> ${puzzle.goalWord} (par ${puzzle.parSteps})`)
     } catch (error) {
       failed++
       console.warn(`${dateKey}: generation failed (${error instanceof Error ? error.message : error})`)

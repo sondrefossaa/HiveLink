@@ -1,0 +1,49 @@
+{
+  "version": 2,
+  "sourceIntegrity": {
+    "ordbankRows": 180366,
+    "eieslandRows": 60865,
+    "eieslandExpectedRows": 60865,
+    "eieslandMatchedRows": 5149,
+    "nstAddedCompounds": 50278,
+    "nowacApplied": false,
+    "checksums": {
+      "ordbank": "57d91cb3f17b85befa50a3b56fcaed9800ca665b39486fe97b668add914d5f60",
+      "nst": "cef2a5f9690d058331f0f814f175109887bcdc7415e802e1523043b9c36e455b",
+      "eiesland": "e46c12b8be66780252a0dfaeebea550203c2e8426d7c95a6ac33d352cc75d81f",
+      "nb1gram": "d6524958dba7f87fddd6e3f6480593625afa885ae9cc75e478ab812fc5960b5b"
+    }
+  },
+  "tierPolicy": {
+    "derived": true,
+    "nodeAndEdgePercentiles": {
+      "easy": 0.6666666666666666,
+      "medium": 0.3333333333333333,
+      "hard": 0
+    },
+    "note": "Eligibility uses retained percentile distributions and graph degree. Graph statistics below support later policy adjustment without source loss."
+  },
+  "graphStatistics": [
+    {
+      "tier": "easy",
+      "nodes": 14132,
+      "nounEndpoints": 7589,
+      "compounds": 19449,
+      "analyses": 19449
+    },
+    {
+      "tier": "medium",
+      "nodes": 20726,
+      "nounEndpoints": 10962,
+      "compounds": 81583,
+      "analyses": 81591
+    },
+    {
+      "tier": "hard",
+      "nodes": 26137,
+      "nounEndpoints": 13198,
+      "compounds": 127524,
+      "analyses": 127538
+    }
+  ]
+}

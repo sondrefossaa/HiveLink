@@ -103,6 +103,17 @@ export default function TopBar({
                 </h1>
               </div>
 
+              <div
+                className="hidden lg:flex items-center gap-2 min-w-0 text-sm font-semibold"
+                aria-label={`Fra ${startWord} til ${goalWord}`}
+              >
+                <span className="max-w-28 truncate text-hive-yellow">{startWord}</span>
+                <span className="text-gray-500" aria-hidden="true">→</span>
+                <span className={`max-w-28 truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>
+                  {goalWord}
+                </span>
+              </div>
+
               <div className="flex items-center gap-2 text-sm">
                 {isDaily ? (
                   <>
@@ -183,7 +194,7 @@ export default function TopBar({
                         {parValue}
                       </motion.div>
                         <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
-                        Mål
+                        Par
                       </div>
                     </div>
                   </>
@@ -276,28 +287,16 @@ export default function TopBar({
 
           {/* Mobile Controls */}
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
-            <div className="flex items-center justify-between gap-3">
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex-1 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border border-hive-yellow/30 shadow-sm"
-              >
-                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Start</div>
-                <div className="text-sm font-bold text-hive-yellow leading-none truncate">{startWord}</div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: -6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex-1 bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-1.5 border shadow-sm text-right
-                           ${isComplete ? 'border-green-500/50' : 'border-hive-graphite/60'}`}
-              >
-                <div className="text-[10px] text-gray-400 uppercase tracking-wide leading-none mb-0.5">Mål</div>
-                <div className={`text-sm font-bold leading-none truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>
-                  {goalWord}
-                </div>
-              </motion.div>
-            </div>
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center justify-center gap-2 min-w-0 text-sm font-semibold"
+              aria-label={`Fra ${startWord} til ${goalWord}`}
+            >
+              <span className="truncate text-hive-yellow">{startWord}</span>
+              <span className="text-gray-500" aria-hidden="true">→</span>
+              <span className={`truncate ${isComplete ? 'text-green-400' : 'text-white'}`}>{goalWord}</span>
+            </motion.div>
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">

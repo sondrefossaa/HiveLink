@@ -161,11 +161,9 @@ export default function Game() {
     // If there's a winning path, find the max layer from nodes in that path
     // Otherwise fall back to maxLayer (for incomplete games)
     let layersExplored = gameState.maxLayer
-    if (gameState.winningPath.length > 0) {
-      const winningPathWords = new Set(gameState.winningPath.map(w => w.toLowerCase()))
-      const winningPathNodes = gameState.nodes.filter(n => 
-        winningPathWords.has(n.word.toLowerCase())
-      )
+    if (gameState.winningPathNodeIds.length > 0) {
+      const winningIds = new Set(gameState.winningPathNodeIds)
+      const winningPathNodes = gameState.nodes.filter((node) => winningIds.has(node.id))
       if (winningPathNodes.length > 0) {
         // Get max layer from winning path nodes (exclude goal node which has layer -1)
         const pathLayers = winningPathNodes
@@ -185,9 +183,9 @@ export default function Game() {
     return {
       wordsUsed: shortestPathLength,
       layersExplored,
-      optimalSteps: puzzle?.optimalSteps || undefined,
+      parSteps: puzzle?.parSteps || undefined,
     }
-  }, [gameState.wordsUsed, gameState.maxLayer, gameState.winningPath, gameState.allPaths, gameState.nodes, puzzle?.optimalSteps])
+  }, [gameState.wordsUsed, gameState.maxLayer, gameState.winningPath, gameState.winningPathNodeIds, gameState.allPaths, gameState.nodes, puzzle?.parSteps])
 
   // Handle give up
   const handleGiveUp = useCallback(() => {
@@ -282,7 +280,7 @@ export default function Game() {
         onGeneratePractice={generatePracticePuzzle}
         isGeneratingPractice={isGeneratingPractice}
         isDaily={isDailyPuzzle}
-        parValue={puzzle.optimalSteps}
+        parValue={puzzle.parSteps}
         startWord={puzzle.startWord}
         goalWord={puzzle.goalWord}
         startTime={gameState.startTime}
@@ -302,6 +300,7 @@ export default function Game() {
               onNodeSelect={gameState.selectNode}
               isComplete={gameState.isComplete}
               winningPath={gameState.winningPath}
+              winningPathNodeIds={gameState.winningPathNodeIds}
               layoutVersion={layoutVersion}
             />
           ) : (
@@ -336,31 +335,6 @@ export default function Game() {
           </div>
         )}
 
-        {/* Start/Goal labels */}
-        <div className="hidden lg:block absolute top-1/2 -translate-y-1/2 left-4 z-10">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-2 border border-hive-yellow/30"
-          >
-            <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Start</div>
-            <div className="text-lg font-bold text-hive-yellow">{puzzle.startWord}</div>
-          </motion.div>
-        </div>
-
-        <div className="hidden lg:block absolute top-1/2 -translate-y-1/2 right-4 z-10">
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`bg-hive-charcoal/80 backdrop-blur-sm rounded-lg px-3 py-2 border 
-                       ${gameState.isComplete ? 'border-green-500/50' : 'border-hive-graphite'}`}
-          >
-            <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Mål</div>
-            <div className={`text-lg font-bold ${gameState.isComplete ? 'text-green-400' : 'text-white'}`}>
-              {puzzle.goalWord}
-            </div>
-          </motion.div>
-        </div>
       </main>
 
       {/* Input bar */}
@@ -374,6 +348,7 @@ export default function Game() {
           onHintReceived={handleHintReceived}
           goalWord={puzzle.goalWord}
           nodes={gameState.nodes}
+          difficulty={puzzle.isDaily ? 'medium' : puzzle.difficulty}
           externalValue={hintValue}
           onExternalValueSet={() => setHintValue(null)}
         />
@@ -399,7 +374,7 @@ export default function Game() {
         }}
         allPaths={gameState.allPaths}
         isDaily={isDailyPuzzle}
-        parValue={puzzle.optimalSteps}
+        parValue={puzzle.parSteps}
         startWord={puzzle.startWord}
         goalWord={puzzle.goalWord}
         difficulty={difficulty}
@@ -529,4 +504,3 @@ export default function Game() {
     </div>
   )
 }
-

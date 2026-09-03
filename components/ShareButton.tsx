@@ -18,7 +18,7 @@ interface ShareButtonProps {
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
   easy: 'Lett',
-  medium: 'Medium',
+  medium: 'Middels',
   hard: 'Vanskelig',
 }
 
@@ -81,7 +81,7 @@ export default function ShareButton({
     const statusConfig = {
       won: { emoji: '🏆', text: 'Løst!' },
       'gave-up': { emoji: '❌', text: 'Ga opp' },
-      playing: { emoji: '⏳', text: 'Hummer fortsatt...' },
+      playing: { emoji: '⏳', text: 'Summer fortsatt...' },
     }
     const { emoji: statusEmoji, text: statusText } = statusConfig[status]
     

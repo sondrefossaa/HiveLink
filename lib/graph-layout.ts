@@ -296,9 +296,8 @@ export const resolveEdgeEndpoint = (endpoint: string | GraphNode): string => res
 /**
  * Build a tree-style layout.
  *
- * Layers come straight from node.layer (authoritative, works for restored
- * games). The goal node is placed one layer past the deepest word. Positions
- * are parent-relative; the start node is anchored at the origin.
+ * Layers and parentId come from the occurrence tree. The unattached target
+ * goal stays one layer beyond the deepest word until the first path reaches it.
  */
 export function computeGraphLayout(
   nodes: GraphNode[],
@@ -306,7 +305,8 @@ export function computeGraphLayout(
   orientation: 'horizontal' | 'vertical' = 'horizontal'
 ): GraphLayoutResult {
   const startNode = nodes.find((node) => node.isStart)
-  const goalNode = nodes.find((node) => node.id === 'goal') ?? nodes.find((node) => node.isGoal)
+  const goalNodes = nodes.filter((node) => node.isGoal)
+  const goalNode = goalNodes.find((node) => node.id === 'goal') ?? goalNodes[0]
   if (!startNode) {
     // Defensive: no start node (should not happen) - empty layout
     return {
@@ -336,19 +336,24 @@ export function computeGraphLayout(
     incoming.get(targetId)!.push(sourceId)
   })
 
-  // Layer assignment: node.layer is authoritative; goal floats one past max
+  // Layer assignment: placed occurrences are authoritative. Only the initial,
+  // unattached goal preview floats beyond the deepest placed word.
   const layerOf = new Map<string, number>()
   let maxLayer = 0
   nodes.forEach((node) => {
-    if (goalNode && node.id === goalNode.id) return
+    if (node.isGoal && !node.parentId) return
     const layer = node.layer >= 0 ? node.layer : 0
     layerOf.set(node.id, layer)
     if (layer > maxLayer) maxLayer = layer
   })
-  const goalLayer = maxLayer + 1
-  if (goalNode) {
-    layerOf.set(goalNode.id, goalLayer)
-  }
+  goalNodes.filter((node) => !node.parentId).forEach((node) => {
+    layerOf.set(node.id, maxLayer + 1)
+  })
+  const goalLayer = goalNodes.reduce(
+    (deepest, node) => Math.max(deepest, layerOf.get(node.id) ?? maxLayer + 1),
+    maxLayer
+  )
+  maxLayer = Math.max(maxLayer, goalLayer)
 
   // Group nodes per layer (deterministic order)
   const layers = new Map<number, GraphNode[]>()
@@ -377,9 +382,10 @@ export function computeGraphLayout(
     // Anchor selection: best-fit parent (closest to mean of all candidates)
     const assignments: Array<{ node: GraphNode; anchorId: string; anchorY: number }> = []
     layerNodes.forEach((node) => {
-      const candidates = (incoming.get(node.id) ?? []).filter(
-        (pid) => pid !== goalNode?.id && yPos.has(pid)
-      )
+      const explicitParent = node.parentId && yPos.has(node.parentId) ? node.parentId : undefined
+      const candidates = explicitParent
+        ? [explicitParent]
+        : (incoming.get(node.id) ?? []).filter((pid) => yPos.has(pid))
 
       let anchorId = ''
       let anchorY = 0
@@ -474,17 +480,6 @@ export function computeGraphLayout(
     })
   }
 
-  // Goal node: centered on its incoming (winning) edge sources, else 0
-  if (goalNode) {
-    const sources = (incoming.get(goalNode.id) ?? []).filter((id) => id !== goalNode.id)
-    const withPos = sources.filter((id) => yPos.has(id))
-    const goalY =
-      withPos.length > 0
-        ? withPos.reduce((sum, id) => sum + yPos.get(id)!, 0) / withPos.length
-        : 0
-    yPos.set(goalNode.id, goalY)
-  }
-
   // Build layout nodes: x = layer * spacing (start at origin), swap for vertical
   const layoutNodes: LayoutNodeMeta[] = []
   const nodeMeta = new Map<string, LayoutNodeMeta>()
@@ -507,7 +502,7 @@ export function computeGraphLayout(
       targetX,
       targetY,
       absoluteY: y,
-      parentId: anchorOf.get(node.id),
+      parentId: node.parentId ?? anchorOf.get(node.id),
     }
     layoutNodes.push(layoutNode)
     nodeMeta.set(node.id, layoutNode)
