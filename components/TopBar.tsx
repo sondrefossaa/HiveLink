@@ -1,40 +1,40 @@
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { motion } from 'framer-motion'
-import ShareButton from './ShareButton'
-import { getPlayerStats } from '@/lib/player-id'
-import type { PuzzleDifficulty, PuzzleMode } from '@/types'
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import ShareButton from "./ShareButton";
+import { getPlayerStats } from "@/lib/player-id";
+import type { PuzzleDifficulty, PuzzleMode } from "@/types";
 
 interface TopBarProps {
-  puzzleNumber?: number
-  date?: string
-  wordsUsed: number
-  layersExplored: number
-  pathsFound: number
-  mode: PuzzleMode
-  onModeChange: (mode: PuzzleMode) => void
-  difficulty: PuzzleDifficulty
-  onDifficultyChange: (difficulty: PuzzleDifficulty) => void
-  onGeneratePractice: () => void
-  isGeneratingPractice: boolean
-  isDaily: boolean
-  parValue?: number
+  puzzleNumber?: number;
+  date?: string;
+  wordsUsed: number;
+  layersExplored: number;
+  pathsFound: number;
+  mode: PuzzleMode;
+  onModeChange: (mode: PuzzleMode) => void;
+  difficulty: PuzzleDifficulty;
+  onDifficultyChange: (difficulty: PuzzleDifficulty) => void;
+  onGeneratePractice: () => void;
+  isGeneratingPractice: boolean;
+  isDaily: boolean;
+  parValue?: number;
   // Sharing props
-  startWord: string
-  goalWord: string
-  startTime: number
-  isComplete: boolean
-  bestPath?: string[]
-  onShowPaths?: () => void
-  onShowLeaderboard?: () => void
+  startWord: string;
+  goalWord: string;
+  startTime: number;
+  isComplete: boolean;
+  bestPath?: string[];
+  onShowPaths?: () => void;
+  onShowLeaderboard?: () => void;
 }
 
 const difficultyLabels: Record<PuzzleDifficulty, string> = {
-  easy: 'Lett',
-  medium: 'Middels',
-  hard: 'Vanskelig',
-}
+  easy: "Lett",
+  medium: "Middels",
+  hard: "Vanskelig",
+};
 
 export default function TopBar({
   puzzleNumber,
@@ -58,29 +58,29 @@ export default function TopBar({
   onShowPaths,
   onShowLeaderboard,
 }: TopBarProps) {
-  const [currentStreak, setCurrentStreak] = useState(0)
-  
+  const [currentStreak, setCurrentStreak] = useState(0);
+
   // Update streak when component mounts or when puzzle is completed
   useEffect(() => {
-    const stats = getPlayerStats()
-    setCurrentStreak(stats.currentStreak)
-  }, [isComplete])
-  
+    const stats = getPlayerStats();
+    setCurrentStreak(stats.currentStreak);
+  }, [isComplete]);
+
   // Format date for display
   const formattedDate = date
-    ? new Date(date + 'T00:00:00').toLocaleDateString('nb-NO', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
+    ? new Date(date + "T00:00:00").toLocaleDateString("nb-NO", {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
       })
-    : null
+    : null;
 
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       className="fixed top-0 left-0 right-0 z-40"
-      style={{ touchAction: 'pan-x pan-y' }}
+      style={{ touchAction: "pan-x pan-y" }}
     >
       <div className="bg-hive-dark/95 backdrop-blur-sm">
         <div className="w-full px-4 sm:px-6 py-3">
@@ -88,18 +88,7 @@ export default function TopBar({
             {/* Left: Logo and puzzle info */}
             <div className="flex items-center gap-4 flex-1">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 relative">
-                  <svg viewBox="0 0 32 32" className="w-full h-full">
-                    <polygon
-                      points="16,2 28,9 28,23 16,30 4,23 4,9"
-                      fill="none"
-                      stroke="#F4B400"
-                      strokeWidth="2"
-                      className="drop-shadow-lg"
-                    />
-                    <circle cx="16" cy="16" r="4" fill="#F4B400" />
-                  </svg>
-                </div>
+                <img src="/logo.svg" alt="HiveLink" className="w-10 h-10" />
                 <h1 className="text-xl font-display font-bold text-gradient-gold hidden sm:block">
                   HiveLink
                 </h1>
@@ -194,7 +183,7 @@ export default function TopBar({
                       >
                         {parValue}
                       </motion.div>
-                        <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
+                      <div className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wide">
                         Par
                       </div>
                     </div>
@@ -210,22 +199,22 @@ export default function TopBar({
                 {/* Mode selector */}
                 <div className="hidden md:flex items-center gap-2">
                   <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
-                    {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
+                    {(["daily", "practice"] as PuzzleMode[]).map((option) => (
                       <button
                         key={option}
                         onClick={() => onModeChange(option)}
                         className={`px-3 py-1 rounded-full transition-colors ${
                           mode === option
-                            ? 'bg-hive-yellow text-hive-dark'
-                            : 'text-gray-300 hover:text-white'
+                            ? "bg-hive-yellow text-hive-dark"
+                            : "text-gray-300 hover:text-white"
                         }`}
                       >
-                        {option === 'daily' ? 'Daglig' : 'Øvelse'}
+                        {option === "daily" ? "Daglig" : "Øvelse"}
                       </button>
                     ))}
                   </div>
                 </div>
-                
+
                 {/* Conditional content based on mode - keeps position stable */}
                 <div className="hidden sm:flex items-center gap-2 min-w-[200px] justify-end">
                   {isDaily ? (
@@ -234,7 +223,12 @@ export default function TopBar({
                         onClick={onShowLeaderboard}
                         className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-hive-yellow/10 text-hive-yellow hover:bg-hive-yellow/20 transition-colors"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -249,23 +243,29 @@ export default function TopBar({
                     <>
                       <select
                         value={difficulty}
-                        onChange={(event) => onDifficultyChange(event.target.value as PuzzleDifficulty)}
+                        onChange={(event) =>
+                          onDifficultyChange(
+                            event.target.value as PuzzleDifficulty,
+                          )
+                        }
                         className="bg-hive-graphite/70 border border-hive-graphite rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-hive-yellow/50"
                       >
-                        {(['easy', 'medium', 'hard'] as PuzzleDifficulty[]).map((level) => (
-                          <option key={level} value={level}>
-                            {difficultyLabels[level]}
-                          </option>
-                        ))}
+                        {(["easy", "medium", "hard"] as PuzzleDifficulty[]).map(
+                          (level) => (
+                            <option key={level} value={level}>
+                              {difficultyLabels[level]}
+                            </option>
+                          ),
+                        )}
                       </select>
                       <button
                         onClick={() => {
-                          void onGeneratePractice()
+                          void onGeneratePractice();
                         }}
                         disabled={isGeneratingPractice}
                         className="px-3 py-1.5 rounded-lg bg-hive-yellow text-hive-dark text-sm font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors whitespace-nowrap"
                       >
-                        {isGeneratingPractice ? '...' : 'Nytt puslespill'}
+                        {isGeneratingPractice ? "..." : "Nytt puslespill"}
                       </button>
                     </>
                   )}
@@ -275,7 +275,7 @@ export default function TopBar({
                   puzzleNumber={puzzleNumber}
                   wordsUsed={wordsUsed}
                   layers={layersExplored}
-                  status={isComplete ? 'won' : 'playing'}
+                  status={isComplete ? "won" : "playing"}
                   startWord={startWord}
                   goalWord={goalWord}
                   isDaily={isDaily}
@@ -292,40 +292,46 @@ export default function TopBar({
           <div className="lg:hidden flex flex-col gap-2 mt-3 pt-3 border-t border-white/5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="text-gray-400 uppercase tracking-wide text-[10px]">Modus</span>
+                <span className="text-gray-400 uppercase tracking-wide text-[10px]">
+                  Modus
+                </span>
                 <div className="flex rounded-full bg-hive-graphite/70 p-1 text-xs">
-                  {(['daily', 'practice'] as PuzzleMode[]).map((option) => (
+                  {(["daily", "practice"] as PuzzleMode[]).map((option) => (
                     <button
                       key={option}
                       onClick={() => onModeChange(option)}
                       className={`px-3 py-1 rounded-full transition-colors ${
                         mode === option
-                          ? 'bg-hive-yellow text-hive-dark'
-                          : 'text-gray-300 hover:text-white'
+                          ? "bg-hive-yellow text-hive-dark"
+                          : "text-gray-300 hover:text-white"
                       }`}
                     >
-                      {option === 'daily' ? 'Daglig' : 'Øvelse'}
+                      {option === "daily" ? "Daglig" : "Øvelse"}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {mode === 'practice' && (
+              {mode === "practice" && (
                 <div className="flex items-center gap-2">
                   <select
                     value={difficulty}
-                    onChange={(event) => onDifficultyChange(event.target.value as PuzzleDifficulty)}
+                    onChange={(event) =>
+                      onDifficultyChange(event.target.value as PuzzleDifficulty)
+                    }
                     className="bg-hive-graphite/70 border border-hive-graphite rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:ring-1 focus:ring-hive-yellow/50"
                   >
-                    {(['easy', 'medium', 'hard'] as PuzzleDifficulty[]).map((level) => (
-                      <option key={level} value={level}>
-                        {difficultyLabels[level]}
-                      </option>
-                    ))}
+                    {(["easy", "medium", "hard"] as PuzzleDifficulty[]).map(
+                      (level) => (
+                        <option key={level} value={level}>
+                          {difficultyLabels[level]}
+                        </option>
+                      ),
+                    )}
                   </select>
                   <button
                     onClick={() => {
-                      void onGeneratePractice()
+                      void onGeneratePractice();
                     }}
                     disabled={isGeneratingPractice}
                     className="px-2 py-1 rounded-lg bg-hive-yellow text-hive-dark text-xs font-medium disabled:opacity-60 hover:bg-hive-gold transition-colors"
@@ -340,7 +346,12 @@ export default function TopBar({
                   onClick={onShowLeaderboard}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-hive-yellow/15 text-hive-yellow text-xs font-medium hover:bg-hive-yellow/25 transition-colors"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -358,7 +369,7 @@ export default function TopBar({
                   onClick={onShowPaths}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-500/15 text-green-400 text-xs font-medium hover:bg-green-500/25 transition-colors"
                 >
-                  {pathsFound} {pathsFound === 1 ? 'sti' : 'stier'}
+                  {pathsFound} {pathsFound === 1 ? "sti" : "stier"}
                 </button>
               )}
             </div>
@@ -366,6 +377,5 @@ export default function TopBar({
         </div>
       </div>
     </motion.header>
-  )
+  );
 }
-
