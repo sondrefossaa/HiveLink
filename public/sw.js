@@ -3,7 +3,7 @@
 // The game is fully client-side, so a cached shell means fully offline play.
 
 const CACHE_NAME = 'hivelink-v2'
-const APP_SHELL_URLS = ['/', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png']
+const APP_SHELL_URLS = ['/', '/manifest.webmanifest', '/logo.svg', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

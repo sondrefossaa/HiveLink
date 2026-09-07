@@ -88,7 +88,7 @@ export default function TopBar({
             {/* Left: Logo and puzzle info */}
             <div className="flex items-center gap-4 flex-1">
               <div className="flex items-center gap-2">
-                <img src="/logo.svg" alt="HiveLink" className="w-10 h-10" />
+                <img src="/logo.svg" alt="HiveLink" className="h-10 w-10 shrink-0" />
                 <h1 className="text-xl font-display font-bold text-gradient-gold hidden sm:block">
                   HiveLink
                 </h1>
