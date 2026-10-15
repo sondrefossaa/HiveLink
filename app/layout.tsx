@@ -4,6 +4,7 @@ import './globals.css'
 import { MotionPreferenceProvider } from '@/hooks/useMotionPreference'
 import ZoomPrevention from '@/components/ZoomPrevention'
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration'
+import { Analytics } from '@vercel/analytics/next'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -86,6 +87,7 @@ export default function RootLayout({
         <ZoomPrevention />
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
         <ServiceWorkerRegistration />
+        <Analytics />
       </body>
     </html>
   )
