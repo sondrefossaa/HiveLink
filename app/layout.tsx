@@ -75,6 +75,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nb" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+      <head>
+        <script
+          async
+          src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6391311831202615"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body className="font-sans antialiased bg-hive-dark text-white min-h-screen">
         <ZoomPrevention />
         <MotionPreferenceProvider>{children}</MotionPreferenceProvider>
